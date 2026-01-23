@@ -1,0 +1,192 @@
+# Cursor AI Agent Rules for Debate Analyzer Project
+
+## Project Structure
+
+This is a Poetry-based Python project with the following structure:
+
+```
+debate_analyzer/
+├── src/              # ALL source code goes here
+│   └── debate_analyzer/
+├── tests/            # ALL test files go here (root level, not in src/)
+├── doc/              # ALL documentation (except main README)
+├── pyproject.toml    # Poetry configuration
+├── Makefile          # Build automation
+└── README.md         # Quick setup information only
+```
+
+## Code Organization Rules
+
+### Source Code (`/src`)
+- **ALL application code MUST be in `/src/debate_analyzer/`**
+- Organize code into logical submodules:
+  - `core/` - Core business logic
+  - `models/` - Data models and schemas
+  - `utils/` - Utility functions and helpers
+  - `api/` - API interfaces and endpoints
+- Each module should have a clear single responsibility
+- Always use type hints for functions and methods
+
+### Tests (`/tests`)
+- **ALL tests MUST be in the root-level `/tests/` folder**
+- This is standard Python convention (tests in root, not in src/)
+- Mirror the structure of `/src` in your tests
+- Test file naming: `test_<module_name>.py`
+- Test function naming: `test_<description>()`
+- Test class naming: `Test<ClassName>`
+- Use pytest fixtures for common test data
+- Keep tests isolated and independent
+
+### Documentation (`/doc`)
+- **ALL detailed documentation goes in `/doc/`**
+- The main `README.md` should contain ONLY quick setup information
+- Documentation files in `/doc/`:
+  - `ARCHITECTURE.md` - System architecture and design decisions
+  - `DEVELOPMENT.md` - Development workflow and guidelines
+  - `API.md` - API reference and examples
+  - Additional how-to guides and documentation as needed
+
+## Development Workflow
+
+### Using Make Commands
+This project uses a Makefile for common tasks:
+
+```bash
+make reset_venv  # Reset and recreate virtual environment
+make test        # Run tests with coverage
+make deploy      # Build and publish package
+make format      # Format code with black
+make lint        # Run ruff linter
+make typecheck   # Run mypy type checker
+make all         # Run all checks (format, lint, typecheck, test)
+```
+
+### Code Quality Standards
+
+#### Type Hints (REQUIRED)
+- **ALL functions and methods MUST have type hints**
+- Use Python 3.9+ type syntax
+- Example:
+  ```python
+  def process_data(input_data: str, options: dict[str, Any] | None = None) -> dict[str, Any]:
+      """Process input data."""
+      pass
+  ```
+
+#### Docstrings (REQUIRED)
+- **ALL public functions, classes, and methods MUST have docstrings**
+- Use Google-style docstrings
+- Include Args, Returns, and Raises sections
+- Example:
+  ```python
+  def function_name(param1: str) -> bool:
+      """
+      Brief description.
+      
+      Args:
+          param1: Description of param1
+          
+      Returns:
+          Description of return value
+          
+      Raises:
+          ValueError: When this occurs
+      """
+  ```
+
+#### Code Formatting
+- Use **black** for code formatting (line length: 88)
+- Run `make format` before committing
+
+#### Linting
+- Use **ruff** for linting
+- Run `make lint` to check for issues
+- Fix issues before committing
+
+#### Type Checking
+- Use **mypy** for static type checking
+- Run `make typecheck` before committing
+- All type checks must pass
+
+## Testing Requirements
+
+### Writing Tests
+- Write tests for all new functionality
+- Aim for high test coverage (>80%)
+- Use pytest fixtures for setup
+- Keep tests fast and focused
+
+### Running Tests
+```bash
+make test                           # Run all tests with coverage
+poetry run pytest tests/test_file.py  # Run specific test file
+poetry run pytest -k test_function    # Run specific test
+```
+
+## Dependencies
+
+### Adding Dependencies
+```bash
+poetry add <package>              # Production dependency
+poetry add --group dev <package>  # Development dependency
+```
+
+### Virtual Environment Issues
+If you encounter issues with the virtual environment:
+```bash
+make reset_venv  # This will fix most venv issues
+```
+
+## When Creating New Code
+
+1. **Place code in the correct folder**:
+   - Source code → `/src/debate_analyzer/`
+   - Tests → `/tests/`
+   - Documentation → `/doc/`
+
+2. **Always include**:
+   - Type hints on all functions/methods
+   - Docstrings (Google style)
+   - Corresponding tests
+   - Update documentation if needed
+
+3. **Before committing**:
+   - Run `make all` to verify everything passes
+   - Ensure all tests pass
+   - Check code is formatted
+   - Verify type hints are correct
+
+## Common Commands Reference
+
+```bash
+# Setup
+poetry install                    # Install dependencies
+poetry shell                      # Activate virtual environment
+
+# Development
+make format                       # Format code
+make lint                         # Check linting
+make typecheck                    # Check types
+make test                         # Run tests
+make all                          # Run all checks
+
+# Maintenance
+make clean                        # Remove build artifacts
+make reset_venv                   # Reset virtual environment
+
+# Deployment
+make deploy                       # Build and publish (runs tests first)
+```
+
+## Important Notes for AI Agents
+
+- **ALWAYS place source code in `/src/debate_analyzer/`**
+- **ALWAYS place tests in `/tests/` (root level, not in src/)**
+- **ALWAYS place detailed docs in `/doc/`** (not in README)
+- **ALWAYS add type hints** to functions and methods
+- **ALWAYS write docstrings** for public APIs
+- **ALWAYS run tests** before deploying
+- When in doubt, run `make all` to verify code quality
+- Follow Python best practices and PEP 8 style guide
+- Use meaningful variable and function names
+- Keep functions focused and single-purpose
