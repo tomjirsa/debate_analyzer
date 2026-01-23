@@ -50,6 +50,49 @@ make test
 make deploy
 ```
 
+## Usage
+
+### Downloading YouTube Videos
+
+Download YouTube videos for debate analysis with optimized settings (high audio quality, reduced video size):
+
+```bash
+# Basic usage - downloads video with subtitles
+poetry run python -m debate_analyzer.video_downloader "https://www.youtube.com/watch?v=VIDEO_ID"
+
+# Specify output directory
+poetry run python -m debate_analyzer.video_downloader "https://www.youtube.com/watch?v=VIDEO_ID" --output-dir my_videos
+
+# Skip subtitles
+poetry run python -m debate_analyzer.video_downloader "https://www.youtube.com/watch?v=VIDEO_ID" --no-subtitles
+
+# Use custom configuration
+poetry run python -m debate_analyzer.video_downloader "https://www.youtube.com/watch?v=VIDEO_ID" --config path/to/config.json
+```
+
+**Download Configuration:**
+- Audio: Best available quality (important for speech analysis)
+- Video: Limited to 480p (optimized for smaller file sizes)
+- Format: MP4 container with automatic subtitle download
+- Configuration file: `src/debate_analyzer/conf/video_downloader_conf.json`
+
+**Programmatic Usage:**
+
+```python
+from debate_analyzer.video_downloader import download_video
+
+# Download video
+metadata = download_video(
+    url="https://www.youtube.com/watch?v=VIDEO_ID",
+    output_dir="data",
+    download_subtitles=True
+)
+
+print(f"Downloaded: {metadata['title']}")
+print(f"Video path: {metadata['video_path']}")
+print(f"Subtitles: {metadata['subtitle_paths']}")
+```
+
 ## Development
 
 ### Running Tests
@@ -80,8 +123,19 @@ poetry run mypy src/
 debate_analyzer/
 ├── src/              # Source code
 │   └── debate_analyzer/
+│       ├── conf/                    # Configuration files
+│       │   └── video_downloader_conf.json
+│       ├── video_downloader/        # Video downloader module
+│       │   ├── __init__.py
+│       │   ├── __main__.py
+│       │   ├── cli.py              # Command-line interface
+│       │   └── downloader.py       # Core downloader logic
+│       └── video_downloader.py     # (Deprecated - kept for compatibility)
 ├── tests/            # Test files
 ├── doc/              # Documentation
+├── data/             # Downloaded videos and subtitles (generated)
+│   ├── videos/
+│   └── subtitles/
 ├── pyproject.toml    # Poetry configuration
 ├── Makefile          # Common tasks automation
 └── README.md         # This file
