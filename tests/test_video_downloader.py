@@ -67,7 +67,7 @@ class TestVideoDownloader:
         with pytest.raises(VideoDownloadError, match="Invalid YouTube URL"):
             downloader.download("https://www.example.com/video")
 
-    @patch("debate_analyzer.video_downloader.yt_dlp.YoutubeDL")
+    @patch("debate_analyzer.video_downloader.downloader.yt_dlp.YoutubeDL")
     def test_download_success(self, mock_ytdl_class: MagicMock, tmp_path: Path) -> None:
         """Test successful video download with metadata."""
         # Mock yt-dlp instance
@@ -116,7 +116,7 @@ class TestVideoDownloader:
         call_args = mock_file.call_args
         assert "dQw4w9WgXcQ_metadata.json" in str(call_args[0][0])
 
-    @patch("debate_analyzer.video_downloader.yt_dlp.YoutubeDL")
+    @patch("debate_analyzer.video_downloader.downloader.yt_dlp.YoutubeDL")
     def test_download_extract_info_returns_none(
         self, mock_ytdl_class: MagicMock, tmp_path: Path
     ) -> None:
@@ -131,7 +131,7 @@ class TestVideoDownloader:
         with pytest.raises(VideoDownloadError, match="Failed to extract video info"):
             downloader.download(url)
 
-    @patch("debate_analyzer.video_downloader.yt_dlp.YoutubeDL")
+    @patch("debate_analyzer.video_downloader.downloader.yt_dlp.YoutubeDL")
     def test_download_handles_download_error(
         self, mock_ytdl_class: MagicMock, tmp_path: Path
     ) -> None:
@@ -146,7 +146,7 @@ class TestVideoDownloader:
         with pytest.raises(VideoDownloadError, match="Failed to download video"):
             downloader.download(url)
 
-    @patch("debate_analyzer.video_downloader.yt_dlp.YoutubeDL")
+    @patch("debate_analyzer.video_downloader.downloader.yt_dlp.YoutubeDL")
     def test_download_handles_unexpected_error(
         self, mock_ytdl_class: MagicMock, tmp_path: Path
     ) -> None:
@@ -163,7 +163,7 @@ class TestVideoDownloader:
         ):
             downloader.download(url)
 
-    @patch("debate_analyzer.video_downloader.yt_dlp.YoutubeDL")
+    @patch("debate_analyzer.video_downloader.downloader.yt_dlp.YoutubeDL")
     def test_download_collects_subtitle_files(
         self, mock_ytdl_class: MagicMock, tmp_path: Path
     ) -> None:
@@ -208,7 +208,7 @@ class TestVideoDownloader:
             f"{video_id}_Test.fr.vtt" in path for path in metadata["subtitle_paths"]
         )
 
-    @patch("debate_analyzer.video_downloader.yt_dlp.YoutubeDL")
+    @patch("debate_analyzer.video_downloader.downloader.yt_dlp.YoutubeDL")
     def test_download_handles_missing_optional_fields(
         self, mock_ytdl_class: MagicMock, tmp_path: Path
     ) -> None:
@@ -240,7 +240,7 @@ class TestVideoDownloader:
 class TestDownloadVideoFunction:
     """Tests for the download_video convenience function."""
 
-    @patch("debate_analyzer.video_downloader.VideoDownloader")
+    @patch("debate_analyzer.video_downloader.downloader.VideoDownloader")
     def test_download_video_with_defaults(
         self, mock_downloader_class: MagicMock
     ) -> None:
@@ -252,11 +252,11 @@ class TestDownloadVideoFunction:
         url = "https://www.youtube.com/watch?v=test123"
         result = download_video(url)
 
-        mock_downloader_class.assert_called_once_with("data")
-        mock_downloader.download.assert_called_once_with(url)
+        mock_downloader_class.assert_called_once_with("data", config_path=None)
+        mock_downloader.download.assert_called_once_with(url, download_subtitles=True)
         assert result == {"video_id": "test123"}
 
-    @patch("debate_analyzer.video_downloader.VideoDownloader")
+    @patch("debate_analyzer.video_downloader.downloader.VideoDownloader")
     def test_download_video_with_custom_output_dir(
         self, mock_downloader_class: MagicMock
     ) -> None:
@@ -269,11 +269,11 @@ class TestDownloadVideoFunction:
         output_dir = "/custom/path"
         result = download_video(url, output_dir)
 
-        mock_downloader_class.assert_called_once_with(output_dir)
-        mock_downloader.download.assert_called_once_with(url)
+        mock_downloader_class.assert_called_once_with(output_dir, config_path=None)
+        mock_downloader.download.assert_called_once_with(url, download_subtitles=True)
         assert result == {"video_id": "test123"}
 
-    @patch("debate_analyzer.video_downloader.VideoDownloader")
+    @patch("debate_analyzer.video_downloader.downloader.VideoDownloader")
     def test_download_video_propagates_errors(
         self, mock_downloader_class: MagicMock
     ) -> None:

@@ -2,8 +2,6 @@
 
 import argparse
 import sys
-from pathlib import Path
-from typing import Union
 
 from .downloader import VideoDownloadError, download_video
 

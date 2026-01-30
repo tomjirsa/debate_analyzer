@@ -38,7 +38,9 @@ class VideoDownloader:
         # Load configuration
         self.config = self._load_config(config_path)
 
-    def _load_config(self, config_path: Union[str, Path, None] = None) -> dict[str, Any]:
+    def _load_config(
+        self, config_path: Union[str, Path, None] = None
+    ) -> dict[str, Any]:
         """
         Load configuration from JSON file.
 
@@ -60,7 +62,7 @@ class VideoDownloader:
             raise VideoDownloadError(f"Configuration file not found: {config_path}")
 
         with open(config_path, "r", encoding="utf-8") as f:
-            config = json.load(f)
+            config: dict[str, Any] = json.load(f)
 
         # Remove description field if present (it's for documentation only)
         config.pop("description", None)
