@@ -4,6 +4,7 @@ This document contains step-by-step guides for common tasks in the Debate Analyz
 
 ## Table of Contents
 - [How to Download YouTube Videos](#how-to-download-youtube-videos)
+- [How to Transcribe Videos with Speaker Identification](#how-to-transcribe-videos-with-speaker-identification)
 - [How to Add a New Feature](#how-to-add-a-new-feature)
 - [How to Write Tests](#how-to-write-tests)
 - [How to Debug Issues](#how-to-debug-issues)
@@ -88,6 +89,378 @@ output_dir/
 - The video may have restricted formats
 - Check if the video is available in your region
 - Try a different video URL
+
+## How to Transcribe Videos with Speaker Identification
+
+The transcriber module provides state-of-the-art speech-to-text transcription with automatic speaker identification using open-source models (faster-whisper + pyannote.audio).
+
+### Prerequisites
+
+1. **FFmpeg** (required for audio extraction):
+   ```bash
+   # macOS
+   brew install ffmpeg
+   
+   # Ubuntu/Debian
+   sudo apt-get install ffmpeg
+   
+   # Verify installation
+   ffmpeg -version
+   ```
+
+2. **HuggingFace Account and Token** (required for speaker diarization):
+   
+   a. Create a free account at [huggingface.co](https://huggingface.co)
+   
+   b. Accept the model terms at [pyannote/speaker-diarization-3.1](https://huggingface.co/pyannote/speaker-diarization-3.1)
+   
+   c. Create an access token at [settings/tokens](https://huggingface.co/settings/tokens)
+   
+   d. Set the environment variable:
+   ```bash
+   export HF_TOKEN=your_token_here
+   
+   # Or add to your shell profile (~/.bashrc, ~/.zshrc, etc.)
+   echo 'export HF_TOKEN=your_token_here' >> ~/.zshrc
+   source ~/.zshrc
+   ```
+
+3. **Install Dependencies**:
+   ```bash
+   poetry install
+   ```
+
+### Using the Command-Line Interface
+
+**Basic Usage:**
+
+```bash
+# Transcribe a video (uses medium Whisper model)
+poetry run python -m debate_analyzer.transcriber video.mp4
+
+# Specify output directory
+poetry run python -m debate_analyzer.transcriber video.mp4 --output-dir my_transcripts
+
+# Use different Whisper model size
+# Available: tiny, base, small, medium, large, large-v2, large-v3
+poetry run python -m debate_analyzer.transcriber video.mp4 --model-size large
+
+# Provide HuggingFace token directly (if not in environment)
+poetry run python -m debate_analyzer.transcriber video.mp4 --hf-token YOUR_TOKEN
+
+# Specify language for better accuracy (auto-detected if not specified)
+poetry run python -m debate_analyzer.transcriber video.mp4 --language en
+
+# Force CPU processing (even if GPU is available)
+poetry run python -m debate_analyzer.transcriber video.mp4 --device cpu
+```
+
+**Model Size Selection:**
+
+Choose based on your needs:
+- `tiny`: Fastest, lowest accuracy (~1GB RAM, ~0.5x real-time)
+- `base`: Fast, good for simple speech (~1GB RAM, ~0.7x real-time)
+- `small`: Balanced for basic use (~2GB RAM, ~1x real-time)
+- `medium`: Recommended for most use cases (~5GB RAM, ~2x real-time) **[DEFAULT]**
+- `large`: Best accuracy, slower (~10GB RAM, ~3x real-time)
+- `large-v2`, `large-v3`: Latest versions of large model
+
+### Using Python Code
+
+**Option 1: Simple Transcription**
+
+```python
+from debate_analyzer.transcriber import transcribe_video
+
+# Basic usage with defaults
+result = transcribe_video("data/videos/debate.mp4")
+
+print(f"Found {result['speakers_count']} speakers")
+print(f"Duration: {result['duration']:.2f} seconds")
+print(f"Processing time: {result['processing_time']:.2f} seconds")
+
+# Access transcription segments
+for segment in result['transcription']:
+    speaker = segment['speaker']
+    text = segment['text']
+    start = segment['start']
+    end = segment['end']
+    confidence = segment['confidence']
+    
+    print(f"[{start:.2f}s - {end:.2f}s] {speaker} (conf: {confidence:.2f}): {text}")
+```
+
+**Option 2: Custom Configuration**
+
+```python
+from debate_analyzer.transcriber import transcribe_video
+
+result = transcribe_video(
+    video_path="data/videos/debate.mp4",
+    output_dir="custom_transcripts",
+    model_size="large",  # Use large model for best accuracy
+    device="cuda",       # Force GPU usage
+    language="en",       # Specify English
+    hf_token="your_hf_token_if_not_in_env"
+)
+
+# Save specific speaker's text to file
+speaker_0_text = [
+    seg['text'] for seg in result['transcription']
+    if seg['speaker'] == 'SPEAKER_00'
+]
+
+with open('speaker_0_transcript.txt', 'w') as f:
+    f.write('\n'.join(speaker_0_text))
+```
+
+**Option 3: Processing Multiple Videos**
+
+```python
+from pathlib import Path
+from debate_analyzer.transcriber import transcribe_video
+
+video_dir = Path("data/videos")
+output_dir = Path("data/transcripts")
+
+for video_file in video_dir.glob("*.mp4"):
+    print(f"Processing: {video_file.name}")
+    
+    try:
+        result = transcribe_video(
+            video_path=video_file,
+            output_dir=output_dir,
+            model_size="medium"
+        )
+        print(f"  ✓ Completed: {result['speakers_count']} speakers found")
+    except Exception as e:
+        print(f"  ✗ Failed: {e}")
+```
+
+### Output Format
+
+Transcriptions are saved as JSON files in the output directory:
+
+**File Structure:**
+```
+output_dir/
+├── video_name_audio.wav         # Extracted audio (16kHz mono WAV)
+└── video_name_transcription.json # Transcription with speakers
+```
+
+**JSON Format:**
+```json
+{
+  "video_path": "data/videos/debate.mp4",
+  "audio_path": "data/transcripts/debate_audio.wav",
+  "duration": 1234.56,
+  "processing_time": 892.12,
+  "model": {
+    "whisper": "medium",
+    "diarization": "pyannote/speaker-diarization-3.1"
+  },
+  "speakers_count": 3,
+  "transcription": [
+    {
+      "start": 0.0,
+      "end": 3.5,
+      "text": "Hello and welcome to the debate.",
+      "speaker": "SPEAKER_00",
+      "confidence": 0.95
+    },
+    {
+      "start": 3.8,
+      "end": 8.2,
+      "text": "Thank you for having me here today.",
+      "speaker": "SPEAKER_01",
+      "confidence": 0.92
+    }
+  ]
+}
+```
+
+### Working with Output Data
+
+**Load and Analyze Transcription:**
+
+```python
+import json
+from collections import Counter
+
+# Load transcription
+with open('data/transcripts/debate_transcription.json') as f:
+    data = json.load(f)
+
+# Count words per speaker
+speaker_words = Counter()
+for segment in data['transcription']:
+    speaker = segment['speaker']
+    word_count = len(segment['text'].split())
+    speaker_words[speaker] += word_count
+
+print("Words spoken by each speaker:")
+for speaker, count in speaker_words.most_common():
+    print(f"  {speaker}: {count} words")
+
+# Find all segments from a specific speaker
+speaker_0_segments = [
+    seg for seg in data['transcription']
+    if seg['speaker'] == 'SPEAKER_00'
+]
+
+# Calculate total speaking time per speaker
+from collections import defaultdict
+speaking_time = defaultdict(float)
+
+for segment in data['transcription']:
+    duration = segment['end'] - segment['start']
+    speaking_time[segment['speaker']] += duration
+
+print("\nSpeaking time per speaker:")
+for speaker, time in sorted(speaking_time.items()):
+    print(f"  {speaker}: {time:.2f} seconds ({time/60:.2f} minutes)")
+```
+
+### Performance Considerations
+
+**First Run:**
+- Downloads Whisper model (~5GB for medium)
+- Downloads pyannote models (~1GB)
+- Models are cached for subsequent runs
+
+**Processing Time:**
+- Approximately 1-2x real-time with medium model
+- Example: 10-minute video = 10-20 minutes processing
+- GPU can speed up by 2-3x
+
+**Resource Requirements:**
+- **RAM**: 4-8GB depending on model size
+- **VRAM** (GPU): 3-6GB if using CUDA
+- **Disk Space**: Original video + extracted audio + JSON (~1MB per hour)
+
+### Troubleshooting
+
+**Error: HuggingFace token required**
+
+Solution:
+```bash
+# Set environment variable
+export HF_TOKEN=your_token_here
+
+# Or provide directly in code
+result = transcribe_video("video.mp4", hf_token="your_token")
+```
+
+**Error: FFmpeg not found**
+
+Solution:
+```bash
+# Install FFmpeg
+brew install ffmpeg  # macOS
+sudo apt-get install ffmpeg  # Linux
+
+# Verify installation
+ffmpeg -version
+```
+
+**Error: CUDA out of memory**
+
+Solutions:
+1. Use smaller model: `--model-size small` or `--model-size base`
+2. Force CPU: `--device cpu`
+3. Close other GPU applications
+
+**Error: Authentication failed with HuggingFace**
+
+Solutions:
+1. Verify token is valid at [huggingface.co/settings/tokens](https://huggingface.co/settings/tokens)
+2. Accept model terms at [pyannote/speaker-diarization-3.1](https://huggingface.co/pyannote/speaker-diarization-3.1)
+3. Create new token if needed
+
+**Poor Transcription Quality**
+
+Solutions:
+1. Use larger model: `--model-size large`
+2. Specify language: `--language en`
+3. Ensure audio quality is good (check input video)
+4. Try different model version: `--model-size large-v3`
+
+**Speaker Identification Issues**
+
+Notes:
+- Speaker IDs (SPEAKER_00, SPEAKER_01, etc.) are arbitrary
+- Same person might get different IDs in different videos
+- Accuracy depends on:
+  - Audio quality
+  - Speaker voice differences
+  - Background noise levels
+  - Overlapping speech
+
+**Slow Processing**
+
+Solutions:
+1. Use smaller model: `--model-size base` or `--model-size small`
+2. Use GPU if available (automatic with `--device auto`)
+3. Process multiple videos in parallel (separate processes)
+4. Consider extracting key segments first
+
+### Advanced Usage
+
+**Custom Configuration File:**
+
+Create `custom_config.json`:
+```json
+{
+  "whisper": {
+    "model_size": "large",
+    "device": "cuda",
+    "compute_type": "float16",
+    "language": "en"
+  },
+  "pyannote": {
+    "pipeline": "pyannote/speaker-diarization-3.1",
+    "min_speakers": 2,
+    "max_speakers": 4
+  },
+  "audio_extraction": {
+    "sample_rate": 16000,
+    "channels": 1,
+    "format": "wav"
+  }
+}
+```
+
+Use it:
+```bash
+poetry run python -m debate_analyzer.transcriber video.mp4 --config custom_config.json
+```
+
+**Extract Audio Only:**
+
+```python
+from debate_analyzer.transcriber import AudioExtractor
+
+extractor = AudioExtractor(sample_rate=16000, channels=1)
+audio_path = extractor.extract_audio("video.mp4", "output_audio.wav")
+print(f"Audio extracted to: {audio_path}")
+```
+
+**Transcribe Without Diarization:**
+
+```python
+from debate_analyzer.transcriber import WhisperTranscriber, AudioExtractor
+
+# Extract audio
+extractor = AudioExtractor()
+audio_path = extractor.extract_audio("video.mp4")
+
+# Transcribe only (no speaker identification)
+transcriber = WhisperTranscriber(model_size="medium")
+segments = transcriber.transcribe(audio_path)
+
+for seg in segments:
+    print(f"[{seg.start:.2f}s] {seg.text}")
+```
 
 ## How to Add a New Feature
 

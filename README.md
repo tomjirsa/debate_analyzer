@@ -93,6 +93,82 @@ print(f"Video path: {metadata['video_path']}")
 print(f"Subtitles: {metadata['subtitle_paths']}")
 ```
 
+### Transcribing Videos with Speaker Identification
+
+Transcribe videos and identify speakers using state-of-the-art open-source models (faster-whisper + pyannote.audio):
+
+**Setup Requirements:**
+1. HuggingFace account and token (for speaker diarization):
+   - Create account at [huggingface.co](https://huggingface.co)
+   - Accept model terms at [pyannote/speaker-diarization-3.1](https://huggingface.co/pyannote/speaker-diarization-3.1)
+   - Create access token at [settings/tokens](https://huggingface.co/settings/tokens)
+   - Set environment variable: `export HF_TOKEN=your_token_here`
+
+**CLI Usage:**
+
+```bash
+# Basic usage - transcribe with medium model
+poetry run python -m debate_analyzer.transcriber video.mp4
+
+# Specify output directory
+poetry run python -m debate_analyzer.transcriber video.mp4 --output-dir transcripts
+
+# Use different model size (tiny, base, small, medium, large)
+poetry run python -m debate_analyzer.transcriber video.mp4 --model-size large
+
+# Provide HuggingFace token directly
+poetry run python -m debate_analyzer.transcriber video.mp4 --hf-token YOUR_TOKEN
+
+# Specify language (for better accuracy)
+poetry run python -m debate_analyzer.transcriber video.mp4 --language en
+```
+
+**Programmatic Usage:**
+
+```python
+from debate_analyzer.transcriber import transcribe_video
+
+# Transcribe video
+result = transcribe_video("data/videos/debate.mp4")
+
+print(f"Found {result['speakers_count']} speakers")
+print(f"Duration: {result['duration']:.2f} seconds")
+print(f"Processing time: {result['processing_time']:.2f} seconds")
+
+# Access transcription segments
+for segment in result['transcription']:
+    speaker = segment['speaker']
+    text = segment['text']
+    start = segment['start']
+    print(f"[{start:.2f}s] {speaker}: {text}")
+```
+
+**Output Format:**
+
+Transcriptions are saved as JSON files in `data/transcripts/` with the following structure:
+```json
+{
+  "video_path": "path/to/video.mp4",
+  "duration": 1234.56,
+  "speakers_count": 3,
+  "transcription": [
+    {
+      "start": 0.0,
+      "end": 3.5,
+      "text": "Hello and welcome to the debate.",
+      "speaker": "SPEAKER_00",
+      "confidence": 0.95
+    }
+  ]
+}
+```
+
+**Performance Notes:**
+- First run downloads models (~5GB for Whisper medium, ~1GB for pyannote)
+- Processing time: approximately 1-2x real-time (10-minute video = 10-20 minutes)
+- Requires ~4GB RAM, ~3GB VRAM if GPU available
+- Models are cached locally for subsequent runs
+
 ## Development
 
 ### Running Tests
@@ -124,18 +200,28 @@ debate_analyzer/
 ├── src/              # Source code
 │   └── debate_analyzer/
 │       ├── conf/                    # Configuration files
-│       │   └── video_downloader_conf.json
+│       │   ├── video_downloader_conf.json
+│       │   └── transcriber_conf.json
 │       ├── video_downloader/        # Video downloader module
 │       │   ├── __init__.py
 │       │   ├── __main__.py
 │       │   ├── cli.py              # Command-line interface
 │       │   └── downloader.py       # Core downloader logic
-│       └── video_downloader.py     # (Deprecated - kept for compatibility)
+│       └── transcriber/             # Transcription & speaker diarization
+│           ├── __init__.py
+│           ├── __main__.py
+│           ├── cli.py              # Command-line interface
+│           ├── audio_extractor.py  # Audio extraction from video
+│           ├── transcriber.py      # Speech-to-text (Whisper)
+│           ├── diarizer.py         # Speaker identification (pyannote)
+│           ├── merger.py           # Merge transcripts with speakers
+│           └── models.py           # Data models
 ├── tests/            # Test files
 ├── doc/              # Documentation
-├── data/             # Downloaded videos and subtitles (generated)
+├── data/             # Downloaded videos, subtitles, transcripts (generated)
 │   ├── videos/
-│   └── subtitles/
+│   ├── subtitles/
+│   └── transcripts/
 ├── pyproject.toml    # Poetry configuration
 ├── Makefile          # Common tasks automation
 └── README.md         # This file
