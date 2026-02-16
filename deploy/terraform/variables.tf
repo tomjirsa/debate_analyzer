@@ -25,7 +25,7 @@ variable "ecr_image_tag" {
 variable "batch_compute_instance_types" {
   description = "EC2 instance types for the Batch compute environment (GPU)."
   type        = list(string)
-  default     = ["g4dn.xlarge"]
+  default     = ["g4dn.xlarge", "g4dn.2xlarge" ]
 }
 
 variable "batch_min_vcpus" {

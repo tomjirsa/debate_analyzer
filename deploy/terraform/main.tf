@@ -21,6 +21,13 @@ locals {
   name       = var.name_prefix
   # ECR image URI for job definition (CI pushes to this repo)
   ecr_image = "${local.account_id}.dkr.ecr.${local.region}.amazonaws.com/${aws_ecr_repository.this.name}:${var.ecr_image_tag}"
+  # Stable suffix for CE name so create_before_destroy can create new CE (new name) before destroying old one
+  ce_name_suffix = substr(md5(jsonencode({
+    instance_types = join(",", var.batch_compute_instance_types)
+    min_vcpus      = var.batch_min_vcpus
+    max_vcpus      = var.batch_max_vcpus
+    use_spot       = var.use_spot
+  })), 0, 8)
 }
 
 # --- Secrets Manager: HuggingFace token ---
@@ -184,13 +191,18 @@ resource "aws_cloudwatch_log_group" "batch" {
 
 # --- Batch: compute environment ---
 resource "aws_batch_compute_environment" "gpu" {
-  compute_environment_name = "${local.name}-gpu"
+  compute_environment_name = "${local.name}-gpu-${local.ce_name_suffix}"
   type                     = "MANAGED"
   state                    = "ENABLED"
 
+  lifecycle {
+    create_before_destroy = true
+  }
+
   compute_resources {
     type                = "EC2"
-    allocation_strategy = var.use_spot ? "SPOT_CAPACITY_OPTIMIZED" : "BEST_FIT"
+    # SPOT_* strategies require CE to request Spot (e.g. launch template); use BEST_FIT for On-Demand
+    allocation_strategy = "BEST_FIT"
     min_vcpus           = var.batch_min_vcpus
     max_vcpus           = var.batch_max_vcpus
     instance_type       = var.batch_compute_instance_types
@@ -221,8 +233,8 @@ resource "aws_batch_job_definition" "this" {
   container_properties = jsonencode({
     image = local.ecr_image
     resourceRequirements = [
-      { type = "VCPU", value = "4" },
-      { type = "MEMORY", value = "16384" },
+      { type = "VCPU", value = "3" },
+      { type = "MEMORY", value = "15360" },
       { type = "GPU", value = "1" }
     ]
     jobRoleArn    = aws_iam_role.batch_job.arn
