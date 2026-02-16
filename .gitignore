@@ -143,6 +143,11 @@ cython_debug/
 .DS_Store
 Thumbs.db
 
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+
 # Data files (but keep directory structure)
 data/*
 !data/.gitkeep
