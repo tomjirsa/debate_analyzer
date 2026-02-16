@@ -2,9 +2,26 @@
 
 import json
 import os
+import sys
 import time
 from pathlib import Path
 from typing import Any, Optional, Union
+
+
+def _format_duration(seconds: float) -> str:
+    """Format seconds as M:SS."""
+    m = int(seconds) // 60
+    s = int(seconds) % 60
+    return f"{m}:{s:02d}"
+
+
+def _format_elapsed(seconds: float) -> str:
+    """Format elapsed time for progress (e.g. 12.3s or 1m 23.4s)."""
+    if seconds < 60:
+        return f"{seconds:.1f}s"
+    m = int(seconds) // 60
+    s = seconds - 60 * m
+    return f"{m}m {s:.1f}s"
 
 from faster_whisper import WhisperModel  # type: ignore[import-untyped]
 
@@ -29,6 +46,8 @@ class WhisperTranscriber:
         device: str = "auto",
         compute_type: str = "float16",
         language: Optional[str] = None,
+        beam_size: int = 5,
+        condition_on_previous_text: bool = True,
     ) -> None:
         """
         Initialize the Whisper transcriber.
@@ -38,9 +57,13 @@ class WhisperTranscriber:
             device: Device to use ('auto', 'cpu', or 'cuda')
             compute_type: Computation type ('float16', 'int8', 'float32')
             language: Language code (e.g., 'en', 'es'). None for auto-detection.
+            beam_size: Beam size for decoding (1 = greedy, faster; 5 = default quality).
+            condition_on_previous_text: Use previous segment for context (false can speed long audio).
         """
         self.model_size = model_size
         self.language = language
+        self.beam_size = beam_size
+        self.condition_on_previous_text = condition_on_previous_text
 
         # Auto-detect device if requested
         if device == "auto":
@@ -71,12 +94,21 @@ class WhisperTranscriber:
                 f"Failed to load Whisper model '{model_size}': {e}"
             ) from e
 
-    def transcribe(self, audio_path: Union[str, Path]) -> list[TranscriptSegment]:
+    def transcribe(
+        self,
+        audio_path: Union[str, Path],
+        duration_sec: Optional[float] = None,
+        step_start_time: Optional[float] = None,
+    ) -> list[TranscriptSegment]:
         """
         Transcribe audio file.
 
         Args:
             audio_path: Path to audio file
+            duration_sec: Total audio duration in seconds. If set, progress is
+                printed during transcription (Step 2).
+            step_start_time: Start time of the step (from time.time()). If set
+                with duration_sec, elapsed time is shown with each progress update.
 
         Returns:
             List of transcript segments with timestamps
@@ -96,10 +128,15 @@ class WhisperTranscriber:
                 language=self.language,
                 word_timestamps=False,  # Segment-level is more reliable
                 vad_filter=True,  # Voice activity detection
+                beam_size=self.beam_size,
+                condition_on_previous_text=self.condition_on_previous_text,
             )
 
-            # Convert to our data model
+            # Convert to our data model and optionally show progress
             transcript_segments = []
+            last_reported_pct = -1
+            show_progress = duration_sec is not None and duration_sec > 0
+
             for segment in segments:
                 transcript_segments.append(
                     TranscriptSegment(
@@ -108,6 +145,25 @@ class WhisperTranscriber:
                         text=segment.text.strip(),
                     )
                 )
+                if show_progress:
+                    pct = min(100, int(100 * segment.end / duration_sec))
+                    if pct >= last_reported_pct + 5 or pct == 100:
+                        elapsed_str = ""
+                        if step_start_time is not None:
+                            elapsed_str = (
+                                f" — elapsed: {_format_elapsed(time.time() - step_start_time)}"
+                            )
+                        sys.stdout.write(
+                            f"\r  Transcribing: {pct}% "
+                            f"({_format_duration(segment.end)} / "
+                            f"{_format_duration(duration_sec)}){elapsed_str}    "
+                        )
+                        sys.stdout.flush()
+                        last_reported_pct = pct
+
+            if show_progress:
+                sys.stdout.write("\n")
+                sys.stdout.flush()
 
             return transcript_segments
 
@@ -177,8 +233,9 @@ def transcribe_video(
     if language is not None:
         config["whisper"]["language"] = language
 
+    # Step 1: Extract audio
+    step_start = time.time()
     print("Step 1/4: Extracting audio from video...")
-    # Extract audio
     extractor = AudioExtractor(
         sample_rate=config["audio_extraction"]["sample_rate"],
         channels=config["audio_extraction"]["channels"],
@@ -187,26 +244,42 @@ def transcribe_video(
     # Generate output audio path
     audio_filename = f"{video_path.stem}_audio.wav"
     audio_path = output_dir / audio_filename
-    
+
     audio_path = extractor.extract_audio(video_path, audio_path)
+    step_elapsed = time.time() - step_start
+    total_elapsed = time.time() - start_time
     print(f"  Audio extracted to: {audio_path}")
+    print(f"  Done in {_format_elapsed(step_elapsed)} (elapsed: {_format_elapsed(total_elapsed)})")
 
     # Get duration from audio file
     duration = _get_audio_duration(audio_path)
 
+    # Step 2: Transcribe
+    step_start = time.time()
     print("\nStep 2/4: Transcribing audio with Whisper...")
-    # Transcribe
     transcriber = WhisperTranscriber(
         model_size=config["whisper"]["model_size"],
         device=device,
         compute_type=config["whisper"]["compute_type"],
         language=config["whisper"].get("language"),
+        beam_size=config["whisper"].get("beam_size", 5),
+        condition_on_previous_text=config["whisper"].get(
+            "condition_on_previous_text", True
+        ),
     )
-    transcript_segments = transcriber.transcribe(audio_path)
+    transcript_segments = transcriber.transcribe(
+        audio_path,
+        duration_sec=duration,
+        step_start_time=step_start,
+    )
+    step_elapsed = time.time() - step_start
+    total_elapsed = time.time() - start_time
     print(f"  Found {len(transcript_segments)} transcript segments")
+    print(f"  Done in {_format_elapsed(step_elapsed)} (elapsed: {_format_elapsed(total_elapsed)})")
 
+    # Step 3: Diarize
+    step_start = time.time()
     print("\nStep 3/4: Identifying speakers with pyannote...")
-    # Diarize
     diarizer = SpeakerDiarizer(
         hf_token=hf_token,
         pipeline_name=config["pyannote"]["pipeline"],
@@ -214,18 +287,26 @@ def transcribe_video(
         max_speakers=config["pyannote"]["max_speakers"],
     )
     speaker_segments = diarizer.diarize(audio_path)
-    
+
     # Count unique speakers
     unique_speakers = len(set(seg.speaker_id for seg in speaker_segments))
+    step_elapsed = time.time() - step_start
+    total_elapsed = time.time() - start_time
     print(f"  Found {unique_speakers} unique speakers")
+    print(f"  Done in {_format_elapsed(step_elapsed)} (elapsed: {_format_elapsed(total_elapsed)})")
 
+    # Step 4: Merge
+    step_start = time.time()
     print("\nStep 4/4: Merging transcription with speaker labels...")
-    # Merge
     merger = TranscriptMerger()
     merged_segments = merger.merge(transcript_segments, speaker_segments)
+    step_elapsed = time.time() - step_start
+    total_elapsed = time.time() - start_time
     print(f"  Created {len(merged_segments)} final segments")
+    print(f"  Done in {_format_elapsed(step_elapsed)} (elapsed: {_format_elapsed(total_elapsed)})")
 
     processing_time = time.time() - start_time
+    print(f"\nTotal time: {_format_elapsed(processing_time)}")
 
     # Prepare output
     result = {

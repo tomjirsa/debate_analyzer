@@ -112,10 +112,10 @@ class VideoDownloader:
         # Start with base configuration
         ydl_opts = self.config.copy()
 
-        # Add output templates
+        # Add output templates (title first, then id)
         ydl_opts["outtmpl"] = {
-            "default": str(self.videos_dir / "%(id)s_%(title)s.%(ext)s"),
-            "subtitle": str(self.subtitles_dir / "%(id)s_%(title)s.%(ext)s"),
+            "default": str(self.videos_dir / "%(title)s_%(id)s.%(ext)s"),
+            "subtitle": str(self.subtitles_dir / "%(title)s_%(id)s.%(ext)s"),
         }
 
         # Override subtitle settings if specified
@@ -141,14 +141,18 @@ class VideoDownloader:
                 duration = info.get("duration", 0)
                 uploader = info.get("uploader", "unknown")
 
-                # Find downloaded video file
+                # Find downloaded video file (filename is title_id.ext, title may be sanitized by yt-dlp)
                 video_ext = info.get("ext", "mp4")
-                video_filename = f"{video_id}_{title}.{video_ext}"
-                video_path = self.videos_dir / video_filename
+                video_matches = list(self.videos_dir.glob(f"*_{video_id}.{video_ext}"))
+                video_path = (
+                    self.videos_dir / f"{title}_{video_id}.{video_ext}"
+                    if not video_matches
+                    else video_matches[0]
+                )
 
-                # Find subtitle files
-                subtitle_paths = list(self.subtitles_dir.glob(f"{video_id}_*.srt"))
-                subtitle_paths.extend(self.subtitles_dir.glob(f"{video_id}_*.vtt"))
+                # Find subtitle files (filename is title_id.ext)
+                subtitle_paths = list(self.subtitles_dir.glob(f"*_{video_id}.srt"))
+                subtitle_paths.extend(self.subtitles_dir.glob(f"*_{video_id}.vtt"))
 
                 metadata = {
                     "video_id": video_id,

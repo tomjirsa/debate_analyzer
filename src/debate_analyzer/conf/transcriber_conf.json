@@ -1,0 +1,21 @@
+{
+  "description": "Transcription and speaker diarization settings",
+  "whisper": {
+    "model_size": "base",
+    "device": "auto",
+    "compute_type": "float16",
+    "language": null,
+    "beam_size": 1,
+    "condition_on_previous_text": true
+  },
+  "pyannote": {
+    "pipeline": "pyannote/speaker-diarization-3.1",
+    "min_speakers": null,
+    "max_speakers": null
+  },
+  "audio_extraction": {
+    "sample_rate": 16000,
+    "channels": 1,
+    "format": "wav"
+  }
+}
