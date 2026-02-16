@@ -26,7 +26,7 @@ RUN curl -sS "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o /tmp/
 WORKDIR /app
 
 # Copy project and install Python deps (no dev deps)
-COPY pyproject.toml poetry.lock* ./
+COPY pyproject.toml poetry.lock* README.md ./
 COPY src ./src
 RUN pip install --no-cache-dir .
 
