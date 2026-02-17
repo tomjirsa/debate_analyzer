@@ -288,6 +288,7 @@ def transcribe_video(
         pipeline_name=config["pyannote"]["pipeline"],
         min_speakers=config["pyannote"]["min_speakers"],
         max_speakers=config["pyannote"]["max_speakers"],
+        device=device,
     )
     speaker_segments = diarizer.diarize(audio_path)
 

@@ -26,6 +26,7 @@ class SpeakerDiarizer:
         pipeline_name: str = "pyannote/speaker-diarization-3.1",
         min_speakers: Optional[int] = None,
         max_speakers: Optional[int] = None,
+        device: str = "auto",
     ) -> None:
         """
         Initialize the speaker diarizer.
@@ -35,6 +36,8 @@ class SpeakerDiarizer:
             pipeline_name: Name of the pyannote pipeline to use
             min_speakers: Minimum number of speakers (optional)
             max_speakers: Maximum number of speakers (optional)
+            device: Device to use ('auto', 'cpu', or 'cuda'). If 'auto', uses CUDA
+                when available, otherwise CPU.
 
         Raises:
             DiarizationError: If HF token is not provided or pipeline fails to load
@@ -59,12 +62,21 @@ class SpeakerDiarizer:
         self.min_speakers = min_speakers
         self.max_speakers = max_speakers
 
+        # Resolve device (same logic as WhisperTranscriber)
+        if device == "auto":
+            try:
+                device = "cuda" if torch.cuda.is_available() else "cpu"
+            except ImportError:
+                device = "cpu"
+        self.device = device
+
         try:
             # Load the pipeline
             self.pipeline = Pipeline.from_pretrained(
                 pipeline_name,
                 token=self.hf_token,
             )
+            self.pipeline = self.pipeline.to(torch.device(device))
         except Exception as e:
             error_msg = str(e)
             if "401" in error_msg or "unauthorized" in error_msg.lower():

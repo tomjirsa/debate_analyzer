@@ -261,6 +261,30 @@ class TestTranscriptMerger:
         assert merged[0].confidence == 0.5  # 2.0 / 4.0
 
 
+class TestSpeakerDiarizer:
+    """Tests for SpeakerDiarizer."""
+
+    @patch("debate_analyzer.transcriber.diarizer.Pipeline")
+    def test_pipeline_moved_to_device_when_cpu_requested(
+        self, mock_pipeline_class: Mock
+    ) -> None:
+        """SpeakerDiarizer moves the pipeline to the requested device (e.g. CPU)."""
+        import torch
+
+        from debate_analyzer.transcriber.diarizer import SpeakerDiarizer
+
+        mock_pipeline = MagicMock()
+        mock_pipeline_class.from_pretrained.return_value = mock_pipeline
+
+        SpeakerDiarizer(
+            hf_token="test_token",
+            pipeline_name="pyannote/speaker-diarization-3.1",
+            device="cpu",
+        )
+
+        mock_pipeline.to.assert_called_once_with(torch.device("cpu"))
+
+
 class TestTranscriptionConfig:
     """Tests for configuration loading."""
 
