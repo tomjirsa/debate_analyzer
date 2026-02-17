@@ -28,6 +28,11 @@ locals {
     max_vcpus      = var.batch_max_vcpus
     use_spot       = var.use_spot
   })), 0, 8)
+  ce_cpu_name_suffix = substr(md5(jsonencode({
+    instance_types = join(",", var.batch_cpu_instance_types)
+    min_vcpus      = var.batch_cpu_min_vcpus
+    max_vcpus      = var.batch_cpu_max_vcpus
+  })), 0, 8)
   # Effective cookies secret ARN: from Terraform-created secret (file path) or user-provided ARN
   yt_cookies_secret_arn = var.yt_cookies_file_path != null ? aws_secretsmanager_secret.yt_cookies[0].arn : var.yt_cookies_secret_arn
 }
@@ -247,7 +252,29 @@ resource "aws_batch_compute_environment" "gpu" {
   }
 }
 
-# --- Batch: job queue ---
+# --- Batch: CPU compute environment (for download job) ---
+resource "aws_batch_compute_environment" "cpu" {
+  compute_environment_name = "${local.name}-cpu-${local.ce_cpu_name_suffix}"
+  type                     = "MANAGED"
+  state                    = "ENABLED"
+
+  lifecycle {
+    create_before_destroy = true
+  }
+
+  compute_resources {
+    type                = "EC2"
+    allocation_strategy = "BEST_FIT"
+    min_vcpus           = var.batch_cpu_min_vcpus
+    max_vcpus           = var.batch_cpu_max_vcpus
+    instance_type       = var.batch_cpu_instance_types
+    subnets             = local.subnet_ids
+    security_group_ids   = [aws_security_group.batch.id]
+    instance_role       = aws_iam_instance_profile.batch_instance.arn
+  }
+}
+
+# --- Batch: job queues ---
 resource "aws_batch_job_queue" "this" {
   name     = "${local.name}-queue"
   state    = "ENABLED"
@@ -259,7 +286,19 @@ resource "aws_batch_job_queue" "this" {
   }
 }
 
-# --- Batch: job definition ---
+resource "aws_batch_job_queue" "cpu" {
+  name     = "${local.name}-queue-cpu"
+  state    = "ENABLED"
+  priority = 1
+
+  compute_environment_order {
+    order               = 1
+    compute_environment = aws_batch_compute_environment.cpu.arn
+  }
+}
+
+# --- Batch: job definitions ---
+# Full pipeline (download + transcribe in one job; backward compatible)
 resource "aws_batch_job_definition" "this" {
   name                  = "${local.name}-job"
   type                  = "container"
@@ -272,8 +311,8 @@ resource "aws_batch_job_definition" "this" {
       { type = "MEMORY", value = "15360" },
       { type = "GPU", value = "1" }
     ]
-    jobRoleArn    = aws_iam_role.batch_job.arn
-    executionRoleArn = aws_iam_role.batch_execution.arn
+    jobRoleArn        = aws_iam_role.batch_job.arn
+    executionRoleArn  = aws_iam_role.batch_execution.arn
     secrets = [
       {
         name      = "HF_TOKEN"
@@ -285,7 +324,69 @@ resource "aws_batch_job_definition" "this" {
       logDriver = "awslogs"
       options = {
         "awslogs-group"         = aws_cloudwatch_log_group.batch.name
-        "awslogs-region"         = local.region
+        "awslogs-region"        = local.region
+        "awslogs-stream-prefix" = "batch"
+      }
+    }
+  })
+}
+
+# Job 1: Download only (CPU, no GPU, no HF token)
+resource "aws_batch_job_definition" "download" {
+  name                  = "${local.name}-job-download"
+  type                  = "container"
+  platform_capabilities = ["EC2"]
+
+  container_properties = jsonencode({
+    image = local.ecr_image
+    command = ["/entrypoint_download.sh"]
+    resourceRequirements = [
+      { type = "VCPU", value = "2" },
+      { type = "MEMORY", value = "4096" }
+    ]
+    jobRoleArn       = aws_iam_role.batch_job.arn
+    executionRoleArn = aws_iam_role.batch_execution.arn
+    secrets          = []
+    environment      = local.yt_cookies_secret_arn != null ? [{ name = "YT_COOKIES_SECRET_ARN", value = local.yt_cookies_secret_arn }] : []
+    logConfiguration = {
+      logDriver = "awslogs"
+      options = {
+        "awslogs-group"         = aws_cloudwatch_log_group.batch.name
+        "awslogs-region"        = local.region
+        "awslogs-stream-prefix" = "batch"
+      }
+    }
+  })
+}
+
+# Job 2: Transcribe only (GPU; reads video from S3)
+resource "aws_batch_job_definition" "transcribe" {
+  name                  = "${local.name}-job-transcribe"
+  type                  = "container"
+  platform_capabilities = ["EC2"]
+
+  container_properties = jsonencode({
+    image = local.ecr_image
+    command = ["/entrypoint_transcribe.sh"]
+    resourceRequirements = [
+      { type = "VCPU", value = "3" },
+      { type = "MEMORY", value = "15360" },
+      { type = "GPU", value = "1" }
+    ]
+    jobRoleArn       = aws_iam_role.batch_job.arn
+    executionRoleArn = aws_iam_role.batch_execution.arn
+    secrets = [
+      {
+        name      = "HF_TOKEN"
+        valueFrom = aws_secretsmanager_secret.hf_token.arn
+      }
+    ]
+    environment = []
+    logConfiguration = {
+      logDriver = "awslogs"
+      options = {
+        "awslogs-group"         = aws_cloudwatch_log_group.batch.name
+        "awslogs-region"        = local.region
         "awslogs-stream-prefix" = "batch"
       }
     }

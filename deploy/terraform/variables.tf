@@ -38,7 +38,25 @@ variable "ecr_image_tag" {
 variable "batch_compute_instance_types" {
   description = "EC2 instance types for the Batch compute environment (GPU)."
   type        = list(string)
-  default     = ["g4dn.xlarge", "g4dn.2xlarge" ]
+  default     = ["g4dn.xlarge", "g4dn.2xlarge"]
+}
+
+variable "batch_cpu_instance_types" {
+  description = "EC2 instance types for the CPU compute environment (download job)."
+  type        = list(string)
+  default     = ["c5.xlarge"]
+}
+
+variable "batch_cpu_min_vcpus" {
+  description = "Minimum vCPUs for the CPU compute environment (0 = scale to zero)."
+  type        = number
+  default     = 0
+}
+
+variable "batch_cpu_max_vcpus" {
+  description = "Maximum vCPUs for the CPU compute environment."
+  type        = number
+  default     = 64
 }
 
 variable "batch_min_vcpus" {

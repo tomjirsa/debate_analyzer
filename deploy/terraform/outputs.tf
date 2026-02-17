@@ -34,13 +34,28 @@ output "batch_job_queue_arn" {
 }
 
 output "batch_job_definition_name" {
-  description = "Name of the Batch job definition (use when submitting jobs)."
+  description = "Name of the Batch job definition (full pipeline; use when submitting jobs)."
   value       = aws_batch_job_definition.this.name
 }
 
 output "batch_job_definition_arn" {
   description = "ARN of the Batch job definition (revision is appended at runtime)."
   value       = aws_batch_job_definition.this.arn
+}
+
+output "batch_job_queue_cpu_name" {
+  description = "Name of the CPU job queue (for download-only jobs)."
+  value       = aws_batch_job_queue.cpu.name
+}
+
+output "batch_job_definition_download_name" {
+  description = "Name of the download-only job definition (Job 1)."
+  value       = aws_batch_job_definition.download.name
+}
+
+output "batch_job_definition_transcribe_name" {
+  description = "Name of the transcribe-only job definition (Job 2)."
+  value       = aws_batch_job_definition.transcribe.name
 }
 
 output "output_s3_prefix_example" {

@@ -35,8 +35,12 @@ COPY pyproject.toml poetry.lock* README.md ./
 COPY src ./src
 RUN pip install --no-cache-dir .
 
-# Pipeline entrypoint (download -> S3 -> transcribe -> S3)
+# Pipeline entrypoints: full pipeline, download-only, transcribe-only
 COPY deploy/entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
+COPY deploy/entrypoint_download.sh /entrypoint_download.sh
+COPY deploy/entrypoint_transcribe.sh /entrypoint_transcribe.sh
+RUN chmod +x /entrypoint.sh /entrypoint_download.sh /entrypoint_transcribe.sh
 
-ENTRYPOINT ["/entrypoint.sh"]
+# No ENTRYPOINT so job definitions can override command to run entrypoint_download.sh or entrypoint_transcribe.sh
+ENTRYPOINT []
+CMD ["/entrypoint.sh"]

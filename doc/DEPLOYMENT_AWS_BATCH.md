@@ -1,13 +1,16 @@
 # Deploying Debate Analyzer to AWS Batch (GPU)
 
-This guide describes how to run the debate-analyzer pipeline on AWS Batch with GPU: you submit a **video URL** (e.g. YouTube), and a job downloads the video in AWS, uploads it to S3, transcribes it with speaker diarization, and uploads the transcripts to S3. All infrastructure is provisioned with **Terraform**; the Docker image is built and pushed by **GitHub Actions**.
+This guide describes how to run the debate-analyzer pipeline on AWS Batch: you can either run a **single job** (download + transcribe) or **two separate jobs** (download to S3, then transcribe from S3). All infrastructure is provisioned with **Terraform**; the Docker image is built and pushed by **GitHub Actions**.
 
 ## Overview
 
-- **Input:** Video URL (e.g. `https://www.youtube.com/watch?v=...`)
-- **Output (S3):** Downloaded video and optional subtitles under `s3://<bucket>/jobs/<job-id>/videos/`; transcription JSON (and optionally audio) under `s3://<bucket>/jobs/<job-id>/transcripts/`
-- **Secrets:** HuggingFace token is stored in AWS Secrets Manager and injected into the container by Batch (no code changes; set via Terraform variable).
-- **Cost:** You pay only for GPU time while the job runs; the compute environment scales to zero when idle.
+- **Single job (full pipeline):** Submit a video URL; one job downloads the video, uploads to S3, transcribes with GPU, and uploads transcripts. Uses the GPU queue and job definition `debate-analyzer-job`.
+- **Two jobs (recommended for reusing downloads):**
+  - **Job 1 (download):** Submit a video URL; downloads and uploads to `s3://<bucket>/jobs/<job-id>/videos/`. Runs on CPU (cheaper). Use `submit-download-job.sh`.
+  - **Job 2 (transcribe):** Submit an S3 prefix where the video already lives; transcribes and uploads to `s3://<bucket>/jobs/<path>/transcripts/`. Runs on GPU. Use `submit-transcribe-job.sh`.
+- **Output (S3):** Downloaded video and optional subtitles under `s3://<bucket>/jobs/<job-id>/videos/`; transcription JSON (and optionally audio) under `s3://<bucket>/jobs/<job-id>/transcripts/`.
+- **Secrets:** HuggingFace token is stored in AWS Secrets Manager and injected into the transcribe job (and full-pipeline job). The download job does not need it.
+- **Cost:** CPU compute environment scales to zero when idle; GPU same. Using two jobs lets you re-run transcription without re-downloading.
 
 ## 1. Terraform setup and variables
 
@@ -26,7 +29,7 @@ All provisioning is in `deploy/terraform/`. Required variable:
   - A `terraform.tfvars` file (do **not** commit it), or
   - A secret backend (e.g. Vault)
 
-Optional variables (see `deploy/terraform/variables.tf`): `aws_region`, `name_prefix`, `ecr_image_tag`, `yt_cookies_secret_arn`, `batch_compute_instance_types`, `batch_min_vcpus`, `batch_max_vcpus`, `vpc_id`, `subnet_ids`, `use_spot`.
+Optional variables (see `deploy/terraform/variables.tf`): `aws_region`, `name_prefix`, `ecr_image_tag`, `yt_cookies_secret_arn`, `batch_compute_instance_types`, `batch_min_vcpus`, `batch_max_vcpus`, `batch_cpu_instance_types`, `batch_cpu_min_vcpus`, `batch_cpu_max_vcpus`, `vpc_id`, `subnet_ids`, `use_spot`.
 
 ## 2. Terraform apply and what it creates
 
@@ -47,9 +50,10 @@ Terraform creates:
 | **S3** bucket | Holds downloaded videos and transcripts (prefix: `jobs/<job-id>/videos/` and `jobs/<job-id>/transcripts/`). |
 | **IAM** roles | Job role (S3 + Secrets Manager), execution role (ECR + CloudWatch), instance role (for Batch compute EC2). |
 | **ECR** repository | Holds the debate-analyzer Docker image (pushed by CI). |
-| **Batch** compute environment | GPU (e.g. g4dn.xlarge), min 0 / max 256 vCPUs. |
-| **Batch** job queue | Linked to the compute environment. |
-| **Batch** job definition | Image, GPU, memory, `HF_TOKEN` from secret, job/execution roles, CloudWatch logs. |
+| **Batch** compute environment (GPU) | GPU (e.g. g4dn.xlarge), min 0 / max 256 vCPUs. |
+| **Batch** compute environment (CPU) | CPU (e.g. c5.xlarge), for download-only jobs; min 0 / max 64 vCPUs. |
+| **Batch** job queues | GPU queue (full pipeline + transcribe job); CPU queue (download job). |
+| **Batch** job definitions | Full pipeline (GPU); download-only (CPU, no HF token); transcribe-only (GPU, reads video from S3). |
 | **CloudWatch** log group | Container logs from each job. |
 
 After `apply`, note the outputs (e.g. `terraform output`): you will need **job queue name**, **job definition name**, and **bucket name** to submit jobs and find outputs.
@@ -107,6 +111,47 @@ Replace `YOUR_VIDEO_ID` with the YouTube video ID. The job will:
 3. Transcribe with GPU and speaker diarization.
 4. Upload transcription (and optionally audio) to `s3://<bucket>/jobs/<job-id>/transcripts/`.
 
+Alternatively, use the helper script from the repo root: `./deploy/submit-job.sh "https://www.youtube.com/watch?v=YOUR_VIDEO_ID"`.
+
+## 4b. Two-job flow: download then transcribe
+
+You can split the pipeline into two Batch jobs so you can re-use an already-downloaded video (e.g. run transcription again with different settings without re-downloading).
+
+### Job 1: Download (CPU)
+
+- **Environment:** `VIDEO_URL`, `OUTPUT_S3_PREFIX` (e.g. `s3://<bucket>/jobs`). Batch injects `AWS_BATCH_JOB_ID`; outputs go under `OUTPUT_S3_PREFIX/<job-id>/videos/`.
+- **Queue:** CPU queue (`batch_job_queue_cpu_name`).
+- **Job definition:** `batch_job_definition_download_name`.
+
+From the repo root:
+
+```bash
+./deploy/submit-download-job.sh "https://www.youtube.com/watch?v=YOUR_VIDEO_ID"
+```
+
+Note the **job ID** from the output (e.g. `abc12345-6789-...`). When the job completes, the video is at `s3://<bucket>/jobs/<job-id>/videos/`.
+
+### Job 2: Transcribe (GPU)
+
+- **Environment:** `VIDEO_S3_PREFIX` (S3 prefix containing the video, e.g. `s3://<bucket>/jobs/<job-id>/videos/`), `OUTPUT_S3_PREFIX` (base prefix for transcripts, e.g. `s3://<bucket>/jobs/<job-id>`). Transcripts are written to `OUTPUT_S3_PREFIX/transcripts/`.
+- **Queue:** GPU queue (`batch_job_queue_name`).
+- **Job definition:** `batch_job_definition_transcribe_name`.
+
+From the repo root (replace `<job-id>` with the download job ID):
+
+```bash
+BUCKET=$(cd deploy/terraform && terraform output -raw s3_bucket_name)
+./deploy/submit-transcribe-job.sh "s3://$BUCKET/jobs/<job-id>/videos"
+```
+
+Or with explicit output prefix:
+
+```bash
+./deploy/submit-transcribe-job.sh "s3://$BUCKET/jobs/<job-id>/videos" "s3://$BUCKET/jobs/<job-id>"
+```
+
+The transcribe job syncs the video from S3 to the container, runs Whisper + pyannote, and uploads transcripts to `s3://<bucket>/jobs/<job-id>/transcripts/`.
+
 ## 5. Where downloaded videos and transcripts land in S3
 
 - **Downloaded video and subtitles:** `s3://<bucket>/jobs/<job-id>/videos/`
@@ -146,6 +191,7 @@ The image includes Deno and EJS for YouTube. If you still see **"Sign in to conf
 
 1. Set `TF_VAR_hf_token`, run `terraform init` and `terraform apply` in `deploy/terraform/`.
 2. Configure GitHub Actions (OIDC or static AWS credentials) and push to `main` to build and push the image to ECR.
-3. Submit jobs with `aws batch submit-job` and container env `VIDEO_URL` and `OUTPUT_S3_PREFIX=s3://<bucket>/jobs`.
-4. Find outputs in S3 under `jobs/<job-id>/videos/` and `jobs/<job-id>/transcripts/`, and logs in CloudWatch under `/aws/batch/debate-analyzer`.
-5. If YouTube shows "Sign in to confirm you're not a bot", use optional cookies (see section 7); set `YT_COOKIES_FILE`, `YT_COOKIES_S3_URI`, or `YT_COOKIES_SECRET_ARN` (or Terraform variable `yt_cookies_secret_arn`).
+3. **Single job:** Use `./deploy/submit-job.sh <video_url>` or `aws batch submit-job` with `VIDEO_URL` and `OUTPUT_S3_PREFIX=s3://<bucket>/jobs`.
+4. **Two jobs:** Use `./deploy/submit-download-job.sh <video_url>`, then `./deploy/submit-transcribe-job.sh s3://<bucket>/jobs/<job-id>/videos` (see section 4b).
+5. Find outputs in S3 under `jobs/<job-id>/videos/` and `jobs/<job-id>/transcripts/`, and logs in CloudWatch under `/aws/batch/debate-analyzer`.
+6. If YouTube shows "Sign in to confirm you're not a bot", use optional cookies (see section 7); set `YT_COOKIES_FILE`, `YT_COOKIES_S3_URI`, or `YT_COOKIES_SECRET_ARN` (or Terraform variable `yt_cookies_secret_arn`).

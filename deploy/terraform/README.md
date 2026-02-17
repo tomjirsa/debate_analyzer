@@ -1,6 +1,6 @@
 # Debate Analyzer – AWS Batch (Terraform)
 
-This directory provisions all AWS resources for running the debate-analyzer pipeline on AWS Batch with GPU: Secrets Manager (HF token), S3 bucket, IAM roles, ECR repository, Batch compute environment, job queue, and job definition.
+This directory provisions all AWS resources for running the debate-analyzer pipeline on AWS Batch: Secrets Manager (HF token), S3 bucket, IAM roles, ECR repository, GPU and CPU compute environments, job queues, and job definitions. You can run a single full-pipeline job (download + transcribe) or two separate jobs (download to S3, then transcribe from S3).
 
 ## Prerequisites
 
@@ -23,16 +23,9 @@ This directory provisions all AWS resources for running the debate-analyzer pipe
    terraform apply
    ```
 
-3. **Note the outputs** (queue name, job definition name, bucket name). After the Docker image is pushed to ECR (e.g. by GitHub Actions), submit a job:
-   ```bash
-   aws batch submit-job \
-     --job-name debate-analyzer-$(date +%s) \
-     --job-queue $(terraform output -raw batch_job_queue_name) \
-     --job-definition $(terraform output -raw batch_job_definition_name) \
-     --container-overrides '{"environment":[{"name":"VIDEO_URL","value":"https://www.youtube.com/watch?v=VIDEO_ID"},{"name":"OUTPUT_S3_PREFIX","value":"s3://BUCKET_NAME/jobs"}]}' \
-     --region $(terraform output -raw aws_region 2>/dev/null || echo "eu-central-1")
-   ```
-   Replace `VIDEO_ID` and `BUCKET_NAME` (or use `terraform output output_s3_prefix_example`).
+3. **Note the outputs** (queue names, job definition names, bucket name). After the Docker image is pushed to ECR (e.g. by GitHub Actions), submit jobs:
+   - **Full pipeline (one job):** From repo root, `./deploy/submit-job.sh "https://www.youtube.com/watch?v=VIDEO_ID"`, or use `batch_job_queue_name` and `batch_job_definition_name` with the example in `terraform output submit_job_example`.
+   - **Two jobs:** From repo root, `./deploy/submit-download-job.sh "<video_url>"`, then after the download job completes, `./deploy/submit-transcribe-job.sh s3://BUCKET/jobs/<job-id>/videos`. Uses `batch_job_queue_cpu_name` / `batch_job_definition_download_name` for the first job and `batch_job_queue_name` / `batch_job_definition_transcribe_name` for the second.
 
 **Optional – YouTube bot check:** If YouTube shows "Sign in to confirm you're not a bot", use optional cookies. See **doc/DEPLOYMENT_AWS_BATCH.md** for `YT_COOKIES_FILE`, `YT_COOKIES_S3_URI`, and `YT_COOKIES_SECRET_ARN`. You can either set `yt_cookies_secret_arn` to the ARN of an existing Secrets Manager secret containing the cookies file content, or set `yt_cookies_file_path` to a local cookies.txt path and let Terraform create the secret from that file.
 
@@ -46,21 +39,29 @@ This directory provisions all AWS resources for running the debate-analyzer pipe
 | `yt_cookies_secret_arn` | ARN of Secrets Manager secret with YouTube cookies (Netscape format); optional for bot check | `null` |
 | `yt_cookies_file_path` | Path to local cookies.txt (Netscape format); Terraform creates the secret from this file | `null` |
 | `ecr_image_tag` | Docker image tag for job definition | `latest` |
-| `batch_compute_instance_types` | GPU instance types | `["g4dn.xlarge"]` |
-| `batch_min_vcpus` | Min vCPUs (0 = scale to zero) | `0` |
-| `batch_max_vcpus` | Max vCPUs | `256` |
+| `batch_compute_instance_types` | GPU instance types | `["g4dn.xlarge", "g4dn.2xlarge"]` |
+| `batch_min_vcpus` | Min vCPUs for GPU CE (0 = scale to zero) | `0` |
+| `batch_max_vcpus` | Max vCPUs for GPU CE | `256` |
+| `batch_cpu_instance_types` | CPU instance types (download job) | `["c5.xlarge"]` |
+| `batch_cpu_min_vcpus` | Min vCPUs for CPU CE (0 = scale to zero) | `0` |
+| `batch_cpu_max_vcpus` | Max vCPUs for CPU CE | `64` |
 | `vpc_id` | VPC ID (null = default VPC) | `null` |
 | `subnet_ids` | Subnet IDs (null = default VPC subnets) | `null` |
 | `use_spot` | Use Spot instances | `false` |
 
 ## Outputs
 
-- `batch_job_queue_name` – use when submitting jobs
-- `batch_job_definition_name` – use when submitting jobs
+- `batch_job_queue_name` – GPU queue (full pipeline and transcribe job)
+- `batch_job_queue_cpu_name` – CPU queue (download job)
+- `batch_job_definition_name` – full pipeline (download + transcribe)
+- `batch_job_definition_download_name` – download-only (Job 1)
+- `batch_job_definition_transcribe_name` – transcribe-only (Job 2)
 - `s3_bucket_name` – where videos and transcripts are written
 - `ecr_repository_url` – where CI pushes the image
 - `output_s3_prefix_example` – example value for `OUTPUT_S3_PREFIX`
-- `submit_job_example` – example `aws batch submit-job` command
+- `submit_job_example` – example `aws batch submit-job` command for full pipeline
+
+**Submit scripts (from repo root):** `./deploy/submit-job.sh`, `./deploy/submit-download-job.sh`, `./deploy/submit-transcribe-job.sh`. See **doc/DEPLOYMENT_AWS_BATCH.md** for the two-job flow.
 
 ## Teardown
 
