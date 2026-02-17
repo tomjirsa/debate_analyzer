@@ -1,5 +1,6 @@
 """Tests for video_downloader module."""
 
+import os
 from pathlib import Path
 from unittest.mock import MagicMock, mock_open, patch
 
@@ -162,6 +163,100 @@ class TestVideoDownloader:
             VideoDownloadError, match="Unexpected error during download"
         ):
             downloader.download(url)
+
+    @patch("debate_analyzer.video_downloader.downloader.yt_dlp.YoutubeDL")
+    def test_download_uses_cookiefile_when_yt_cookies_file_set_and_exists(
+        self, mock_ytdl_class: MagicMock, tmp_path: Path
+    ) -> None:
+        """Test cookiefile in ydl_opts when YT_COOKIES_FILE is set and path exists."""
+        mock_ytdl = MagicMock()
+        mock_ytdl_class.return_value.__enter__.return_value = mock_ytdl
+        mock_ytdl.extract_info.return_value = {
+            "id": "dQw4w9WgXcQ",
+            "title": "Test",
+            "duration": 100,
+            "uploader": "Tester",
+            "ext": "mp4",
+        }
+
+        cookies_file = tmp_path / "cookies.txt"
+        cookies_file.touch()
+        (tmp_path / "videos").mkdir(parents=True)
+        (tmp_path / "videos" / "Test_dQw4w9WgXcQ.mp4").touch()
+        (tmp_path / "subtitles").mkdir(parents=True)
+
+        downloader = VideoDownloader(tmp_path)
+        url = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+
+        with patch.dict(
+            os.environ, {"YT_COOKIES_FILE": str(cookies_file)}, clear=False
+        ):
+            with patch("builtins.open", mock_open()):
+                downloader.download(url)
+
+        ydl_opts = mock_ytdl_class.call_args[0][0]
+        assert "cookiefile" in ydl_opts
+        assert ydl_opts["cookiefile"] == str(cookies_file)
+
+    @patch("debate_analyzer.video_downloader.downloader.yt_dlp.YoutubeDL")
+    def test_download_no_cookiefile_when_yt_cookies_file_unset(
+        self, mock_ytdl_class: MagicMock, tmp_path: Path
+    ) -> None:
+        """Test no cookiefile when YT_COOKIES_FILE is unset."""
+        mock_ytdl = MagicMock()
+        mock_ytdl_class.return_value.__enter__.return_value = mock_ytdl
+        mock_ytdl.extract_info.return_value = {
+            "id": "dQw4w9WgXcQ",
+            "title": "Test",
+            "duration": 100,
+            "uploader": "Tester",
+            "ext": "mp4",
+        }
+
+        (tmp_path / "videos").mkdir(parents=True)
+        (tmp_path / "videos" / "Test_dQw4w9WgXcQ.mp4").touch()
+        (tmp_path / "subtitles").mkdir(parents=True)
+
+        downloader = VideoDownloader(tmp_path)
+        url = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+
+        with patch.dict(os.environ, {"YT_COOKIES_FILE": ""}, clear=False):
+            with patch("builtins.open", mock_open()):
+                downloader.download(url)
+
+        ydl_opts = mock_ytdl_class.call_args[0][0]
+        assert "cookiefile" not in ydl_opts
+
+    @patch("debate_analyzer.video_downloader.downloader.yt_dlp.YoutubeDL")
+    def test_download_no_cookiefile_when_yt_cookies_file_path_does_not_exist(
+        self, mock_ytdl_class: MagicMock, tmp_path: Path
+    ) -> None:
+        """Test no cookiefile when YT_COOKIES_FILE path does not exist."""
+        mock_ytdl = MagicMock()
+        mock_ytdl_class.return_value.__enter__.return_value = mock_ytdl
+        mock_ytdl.extract_info.return_value = {
+            "id": "dQw4w9WgXcQ",
+            "title": "Test",
+            "duration": 100,
+            "uploader": "Tester",
+            "ext": "mp4",
+        }
+
+        nonexistent = tmp_path / "nonexistent_cookies.txt"
+        assert not nonexistent.exists()
+        (tmp_path / "videos").mkdir(parents=True)
+        (tmp_path / "videos" / "Test_dQw4w9WgXcQ.mp4").touch()
+        (tmp_path / "subtitles").mkdir(parents=True)
+
+        downloader = VideoDownloader(tmp_path)
+        url = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+
+        with patch.dict(os.environ, {"YT_COOKIES_FILE": str(nonexistent)}, clear=False):
+            with patch("builtins.open", mock_open()):
+                downloader.download(url)
+
+        ydl_opts = mock_ytdl_class.call_args[0][0]
+        assert "cookiefile" not in ydl_opts
 
     @patch("debate_analyzer.video_downloader.downloader.yt_dlp.YoutubeDL")
     def test_download_collects_subtitle_files(

@@ -127,7 +127,7 @@ Examples:
             text = segment["text"]
             start = segment["start"]
             print(f"[{start:>7.2f}s] {speaker}: {text}")
-        
+
         if len(result["transcription"]) > 5:
             print(f"... and {len(result['transcription']) - 5} more segments")
 

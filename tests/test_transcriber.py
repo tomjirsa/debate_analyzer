@@ -325,7 +325,7 @@ class TestTranscriptionIntegration:
 
         # This would require a real video file and models
         video_path = tmp_path / "test_video.mp4"
-        
+
         # Skip if video doesn't exist
         if not video_path.exists():
             pytest.skip("Test video not available")

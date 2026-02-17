@@ -26,7 +26,7 @@ All provisioning is in `deploy/terraform/`. Required variable:
   - A `terraform.tfvars` file (do **not** commit it), or
   - A secret backend (e.g. Vault)
 
-Optional variables (see `deploy/terraform/variables.tf`): `aws_region`, `name_prefix`, `ecr_image_tag`, `batch_compute_instance_types`, `batch_min_vcpus`, `batch_max_vcpus`, `vpc_id`, `subnet_ids`, `use_spot`.
+Optional variables (see `deploy/terraform/variables.tf`): `aws_region`, `name_prefix`, `ecr_image_tag`, `yt_cookies_secret_arn`, `batch_compute_instance_types`, `batch_min_vcpus`, `batch_max_vcpus`, `vpc_id`, `subnet_ids`, `use_spot`.
 
 ## 2. Terraform apply and what it creates
 
@@ -120,9 +120,32 @@ Replace `YOUR_VIDEO_ID` with the YouTube video ID. The job will:
 - **Container logs:** CloudWatch Logs group `/aws/batch/debate-analyzer` (or the name in Terraform output); stream prefix `batch`.
 - **Failed jobs:** Check the same log group for stderr; ensure `VIDEO_URL` and `OUTPUT_S3_PREFIX` are set and the HuggingFace token is valid and has accepted the pyannote model terms.
 
+## 7. YouTube bot check (optional cookies)
+
+The image includes Deno and EJS for YouTube. If you still see **"Sign in to confirm you're not a bot"** (common when running from AWS datacenter IPs), use a cookies file.
+
+**Export:** Log into YouTube in a browser, then use an extension (e.g. [Get cookies.txt LOCALLY](https://chromewebstore.google.com/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc)) to export cookies in Netscape format to a file (e.g. `cookies.txt`). Alternatively, you can export cookies from Chrome (e.g. JSON from an export extension or the Cookie header from the Network tab) and convert them with `python deploy/scripts/chrome_cookies_to_netscape.py [options] <input> -o cookies.txt`.
+
+**Store:** Put the cookies in one of:
+
+1. A **private** S3 object
+2. An **AWS Secrets Manager** secret (secret value = raw cookies.txt content)
+3. A file mounted into the container
+
+**Use:**
+
+- **Option A (Secrets Manager):**
+  - **From a local file via Terraform:** Set the Terraform variable `yt_cookies_file_path` to the path to your `cookies.txt` (e.g. `./cookies.txt` or `~/cookies.txt`). Run `terraform apply`; Terraform will create the secret from the file and configure the job. Do not commit the cookies file. Terraform state will contain the secret value—use a remote backend with encryption and restrict access.
+  - **Existing secret:** Create a secret in AWS (console or CLI) with the cookies content, then set the Terraform variable `yt_cookies_secret_arn` to the secret ARN (or pass `YT_COOKIES_SECRET_ARN` in container overrides). The entrypoint fetches the value and sets `YT_COOKIES_FILE` before the download step.
+- **Option B (S3):** Set `YT_COOKIES_S3_URI` to the S3 URI (e.g. `s3://your-bucket/private/cookies.txt`). The entrypoint downloads it and sets `YT_COOKIES_FILE`.
+- **Option C (direct path):** If the cookie file is provided by another mechanism (e.g. volume mount), set `YT_COOKIES_FILE` to the path inside the container.
+
+**Security:** The cookie file is as sensitive as a browser session. Use a private bucket or Secrets Manager and least-privilege IAM. Do not commit or log the file.
+
 ## Summary
 
 1. Set `TF_VAR_hf_token`, run `terraform init` and `terraform apply` in `deploy/terraform/`.
 2. Configure GitHub Actions (OIDC or static AWS credentials) and push to `main` to build and push the image to ECR.
 3. Submit jobs with `aws batch submit-job` and container env `VIDEO_URL` and `OUTPUT_S3_PREFIX=s3://<bucket>/jobs`.
 4. Find outputs in S3 under `jobs/<job-id>/videos/` and `jobs/<job-id>/transcripts/`, and logs in CloudWatch under `/aws/batch/debate-analyzer`.
+5. If YouTube shows "Sign in to confirm you're not a bot", use optional cookies (see section 7); set `YT_COOKIES_FILE`, `YT_COOKIES_S3_URI`, or `YT_COOKIES_SECRET_ARN` (or Terraform variable `yt_cookies_secret_arn`).

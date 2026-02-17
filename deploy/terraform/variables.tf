@@ -16,6 +16,19 @@ variable "hf_token" {
   sensitive   = true
 }
 
+variable "yt_cookies_secret_arn" {
+  description = "ARN of an AWS Secrets Manager secret containing the YouTube cookies file content (Netscape format). If set, the job role can read this secret and the job definition passes it as YT_COOKIES_SECRET_ARN; the entrypoint fetches the value and writes to a file before the download step."
+  type        = string
+  default     = null
+  sensitive   = true
+}
+
+variable "yt_cookies_file_path" {
+  description = "Path to a local file containing the YouTube cookies in Netscape format (e.g. from a browser extension). When set, Terraform creates a secret from this file and uses it for the Batch job. The path is relative to the working directory when running Terraform. Do not commit the file; use TF_VAR_yt_cookies_file_path or a non-committed tfvars file."
+  type        = string
+  default     = null
+}
+
 variable "ecr_image_tag" {
   description = "Docker image tag to use in the Batch job definition (e.g. latest)."
   type        = string

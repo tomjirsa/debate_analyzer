@@ -1,6 +1,7 @@
 """Video downloader implementation."""
 
 import json
+import os
 import re
 from pathlib import Path
 from typing import Any, Union
@@ -105,6 +106,11 @@ class VideoDownloader:
 
         Raises:
             VideoDownloadError: If URL is invalid or download fails
+
+        Note:
+            If the environment variable ``YT_COOKIES_FILE`` is set and points to an
+            existing file, that file is used as the cookie file for yt-dlp (e.g. to
+            work around YouTube bot checks on datacenter IPs).
         """
         if not self.validate_url(url):
             raise VideoDownloadError(f"Invalid YouTube URL: {url}")
@@ -125,6 +131,13 @@ class VideoDownloader:
             ydl_opts["subtitleslangs"] = []
             ydl_opts["subtitlesformat"] = None
 
+        # Optional cookies file for YouTube (e.g. bot check on datacenter IPs)
+        cookies_path = os.environ.get("YT_COOKIES_FILE", "").strip()
+        if cookies_path:
+            path = Path(cookies_path)
+            if path.exists() and path.is_file():
+                ydl_opts["cookiefile"] = str(path)
+
         try:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 # Extract info and download
@@ -141,7 +154,7 @@ class VideoDownloader:
                 duration = info.get("duration", 0)
                 uploader = info.get("uploader", "unknown")
 
-                # Find downloaded video file (filename is title_id.ext, title may be sanitized by yt-dlp)
+                # Find downloaded video file (title_id.ext; title may be sanitized by yt-dlp)
                 video_ext = info.get("ext", "mp4")
                 video_matches = list(self.videos_dir.glob(f"*_{video_id}.{video_ext}"))
                 video_path = (

@@ -147,6 +147,8 @@ Thumbs.db
 .terraform/
 *.tfstate
 *.tfstate.*
+# YouTube cookies (sensitive; do not commit)
+cookies.txt
 
 # Data files (but keep directory structure)
 data/*

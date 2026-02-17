@@ -28,6 +28,8 @@ locals {
     max_vcpus      = var.batch_max_vcpus
     use_spot       = var.use_spot
   })), 0, 8)
+  # Effective cookies secret ARN: from Terraform-created secret (file path) or user-provided ARN
+  yt_cookies_secret_arn = var.yt_cookies_file_path != null ? aws_secretsmanager_secret.yt_cookies[0].arn : var.yt_cookies_secret_arn
 }
 
 # --- Secrets Manager: HuggingFace token ---
@@ -39,6 +41,19 @@ resource "aws_secretsmanager_secret" "hf_token" {
 resource "aws_secretsmanager_secret_version" "hf_token" {
   secret_id     = aws_secretsmanager_secret.hf_token.id
   secret_string = var.hf_token
+}
+
+# --- Secrets Manager: YouTube cookies (optional, from local file) ---
+resource "aws_secretsmanager_secret" "yt_cookies" {
+  count         = var.yt_cookies_file_path != null ? 1 : 0
+  name          = "${local.name}/yt-cookies"
+  description   = "YouTube cookies for debate-analyzer (Netscape format)"
+}
+
+resource "aws_secretsmanager_secret_version" "yt_cookies" {
+  count         = var.yt_cookies_file_path != null ? 1 : 0
+  secret_id     = aws_secretsmanager_secret.yt_cookies[0].id
+  secret_string = file(var.yt_cookies_file_path)
 }
 
 # --- S3: bucket for downloaded videos and transcripts ---
@@ -84,7 +99,7 @@ resource "aws_iam_role_policy" "batch_job" {
       {
         Effect   = "Allow"
         Action   = "secretsmanager:GetSecretValue"
-        Resource = aws_secretsmanager_secret.hf_token.arn
+        Resource = concat([aws_secretsmanager_secret.hf_token.arn], local.yt_cookies_secret_arn != null ? [local.yt_cookies_secret_arn] : [])
       }
     ]
   })
@@ -265,7 +280,7 @@ resource "aws_batch_job_definition" "this" {
         valueFrom = aws_secretsmanager_secret.hf_token.arn
       }
     ]
-    environment = []
+    environment = local.yt_cookies_secret_arn != null ? [{ name = "YT_COOKIES_SECRET_ARN", value = local.yt_cookies_secret_arn }] : []
     logConfiguration = {
       logDriver = "awslogs"
       options = {

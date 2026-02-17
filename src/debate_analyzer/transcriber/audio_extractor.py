@@ -149,7 +149,9 @@ class AudioExtractor:
             # Clean up output file if extraction failed
             if output_path.exists():
                 output_path.unlink()
-            raise AudioExtractionError(f"Unexpected error during extraction: {e}") from e
+            raise AudioExtractionError(
+                f"Unexpected error during extraction: {e}"
+            ) from e
 
 
 def extract_audio(

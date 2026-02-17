@@ -20,6 +20,16 @@ fi
 DOWNLOADS_DIR=/tmp/downloads
 TRANSCRIPT_DIR=/tmp/out
 
+# Optional cookies for YouTube (bot check on datacenter IPs). S3 object and secret value are sensitive; use private bucket and least-privilege IAM.
+COOKIES_LOCAL=/tmp/yt_cookies.txt
+if [[ -n "${YT_COOKIES_SECRET_ARN:-}" ]]; then
+  aws secretsmanager get-secret-value --secret-id "$YT_COOKIES_SECRET_ARN" --query SecretString --output text > "$COOKIES_LOCAL"
+  export YT_COOKIES_FILE="$COOKIES_LOCAL"
+elif [[ -n "${YT_COOKIES_S3_URI:-}" ]]; then
+  aws s3 cp "$YT_COOKIES_S3_URI" "$COOKIES_LOCAL"
+  export YT_COOKIES_FILE="$COOKIES_LOCAL"
+fi
+
 echo "Step 1/4: Downloading video from $VIDEO_URL"
 python -m debate_analyzer.video_downloader "$VIDEO_URL" --output-dir "$DOWNLOADS_DIR"
 

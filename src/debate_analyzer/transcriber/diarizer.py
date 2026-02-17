@@ -130,7 +130,7 @@ class SpeakerDiarizer:
 
             # Convert to our data model
             speaker_segments = []
-            
+
             # pyannote.audio 4.0 returns a DiarizeOutput object
             # The actual diarization is in the speaker_diarization attribute
             if hasattr(diarization, "speaker_diarization"):

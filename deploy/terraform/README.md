@@ -34,6 +34,8 @@ This directory provisions all AWS resources for running the debate-analyzer pipe
    ```
    Replace `VIDEO_ID` and `BUCKET_NAME` (or use `terraform output output_s3_prefix_example`).
 
+**Optional – YouTube bot check:** If YouTube shows "Sign in to confirm you're not a bot", use optional cookies. See **doc/DEPLOYMENT_AWS_BATCH.md** for `YT_COOKIES_FILE`, `YT_COOKIES_S3_URI`, and `YT_COOKIES_SECRET_ARN`. You can either set `yt_cookies_secret_arn` to the ARN of an existing Secrets Manager secret containing the cookies file content, or set `yt_cookies_file_path` to a local cookies.txt path and let Terraform create the secret from that file.
+
 ## Variables
 
 | Variable | Description | Default |
@@ -41,6 +43,8 @@ This directory provisions all AWS resources for running the debate-analyzer pipe
 | `aws_region` | AWS region | `eu-central-1` |
 | `name_prefix` | Prefix for resource names | `debate-analyzer` |
 | `hf_token` | HuggingFace token (sensitive) | (required) |
+| `yt_cookies_secret_arn` | ARN of Secrets Manager secret with YouTube cookies (Netscape format); optional for bot check | `null` |
+| `yt_cookies_file_path` | Path to local cookies.txt (Netscape format); Terraform creates the secret from this file | `null` |
 | `ecr_image_tag` | Docker image tag for job definition | `latest` |
 | `batch_compute_instance_types` | GPU instance types | `["g4dn.xlarge"]` |
 | `batch_min_vcpus` | Min vCPUs (0 = scale to zero) | `0` |

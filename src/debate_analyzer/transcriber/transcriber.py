@@ -23,6 +23,7 @@ def _format_elapsed(seconds: float) -> str:
     s = seconds - 60 * m
     return f"{m}m {s:.1f}s"
 
+
 from faster_whisper import WhisperModel  # type: ignore[import-untyped]
 
 from debate_analyzer.transcriber.audio_extractor import AudioExtractor
@@ -79,7 +80,7 @@ class WhisperTranscriber:
         # Adjust compute type based on device
         if device == "cpu":
             compute_type = "int8"  # More efficient for CPU
-        
+
         self.compute_type = compute_type
 
         try:
@@ -150,9 +151,7 @@ class WhisperTranscriber:
                     if pct >= last_reported_pct + 5 or pct == 100:
                         elapsed_str = ""
                         if step_start_time is not None:
-                            elapsed_str = (
-                                f" — elapsed: {_format_elapsed(time.time() - step_start_time)}"
-                            )
+                            elapsed_str = f" — elapsed: {_format_elapsed(time.time() - step_start_time)}"
                         sys.stdout.write(
                             f"\r  Transcribing: {pct}% "
                             f"({_format_duration(segment.end)} / "
@@ -249,7 +248,9 @@ def transcribe_video(
     step_elapsed = time.time() - step_start
     total_elapsed = time.time() - start_time
     print(f"  Audio extracted to: {audio_path}")
-    print(f"  Done in {_format_elapsed(step_elapsed)} (elapsed: {_format_elapsed(total_elapsed)})")
+    print(
+        f"  Done in {_format_elapsed(step_elapsed)} (elapsed: {_format_elapsed(total_elapsed)})"
+    )
 
     # Get duration from audio file
     duration = _get_audio_duration(audio_path)
@@ -275,7 +276,9 @@ def transcribe_video(
     step_elapsed = time.time() - step_start
     total_elapsed = time.time() - start_time
     print(f"  Found {len(transcript_segments)} transcript segments")
-    print(f"  Done in {_format_elapsed(step_elapsed)} (elapsed: {_format_elapsed(total_elapsed)})")
+    print(
+        f"  Done in {_format_elapsed(step_elapsed)} (elapsed: {_format_elapsed(total_elapsed)})"
+    )
 
     # Step 3: Diarize
     step_start = time.time()
@@ -293,7 +296,9 @@ def transcribe_video(
     step_elapsed = time.time() - step_start
     total_elapsed = time.time() - start_time
     print(f"  Found {unique_speakers} unique speakers")
-    print(f"  Done in {_format_elapsed(step_elapsed)} (elapsed: {_format_elapsed(total_elapsed)})")
+    print(
+        f"  Done in {_format_elapsed(step_elapsed)} (elapsed: {_format_elapsed(total_elapsed)})"
+    )
 
     # Step 4: Merge
     step_start = time.time()
@@ -303,7 +308,9 @@ def transcribe_video(
     step_elapsed = time.time() - step_start
     total_elapsed = time.time() - start_time
     print(f"  Created {len(merged_segments)} final segments")
-    print(f"  Done in {_format_elapsed(step_elapsed)} (elapsed: {_format_elapsed(total_elapsed)})")
+    print(
+        f"  Done in {_format_elapsed(step_elapsed)} (elapsed: {_format_elapsed(total_elapsed)})"
+    )
 
     processing_time = time.time() - start_time
     print(f"\nTotal time: {_format_elapsed(processing_time)}")
@@ -325,7 +332,7 @@ def transcribe_video(
     # Save to JSON
     output_filename = f"{video_path.stem}_transcription.json"
     output_path = output_dir / output_filename
-    
+
     with open(output_path, "w", encoding="utf-8") as f:
         json.dump(result, f, indent=2, ensure_ascii=False)
 
@@ -346,9 +353,7 @@ def _load_config(config_path: Union[str, Path, None] = None) -> dict[str, Any]:
     """
     if config_path is None:
         # Use default config
-        config_path = (
-            Path(__file__).parent.parent / "conf" / "transcriber_conf.json"
-        )
+        config_path = Path(__file__).parent.parent / "conf" / "transcriber_conf.json"
     else:
         config_path = Path(config_path)
 
