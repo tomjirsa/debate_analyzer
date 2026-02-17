@@ -87,12 +87,12 @@ class TestVideoDownloader:
         # Create downloader and download
         downloader = VideoDownloader(tmp_path)
 
-        # Create mock video file
-        video_file = downloader.videos_dir / "dQw4w9WgXcQ_Test Video.mp4"
+        # Create mock video file (downloader uses template title_id.ext)
+        video_file = downloader.videos_dir / "Test Video_dQw4w9WgXcQ.mp4"
         video_file.touch()
 
-        # Create mock subtitle files
-        subtitle_file = downloader.subtitles_dir / "dQw4w9WgXcQ_Test Video.en.srt"
+        # Create mock subtitle file (downloader globs *_video_id.srt)
+        subtitle_file = downloader.subtitles_dir / "Test Video_dQw4w9WgXcQ.srt"
         subtitle_file.touch()
 
         url = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
@@ -109,7 +109,7 @@ class TestVideoDownloader:
         assert metadata["duration"] == 212
         assert metadata["uploader"] == "Test Channel"
         assert metadata["url"] == url
-        assert "dQw4w9WgXcQ_Test Video.mp4" in metadata["video_path"]
+        assert "Test Video_dQw4w9WgXcQ.mp4" in metadata["video_path"]
 
         # Verify metadata file was written
         mock_file.assert_called_once()
@@ -183,13 +183,13 @@ class TestVideoDownloader:
 
         downloader = VideoDownloader(tmp_path)
 
-        # Create mock subtitle files
-        (downloader.subtitles_dir / f"{video_id}_Test.en.srt").touch()
-        (downloader.subtitles_dir / f"{video_id}_Test.es.srt").touch()
-        (downloader.subtitles_dir / f"{video_id}_Test.fr.vtt").touch()
+        # Create mock subtitle files (downloader globs *_video_id.srt / *_video_id.vtt)
+        (downloader.subtitles_dir / f"en_{video_id}.srt").touch()
+        (downloader.subtitles_dir / f"es_{video_id}.srt").touch()
+        (downloader.subtitles_dir / f"fr_{video_id}.vtt").touch()
 
-        # Create mock video file
-        (downloader.videos_dir / f"{video_id}_Test.mp4").touch()
+        # Create mock video file (downloader uses template title_id.ext)
+        (downloader.videos_dir / f"Test_{video_id}.mp4").touch()
 
         url = f"https://www.youtube.com/watch?v={video_id}"
 
@@ -198,15 +198,9 @@ class TestVideoDownloader:
 
         # Should find all 3 subtitle files
         assert len(metadata["subtitle_paths"]) == 3
-        assert any(
-            f"{video_id}_Test.en.srt" in path for path in metadata["subtitle_paths"]
-        )
-        assert any(
-            f"{video_id}_Test.es.srt" in path for path in metadata["subtitle_paths"]
-        )
-        assert any(
-            f"{video_id}_Test.fr.vtt" in path for path in metadata["subtitle_paths"]
-        )
+        assert any(f"en_{video_id}.srt" in path for path in metadata["subtitle_paths"])
+        assert any(f"es_{video_id}.srt" in path for path in metadata["subtitle_paths"])
+        assert any(f"fr_{video_id}.vtt" in path for path in metadata["subtitle_paths"])
 
     @patch("debate_analyzer.video_downloader.downloader.yt_dlp.YoutubeDL")
     def test_download_handles_missing_optional_fields(

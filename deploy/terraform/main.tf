@@ -116,6 +116,21 @@ resource "aws_iam_role_policy_attachment" "batch_execution_logs" {
   policy_arn = "arn:aws:iam::aws:policy/CloudWatchLogsFullAccess"
 }
 
+resource "aws_iam_role_policy" "batch_execution_secrets" {
+  name   = "${local.name}-batch-execution-secrets"
+  role   = aws_iam_role.batch_execution.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect   = "Allow"
+        Action   = ["secretsmanager:GetSecretValue"]
+        Resource = aws_secretsmanager_secret.hf_token.arn
+      }
+    ]
+  })
+}
+
 # --- IAM: Instance role for Batch compute environment (EC2 hosts) ---
 resource "aws_iam_role" "batch_instance" {
   name = "${local.name}-batch-instance-role"
@@ -144,7 +159,8 @@ resource "aws_iam_instance_profile" "batch_instance" {
 
 # --- ECR repository ---
 resource "aws_ecr_repository" "this" {
-  name = local.name
+  name                 = local.name
+  force_delete         = false
 }
 
 # --- VPC / subnets (use default if not provided) ---
@@ -209,6 +225,10 @@ resource "aws_batch_compute_environment" "gpu" {
     subnets             = local.subnet_ids
     security_group_ids   = [aws_security_group.batch.id]
     instance_role       = aws_iam_instance_profile.batch_instance.arn
+
+    ec2_configuration {
+      image_type = "ECS_AL2023_NVIDIA"
+    }
   }
 }
 
