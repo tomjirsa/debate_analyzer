@@ -8,7 +8,7 @@ packages = [{include = "debate_analyzer", from = "src"}]
 
 [tool.poetry.dependencies]
 python = ">=3.10,<3.14"
-yt-dlp = ">=2025.12.8"
+yt-dlp = {extras = ["default"], version = ">=2025.12.8"}
 faster-whisper = "^1.2.1"
 pyannote-audio = "^4.0.3"
 torch = "^2.0.0"

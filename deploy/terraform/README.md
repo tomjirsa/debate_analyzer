@@ -63,3 +63,26 @@ This directory provisions all AWS resources for running the debate-analyzer pipe
 ```bash
 terraform destroy
 ```
+
+- **ECR**: The repository is created with `force_delete = true`, so Terraform will delete all images and then the repository during destroy. No need to empty the repo manually.
+- **IAM**: Destroying the Batch IAM roles requires the user running Terraform to have permission to list instance profiles for those roles. If you see `AccessDenied: ... iam:ListInstanceProfilesForRole`, add the following to the IAM user or role used for Terraform (e.g. `DatabaseAnalyzer`):
+
+  ```json
+  {
+    "Effect": "Allow",
+    "Action": [
+      "iam:ListInstanceProfilesForRole",
+      "iam:DeleteRole",
+      "iam:GetRole",
+      "iam:DeleteInstanceProfile",
+      "iam:RemoveRoleFromInstanceProfile",
+      "iam:ListAttachedRolePolicies",
+      "iam:DetachRolePolicy",
+      "iam:ListRolePolicies",
+      "iam:DeleteRolePolicy"
+    ],
+    "Resource": "arn:aws:iam::*:role/debate-analyzer-*"
+  }
+  ```
+
+  Alternatively, use an IAM user/role with broader IAM permissions (e.g. `IAMFullAccess` or power-user) when running `terraform destroy`.

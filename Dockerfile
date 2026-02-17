@@ -23,6 +23,11 @@ RUN curl -sS "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o /tmp/
     && /tmp/aws/install -b /usr/local/bin \
     && rm -rf /tmp/awscliv2.zip /tmp/aws
 
+# Install Deno (JS runtime required by yt-dlp for YouTube EJS challenges)
+RUN curl -fsSL https://deno.land/install.sh | sh \
+    && mv /root/.deno/bin/deno /usr/local/bin/ \
+    && rm -rf /root/.deno
+
 WORKDIR /app
 
 # Copy project and install Python deps (no dev deps)
