@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Speaker annotator</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: system-ui, sans-serif; max-width: 1000px; margin: 0 auto; padding: 1rem; }
+    h1 { font-size: 1.25rem; margin-top: 0; }
+    .section { margin-bottom: 1.5rem; }
+    label { display: block; margin-bottom: 0.25rem; font-weight: 500; }
+    input[type="file"] { margin-bottom: 0.5rem; }
+    video { width: 100%; max-height: 360px; background: #111; border-radius: 4px; }
+    .error { color: #c00; padding: 0.5rem; background: #fee; border-radius: 4px; margin: 0.5rem 0; }
+    .transcript { max-height: 400px; overflow-y: auto; border: 1px solid #ccc; border-radius: 4px; padding: 0.5rem; }
+    .segment { padding: 0.35rem 0.5rem; margin: 2px 0; border-radius: 4px; cursor: pointer; }
+    .segment:hover { background: #f0f0f0; }
+    .segment.current { background: #e0e8ff; }
+    .segment .speaker { font-weight: 600; margin-right: 0.5rem; color: #333; }
+    .segment .time { font-size: 0.85em; color: #666; margin-right: 0.5rem; }
+    .speakers { display: flex; flex-wrap: wrap; gap: 1rem; margin: 0.5rem 0; }
+    .speaker-row { display: flex; align-items: center; gap: 0.5rem; }
+    .speaker-row label { margin: 0; font-weight: normal; min-width: 90px; cursor: pointer; }
+    .speaker-row label:hover { text-decoration: underline; }
+    .segment.highlight { background: #fff3cd; }
+    .speaker-row input { width: 160px; padding: 0.35rem 0.5rem; }
+    button { padding: 0.5rem 1rem; cursor: pointer; margin-right: 0.5rem; margin-top: 0.5rem; }
+    button:disabled { opacity: 0.6; cursor: not-allowed; }
+    .hidden { display: none; }
+  </style>
+</head>
+<body>
+  <h1>Speaker annotator</h1>
+  <p>Select a transcript JSON (from the transcriber) and a video. Assign names to speakers and save the mapping as JSON.</p>
+
+  <div class="section">
+    <label for="transcriptFile">Transcript (JSON)</label>
+    <input type="file" id="transcriptFile" accept=".json,application/json">
+    <label for="videoFile">Video</label>
+    <input type="file" id="videoFile" accept="video/mp4,video/webm,.mp4,.webm">
+  </div>
+
+  <div id="errorBox" class="error hidden"></div>
+
+  <div id="mainArea" class="hidden">
+    <div class="section">
+      <label>Video</label>
+      <video id="video" controls></video>
+    </div>
+
+    <div class="section">
+      <label>Speaker names (assign a display name to each speaker ID)</label>
+      <div id="speakers" class="speakers"></div>
+      <button type="button" id="saveBtn">Save speaker mapping (download JSON)</button>
+      <button type="button" id="saveAsBtn" title="Choose where to save (supported in Chrome/Edge)">Save as…</button>
+    </div>
+
+    <div class="section">
+      <label>Transcript (click a line to jump to that time)</label>
+      <div id="transcript" class="transcript"></div>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      const transcriptInput = document.getElementById('transcriptFile');
+      const videoInput = document.getElementById('videoFile');
+      const errorBox = document.getElementById('errorBox');
+      const mainArea = document.getElementById('mainArea');
+      const videoEl = document.getElementById('video');
+      const speakersDiv = document.getElementById('speakers');
+      const transcriptDiv = document.getElementById('transcript');
+      const saveBtn = document.getElementById('saveBtn');
+      const saveAsBtn = document.getElementById('saveAsBtn');
+
+      let transcriptData = null;
+      let transcriptFilename = '';
+      let videoFilename = '';
+
+      function showError(msg) {
+        errorBox.textContent = msg;
+        errorBox.classList.remove('hidden');
+        mainArea.classList.add('hidden');
+      }
+
+      function clearError() {
+        errorBox.classList.add('hidden');
+        errorBox.textContent = '';
+      }
+
+      function validateTranscript(data) {
+        if (!data || typeof data !== 'object') return 'Invalid JSON.';
+        if (!Array.isArray(data.transcription)) return 'Missing or invalid "transcription" array.';
+        const seg = data.transcription[0];
+        if (seg && (typeof seg.start !== 'number' || typeof seg.end !== 'number' || typeof seg.text !== 'string' || typeof seg.speaker !== 'string')) {
+          return 'Each segment must have start, end, text, and speaker.';
+        }
+        return null;
+      }
+
+      function getUniqueSpeakers(segments) {
+        const set = new Set();
+        segments.forEach(function (s) { set.add(s.speaker); });
+        return Array.from(set).sort();
+      }
+
+      function renderSpeakers(speakerIds, mapping) {
+        mapping = mapping || {};
+        speakersDiv.innerHTML = '';
+        speakerIds.forEach(function (id) {
+          const row = document.createElement('div');
+          row.className = 'speaker-row';
+          const lab = document.createElement('label');
+          lab.textContent = id + ':';
+          lab.dataset.speakerId = id;
+          const inp = document.createElement('input');
+          inp.type = 'text';
+          inp.placeholder = 'Display name';
+          inp.dataset.speakerId = id;
+          inp.value = mapping[id] || '';
+          row.appendChild(lab);
+          row.appendChild(inp);
+          speakersDiv.appendChild(row);
+        });
+      }
+
+      function getMappingFromInputs() {
+        const mapping = {};
+        speakersDiv.querySelectorAll('input[data-speaker-id]').forEach(function (inp) {
+          const name = inp.value.trim();
+          if (name) mapping[inp.dataset.speakerId] = name;
+        });
+        return mapping;
+      }
+
+      function buildMetadata() {
+        const speaker_mapping = getMappingFromInputs();
+        return {
+          speaker_mapping: speaker_mapping,
+          updated_at: new Date().toISOString(),
+          transcript_filename: transcriptFilename || undefined,
+          video_filename: videoFilename || undefined
+        };
+      }
+
+      function downloadMetadata() {
+        const meta = buildMetadata();
+        const blob = new Blob([JSON.stringify(meta, null, 2)], { type: 'application/json' });
+        const name = transcriptFilename ? transcriptFilename.replace(/\.json$/i, '') + '_speaker_metadata.json' : 'speaker_metadata.json';
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = name;
+        a.click();
+        URL.revokeObjectURL(a.href);
+      }
+
+      function renderTranscript(segments, mapping) {
+        mapping = mapping || {};
+        transcriptDiv.innerHTML = '';
+        segments.forEach(function (seg) {
+          const div = document.createElement('div');
+          div.className = 'segment';
+          div.dataset.start = seg.start;
+          div.dataset.speaker = seg.speaker;
+          const timeSpan = document.createElement('span');
+          timeSpan.className = 'time';
+          timeSpan.textContent = formatTime(seg.start) + ' – ' + formatTime(seg.end);
+          const speakerSpan = document.createElement('span');
+          speakerSpan.className = 'speaker';
+          speakerSpan.textContent = mapping[seg.speaker] || seg.speaker;
+          const textSpan = document.createElement('span');
+          textSpan.textContent = seg.text;
+          div.appendChild(timeSpan);
+          div.appendChild(speakerSpan);
+          div.appendChild(document.createTextNode(' '));
+          div.appendChild(textSpan);
+          div.addEventListener('click', function () {
+            videoEl.currentTime = seg.start;
+            videoEl.play();
+          });
+          transcriptDiv.appendChild(div);
+        });
+      }
+
+      function formatTime(sec) {
+        const m = Math.floor(sec / 60);
+        const s = Math.floor(sec % 60);
+        return m + ':' + (s < 10 ? '0' : '') + s;
+      }
+
+      function updateSegmentHighlight() {
+        const t = videoEl.currentTime;
+        transcriptDiv.querySelectorAll('.segment').forEach(function (el) {
+          const start = parseFloat(el.dataset.start);
+          const seg = transcriptData.transcription.find(function (s) { return s.start === start; });
+          const inRange = seg && t >= seg.start && t < seg.end;
+          el.classList.toggle('current', inRange);
+        });
+      }
+
+      function updateDisplayNamesInTranscript() {
+        const mapping = getMappingFromInputs();
+        transcriptDiv.querySelectorAll('.segment').forEach(function (div) {
+          const start = parseFloat(div.dataset.start);
+          const seg = transcriptData.transcription.find(function (s) { return s.start === start; });
+          if (seg) {
+            const speakerSpan = div.querySelector('.speaker');
+            if (speakerSpan) speakerSpan.textContent = mapping[seg.speaker] || seg.speaker;
+          }
+        });
+      }
+
+      speakersDiv.addEventListener('input', function () { updateDisplayNamesInTranscript(); });
+      speakersDiv.addEventListener('change', function () { updateDisplayNamesInTranscript(); });
+
+      speakersDiv.addEventListener('click', function (e) {
+        if (!transcriptData) return;
+        const lab = e.target.closest('label[data-speaker-id]');
+        if (!lab) return;
+        const speakerId = lab.dataset.speakerId;
+        const el = transcriptDiv.querySelector('.segment[data-speaker="' + speakerId + '"]');
+        if (!el) return;
+        el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        el.classList.add('highlight');
+        window.setTimeout(function () { el.classList.remove('highlight'); }, 1500);
+      });
+
+      transcriptInput.addEventListener('change', function () {
+        clearError();
+        const file = transcriptInput.files[0];
+        if (!file) return;
+        transcriptFilename = file.name;
+        const reader = new FileReader();
+        reader.onload = function () {
+          try {
+            const data = JSON.parse(reader.result);
+            const err = validateTranscript(data);
+            if (err) { showError(err); return; }
+            transcriptData = data;
+            const speakerIds = getUniqueSpeakers(data.transcription);
+            renderSpeakers(speakerIds, {});
+            renderTranscript(data.transcription, {});
+            if (videoEl.src) mainArea.classList.remove('hidden');
+          } catch (e) {
+            showError('Failed to parse JSON: ' + e.message);
+          }
+        };
+        reader.readAsText(file, 'UTF-8');
+      });
+
+      videoInput.addEventListener('change', function () {
+        clearError();
+        const file = videoInput.files[0];
+        if (!file) return;
+        videoFilename = file.name;
+        if (videoEl.src) URL.revokeObjectURL(videoEl.src);
+        videoEl.src = URL.createObjectURL(file);
+        if (transcriptData) mainArea.classList.remove('hidden');
+      });
+
+      videoEl.addEventListener('timeupdate', updateSegmentHighlight);
+
+      saveBtn.addEventListener('click', function () {
+        if (!transcriptData) return;
+        downloadMetadata();
+      });
+
+      saveAsBtn.addEventListener('click', function () {
+        if (!transcriptData) return;
+        if (typeof window.showSaveFilePicker !== 'function') {
+          downloadMetadata();
+          return;
+        }
+        const meta = buildMetadata();
+        const name = transcriptFilename ? transcriptFilename.replace(/\.json$/i, '') + '_speaker_metadata.json' : 'speaker_metadata.json';
+        window.showSaveFilePicker({ suggestedName: name, types: [{ description: 'JSON', accept: { 'application/json': ['.json'] } }] })
+          .then(function (handle) {
+            return handle.createWritable().then(function (writable) {
+              return writable.write(JSON.stringify(meta, null, 2)).then(function () { return writable.close(); });
+            });
+          })
+          .catch(function (err) {
+            if (err.name !== 'AbortError') alert('Save failed: ' + err.message);
+          });
+      });
+    })();
+  </script>
+</body>
+</html>

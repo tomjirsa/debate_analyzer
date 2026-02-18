@@ -5,6 +5,7 @@ This document contains step-by-step guides for common tasks in the Debate Analyz
 ## Table of Contents
 - [How to Download YouTube Videos](#how-to-download-youtube-videos)
 - [How to Transcribe Videos with Speaker Identification](#how-to-transcribe-videos-with-speaker-identification)
+- [How to Annotate Speaker Names](#how-to-annotate-speaker-names)
 - [How to Add a New Feature](#how-to-add-a-new-feature)
 - [How to Write Tests](#how-to-write-tests)
 - [How to Debug Issues](#how-to-debug-issues)
@@ -461,6 +462,30 @@ segments = transcriber.transcribe(audio_path)
 for seg in segments:
     print(f"[{seg.start:.2f}s] {seg.text}")
 ```
+
+## How to Annotate Speaker Names
+
+After transcribing a video, speaker IDs are generic (e.g. `SPEAKER_00`, `SPEAKER_01`). To assign real names, use the **speaker annotator** — a single HTML tool that runs in your browser (no server required).
+
+1. **Open the tool**: Open [tool/speaker_annotator.html](../tool/speaker_annotator.html) in your browser (e.g. double-click the file or use `file://`).
+2. **Load transcript and video**: Use the file inputs to select your transcript JSON (from the transcriber) and the corresponding video file.
+3. **Assign names**: For each speaker ID, type the display name in the text field. The transcript list updates as you type.
+4. **Use the transcript**: Click a segment to jump the video to that time. The current segment is highlighted as the video plays.
+5. **Save the mapping**: Click **Save speaker mapping (download JSON)** to download a JSON file with the `speaker_mapping`. Save it next to your transcript (e.g. `debate_transcription_speaker_metadata.json`). In Chrome/Edge you can use **Save as…** to choose the path.
+
+The metadata JSON has this structure:
+
+```json
+{
+  "speaker_mapping": {
+    "SPEAKER_00": "Alice",
+    "SPEAKER_01": "Bob"
+  },
+  "updated_at": "2025-02-18T12:00:00.000Z"
+}
+```
+
+You can use this file downstream to replace speaker IDs with display names when displaying or exporting the transcript.
 
 ## How to Add a New Feature
 
