@@ -29,7 +29,7 @@ else
 fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-TERRAFORM_DIR="${SCRIPT_DIR}/terraform"
+TERRAFORM_DIR="${SCRIPT_DIR}/../../terraform"
 
 if [[ ! -d "$TERRAFORM_DIR" ]]; then
   echo "Error: Terraform directory not found: $TERRAFORM_DIR" >&2

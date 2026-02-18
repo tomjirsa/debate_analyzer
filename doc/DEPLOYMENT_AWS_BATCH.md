@@ -111,7 +111,7 @@ Replace `YOUR_VIDEO_ID` with the YouTube video ID. The job will:
 3. Transcribe with GPU and speaker diarization.
 4. Upload transcription (and optionally audio) to `s3://<bucket>/jobs/<job-id>/transcripts/`.
 
-Alternatively, use the helper script from the repo root: `./deploy/submit-job.sh "https://www.youtube.com/watch?v=YOUR_VIDEO_ID"`.
+Alternatively, use the helper script from the repo root: `./deploy/scripts/submit-jobs/submit-job.sh "https://www.youtube.com/watch?v=YOUR_VIDEO_ID"`.
 
 ## 4b. Two-job flow: download then transcribe
 
@@ -126,7 +126,7 @@ You can split the pipeline into two Batch jobs so you can re-use an already-down
 From the repo root:
 
 ```bash
-./deploy/submit-download-job.sh "https://www.youtube.com/watch?v=YOUR_VIDEO_ID"
+./deploy/scripts/submit-jobs/submit-download-job.sh "https://www.youtube.com/watch?v=YOUR_VIDEO_ID"
 ```
 
 Note the **job ID** from the output (e.g. `abc12345-6789-...`). When the job completes, the video is at `s3://<bucket>/jobs/<job-id>/videos/`.
@@ -141,13 +141,13 @@ From the repo root (replace `<job-id>` with the download job ID):
 
 ```bash
 BUCKET=$(cd deploy/terraform && terraform output -raw s3_bucket_name)
-./deploy/submit-transcribe-job.sh "s3://$BUCKET/jobs/<job-id>/videos"
+./deploy/scripts/submit-jobs/submit-transcribe-job.sh "s3://$BUCKET/jobs/<job-id>/videos"
 ```
 
 Or with explicit output prefix:
 
 ```bash
-./deploy/submit-transcribe-job.sh "s3://$BUCKET/jobs/<job-id>/videos" "s3://$BUCKET/jobs/<job-id>"
+./deploy/scripts/submit-jobs/submit-transcribe-job.sh "s3://$BUCKET/jobs/<job-id>/videos" "s3://$BUCKET/jobs/<job-id>"
 ```
 
 The transcribe job syncs the video from S3 to the container, runs Whisper + pyannote, and uploads transcripts to `s3://<bucket>/jobs/<job-id>/transcripts/`.
@@ -191,7 +191,7 @@ The image includes Deno and EJS for YouTube. If you still see **"Sign in to conf
 
 1. Set `TF_VAR_hf_token`, run `terraform init` and `terraform apply` in `deploy/terraform/`.
 2. Configure GitHub Actions (OIDC or static AWS credentials) and push to `main` to build and push the image to ECR.
-3. **Single job:** Use `./deploy/submit-job.sh <video_url>` or `aws batch submit-job` with `VIDEO_URL` and `OUTPUT_S3_PREFIX=s3://<bucket>/jobs`.
-4. **Two jobs:** Use `./deploy/submit-download-job.sh <video_url>`, then `./deploy/submit-transcribe-job.sh s3://<bucket>/jobs/<job-id>/videos` (see section 4b).
+3. **Single job:** Use `./deploy/scripts/submit-jobs/submit-job.sh <video_url>` or `aws batch submit-job` with `VIDEO_URL` and `OUTPUT_S3_PREFIX=s3://<bucket>/jobs`.
+4. **Two jobs:** Use `./deploy/scripts/submit-jobs/submit-download-job.sh <video_url>`, then `./deploy/scripts/submit-jobs/submit-transcribe-job.sh s3://<bucket>/jobs/<job-id>/videos` (see section 4b).
 5. Find outputs in S3 under `jobs/<job-id>/videos/` and `jobs/<job-id>/transcripts/`, and logs in CloudWatch under `/aws/batch/debate-analyzer`.
 6. If YouTube shows "Sign in to confirm you're not a bot", use optional cookies (see section 7); set `YT_COOKIES_FILE`, `YT_COOKIES_S3_URI`, or `YT_COOKIES_SECRET_ARN` (or Terraform variable `yt_cookies_secret_arn`).

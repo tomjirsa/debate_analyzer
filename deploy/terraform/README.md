@@ -24,8 +24,8 @@ This directory provisions all AWS resources for running the debate-analyzer pipe
    ```
 
 3. **Note the outputs** (queue names, job definition names, bucket name). After the Docker image is pushed to ECR (e.g. by GitHub Actions), submit jobs:
-   - **Full pipeline (one job):** From repo root, `./deploy/submit-job.sh "https://www.youtube.com/watch?v=VIDEO_ID"`, or use `batch_job_queue_name` and `batch_job_definition_name` with the example in `terraform output submit_job_example`.
-   - **Two jobs:** From repo root, `./deploy/submit-download-job.sh "<video_url>"`, then after the download job completes, `./deploy/submit-transcribe-job.sh s3://BUCKET/jobs/<job-id>/videos`. Uses `batch_job_queue_cpu_name` / `batch_job_definition_download_name` for the first job and `batch_job_queue_name` / `batch_job_definition_transcribe_name` for the second.
+   - **Full pipeline (one job):** From repo root, `./deploy/scripts/submit-jobs/submit-job.sh "https://www.youtube.com/watch?v=VIDEO_ID"`, or use `batch_job_queue_name` and `batch_job_definition_name` with the example in `terraform output submit_job_example`.
+   - **Two jobs:** From repo root, `./deploy/scripts/submit-jobs/submit-download-job.sh "<video_url>"`, then after the download job completes, `./deploy/scripts/submit-jobs/submit-transcribe-job.sh s3://BUCKET/jobs/<job-id>/videos`. Uses `batch_job_queue_cpu_name` / `batch_job_definition_download_name` for the first job and `batch_job_queue_name` / `batch_job_definition_transcribe_name` for the second.
 
 **Optional – YouTube bot check:** If YouTube shows "Sign in to confirm you're not a bot", use optional cookies. See **doc/DEPLOYMENT_AWS_BATCH.md** for `YT_COOKIES_FILE`, `YT_COOKIES_S3_URI`, and `YT_COOKIES_SECRET_ARN`. You can either set `yt_cookies_secret_arn` to the ARN of an existing Secrets Manager secret containing the cookies file content, or set `yt_cookies_file_path` to a local cookies.txt path and let Terraform create the secret from that file.
 
@@ -61,7 +61,7 @@ This directory provisions all AWS resources for running the debate-analyzer pipe
 - `output_s3_prefix_example` – example value for `OUTPUT_S3_PREFIX`
 - `submit_job_example` – example `aws batch submit-job` command for full pipeline
 
-**Submit scripts (from repo root):** `./deploy/submit-job.sh`, `./deploy/submit-download-job.sh`, `./deploy/submit-transcribe-job.sh`. See **doc/DEPLOYMENT_AWS_BATCH.md** for the two-job flow.
+**Submit scripts (from repo root):** `./deploy/scripts/submit-jobs/submit-job.sh`, `./deploy/scripts/submit-jobs/submit-download-job.sh`, `./deploy/scripts/submit-jobs/submit-transcribe-job.sh`. See **doc/DEPLOYMENT_AWS_BATCH.md** for the two-job flow.
 
 ## Teardown
 

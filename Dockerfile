@@ -36,9 +36,9 @@ COPY src ./src
 RUN pip install --no-cache-dir .
 
 # Pipeline entrypoints: full pipeline, download-only, transcribe-only
-COPY deploy/entrypoint.sh /entrypoint.sh
-COPY deploy/entrypoint_download.sh /entrypoint_download.sh
-COPY deploy/entrypoint_transcribe.sh /entrypoint_transcribe.sh
+COPY deploy/scripts/entrypoints/entrypoint.sh /entrypoint.sh
+COPY deploy/scripts/entrypoints/entrypoint_download.sh /entrypoint_download.sh
+COPY deploy/scripts/entrypoints/entrypoint_transcribe.sh /entrypoint_transcribe.sh
 RUN chmod +x /entrypoint.sh /entrypoint_download.sh /entrypoint_transcribe.sh
 
 # No ENTRYPOINT so job definitions can override command to run entrypoint_download.sh or entrypoint_transcribe.sh
