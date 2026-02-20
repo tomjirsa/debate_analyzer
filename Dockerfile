@@ -33,7 +33,7 @@ WORKDIR /app
 # Copy project and install Python deps (no dev deps)
 COPY pyproject.toml poetry.lock* README.md ./
 COPY src ./src
-RUN pip install --no-cache-dir .
+RUN pip install --no-cache-dir .[transcribe]
 
 # Pipeline entrypoints: full pipeline, download-only, transcribe-only
 COPY deploy/scripts/entrypoints/entrypoint.sh /entrypoint.sh

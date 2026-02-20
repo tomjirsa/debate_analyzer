@@ -34,9 +34,9 @@
    cd debate_analyzer
    ```
 
-4. **Install Python dependencies**:
+4. **Install Python dependencies** (transcribe pipeline + web app; required for tests):
    ```bash
-   poetry install
+   poetry install --extras transcribe --extras webapp
    ```
 
 5. **Activate the virtual environment**:

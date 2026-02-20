@@ -160,7 +160,7 @@ make reset_venv  # This will fix most venv issues
 
 ```bash
 # Setup
-poetry install                    # Install dependencies
+poetry install --extras transcribe --extras webapp  # Full install (pipeline + web app)
 poetry shell                      # Activate virtual environment
 
 # Development

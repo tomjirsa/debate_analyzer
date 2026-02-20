@@ -22,8 +22,10 @@ cd debate_analyzer
 
 2. Install dependencies:
 ```bash
-poetry install
+# Full local install (transcribe pipeline + web app; needed for tests and local dev)
+poetry install --extras transcribe --extras webapp
 ```
+For minimal installs, use only the extras you need: `--extras transcribe` or `--extras webapp`. Docker images use `.[transcribe]` (pipeline) and `.[webapp]` (web app) respectively.
 
 3. Verify ffmpeg is installed:
 ```bash

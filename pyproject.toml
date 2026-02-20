@@ -8,17 +8,21 @@ packages = [{include = "debate_analyzer", from = "src"}]
 
 [tool.poetry.dependencies]
 python = ">=3.10,<3.14"
-yt-dlp = {extras = ["default"], version = ">=2025.12.8"}
-faster-whisper = "^1.2.1"
-pyannote-audio = "^4.0.3"
-soundfile = "^0.12.0"
-torch = "^2.0.0"
-fastapi = "^0.129.0"
-uvicorn = "^0.41.0"
-sqlalchemy = "^2.0.46"
-alembic = "^1.18.4"
-psycopg2-binary = "^2.9.11"
-boto3 = "^1.42.53"
+yt-dlp = {extras = ["default"], version = ">=2025.12.8", optional = true}
+faster-whisper = {version = "^1.2.1", optional = true}
+pyannote-audio = {version = "^4.0.3", optional = true}
+soundfile = {version = "^0.12.0", optional = true}
+torch = {version = "^2.0.0", optional = true}
+fastapi = {version = "^0.129.0", optional = true}
+uvicorn = {version = "^0.41.0", optional = true}
+sqlalchemy = {version = "^2.0.46", optional = true}
+alembic = {version = "^1.18.4", optional = true}
+psycopg2-binary = {version = "^2.9.11", optional = true}
+boto3 = {version = "^1.42.53", optional = true}
+
+[tool.poetry.extras]
+transcribe = ["yt-dlp", "faster-whisper", "pyannote-audio", "soundfile", "torch"]
+webapp = ["fastapi", "uvicorn", "sqlalchemy", "alembic", "psycopg2-binary", "boto3"]
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.4.0"

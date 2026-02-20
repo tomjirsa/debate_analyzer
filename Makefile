@@ -17,7 +17,7 @@ reset_venv:
 	@echo "Removing existing virtual environment..."
 	@poetry env remove --all || true
 	@echo "Installing dependencies..."
-	@poetry install
+	@poetry install --extras transcribe --extras webapp
 	@echo "Virtual environment reset complete!"
 
 # Run tests with coverage

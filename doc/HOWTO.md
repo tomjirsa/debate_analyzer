@@ -126,9 +126,9 @@ The transcriber module provides state-of-the-art speech-to-text transcription wi
    source ~/.zshrc
    ```
 
-3. **Install Dependencies**:
+3. **Install Dependencies** (include both extras for full functionality):
    ```bash
-   poetry install
+   poetry install --extras transcribe --extras webapp
    ```
 
 ### Using the Command-Line Interface
