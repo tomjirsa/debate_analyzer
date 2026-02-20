@@ -1,6 +1,6 @@
 <template>
   <div>
-    <p><router-link to="/">← Speakers</router-link></p>
+    <p><router-link to="/">← Dashboard</router-link></p>
     <div v-if="error" class="err">{{ error }}</div>
     <div v-else-if="profile">
       <h1>{{ displayName }}</h1>

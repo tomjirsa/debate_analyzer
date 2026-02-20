@@ -1,7 +1,7 @@
 <template>
   <div>
-    <h1>Speakers</h1>
-    <p>Public statistics for speakers in the debate database.</p>
+    <h1>Dashboard</h1>
+    <p>Main statistics and speakers in the debate database.</p>
     <ul v-if="speakers.length" id="speakers">
       <li v-for="s in speakers" :key="s.id">
         <router-link :to="'/speakers/' + encodeURIComponent(s.slug || s.id)">

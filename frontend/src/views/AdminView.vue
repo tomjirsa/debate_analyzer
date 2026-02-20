@@ -2,7 +2,7 @@
   <div>
     <h1>Admin</h1>
     <p>
-      <router-link to="/">← Public speakers</router-link>
+      <router-link to="/">← Dashboard</router-link>
     </p>
 
     <div v-if="showLogin" class="login-box">

@@ -3,7 +3,7 @@
     <header class="site-header">
       <router-link to="/" class="site-title">Debate Analyzer</router-link>
       <nav class="site-nav">
-        <router-link to="/">Speakers</router-link>
+        <router-link to="/">Dashboard</router-link>
         <router-link to="/admin">Admin</router-link>
       </nav>
     </header>
