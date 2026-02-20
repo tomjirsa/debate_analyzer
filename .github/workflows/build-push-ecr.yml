@@ -11,6 +11,13 @@ name: Build and push to ECR
 on:
   push:
     branches: [main]
+    paths:
+      - 'src/**'
+      - 'pyproject.toml'
+      - 'poetry.lock'
+      - 'Dockerfile'
+      - 'Dockerfile.webapp'
+      - 'deploy/scripts/entrypoints/**'
   workflow_dispatch:
 
 env:
