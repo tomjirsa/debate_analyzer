@@ -1,3 +1,14 @@
+# Stage 1: Build Vue frontend
+FROM node:20-alpine AS frontend-builder
+WORKDIR /app/frontend
+
+COPY frontend/package.json frontend/package-lock.json* ./
+RUN npm ci 2>/dev/null || npm install
+
+COPY frontend/ .
+RUN npm run build
+
+# Stage 2: Python app + frontend assets
 # Debate Analyzer Web App – FastAPI + SQLAlchemy (no GPU)
 FROM python:3.12-slim
 
@@ -7,6 +18,9 @@ WORKDIR /app
 # Install Python deps only for the web app (no torch, whisper, pyannote)
 COPY pyproject.toml poetry.lock* README.md ./
 COPY src ./src
+
+# Copy Vue build output into static dir (overwrites any existing static files)
+COPY --from=frontend-builder /app/frontend/dist ./src/debate_analyzer/api/static
 
 # Install project (includes web app deps: fastapi, uvicorn, sqlalchemy, boto3).
 RUN pip install --no-cache-dir .[webapp]

@@ -5,6 +5,7 @@ from typing import Annotated
 
 from fastapi import Depends, FastAPI, HTTPException, status
 from fastapi.responses import FileResponse, Response
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -128,6 +129,47 @@ def admin_register_transcript(
         title=body.title,
     )
     return transcript.to_dict()
+
+
+class UpdateTranscriptRequest(BaseModel):
+    """Request body for update transcript (all fields optional)."""
+
+    title: str | None = None
+    video_path: str | None = None
+
+
+@app.put("/api/admin/transcripts/{transcript_id}")
+def admin_update_transcript(
+    transcript_id: str,
+    body: UpdateTranscriptRequest,
+    _: Annotated[object, Depends(get_admin_credentials)],
+    repo: Annotated[TranscriptRepository, Depends(get_repo_from_db)],
+) -> dict:
+    """Update transcript title and/or video_path (admin)."""
+    transcript = repo.update_transcript(
+        transcript_id,
+        title=body.title,
+        video_path=body.video_path,
+    )
+    if not transcript:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Transcript not found"
+        )
+    return transcript.to_dict()
+
+
+@app.delete("/api/admin/transcripts/{transcript_id}")
+def admin_delete_transcript(
+    transcript_id: str,
+    _: Annotated[object, Depends(get_admin_credentials)],
+    repo: Annotated[TranscriptRepository, Depends(get_repo_from_db)],
+) -> Response:
+    """Delete transcript and its segments/mappings (admin)."""
+    if not repo.delete_transcript(transcript_id):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Transcript not found"
+        )
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 class CreateSpeakerRequest(BaseModel):
@@ -279,61 +321,31 @@ def admin_list_speakers(
     return [p.to_dict() for p in repo.list_speaker_profiles()]
 
 
-# ---------- Static / UI ----------
+# ---------- Static / UI (Vue SPA) ----------
 
 
 STATIC_DIR = Path(__file__).parent / "static"
 
+# Serve Vue build assets (JS, CSS with hashed filenames).
+if (STATIC_DIR / "assets").exists():
+    app.mount("/assets", StaticFiles(directory=STATIC_DIR / "assets"), name="assets")
 
-@app.get("/", response_model=None)
-def index() -> FileResponse | dict:
-    """Serve public index (speaker list) or JSON if static not present."""
-    for name in ("index.html", "public/index.html"):
-        p = STATIC_DIR / name
-        if p.exists():
-            return FileResponse(p)
+
+@app.get("/{full_path:path}", response_model=None)
+def serve_spa(full_path: str) -> FileResponse | dict:
+    """
+    Catch-all: serve index.html for SPA client-side routes.
+    Skip paths that belong to API or docs (should not reach here if defined above).
+    """
+    if (
+        full_path.startswith("api/")
+        or full_path == "api"
+        or full_path == "docs"
+        or full_path == "openapi.json"
+        or full_path.startswith("assets/")
+    ):
+        raise HTTPException(status_code=404, detail="Not found")
+    index_path = STATIC_DIR / "index.html"
+    if index_path.exists():
+        return FileResponse(index_path, headers={"Cache-Control": "no-store"})
     return {"message": "Debate Analyzer API", "docs": "/docs", "api": "/api/speakers"}
-
-
-@app.get("/speakers/{id_or_slug:path}", response_model=None)
-def speaker_page(id_or_slug: str) -> FileResponse:
-    """Serve speaker detail page (public)."""
-    p = STATIC_DIR / "public" / "speaker.html"
-    if p.exists():
-        return FileResponse(p)
-    raise HTTPException(status_code=404, detail="Not found")
-
-
-@app.get("/admin", response_model=None)
-def admin_index() -> FileResponse | dict:
-    """Serve admin UI or message if static not present."""
-    for name in ("admin/index.html", "admin.html"):
-        p = STATIC_DIR / name
-        if p.exists():
-            return FileResponse(p)
-    return {
-        "message": "Admin API",
-        "docs": "/docs",
-        "admin_transcripts": "/api/admin/transcripts",
-    }
-
-
-@app.get("/admin/annotate", response_model=None)
-def admin_annotate_page() -> FileResponse:
-    """Serve speaker annotation page (admin)."""
-    p = STATIC_DIR / "admin" / "annotate.html"
-    if p.exists():
-        return FileResponse(p)
-    raise HTTPException(status_code=404, detail="Not found")
-
-
-@app.get("/admin/speakers", response_model=None)
-def admin_speakers_page() -> FileResponse:
-    """Serve speaker management page (admin): add, edit, delete speakers."""
-    p = STATIC_DIR / "admin" / "speakers.html"
-    if p.exists():
-        return FileResponse(
-            p,
-            headers={"Cache-Control": "no-store"},
-        )
-    raise HTTPException(status_code=404, detail="Not found")

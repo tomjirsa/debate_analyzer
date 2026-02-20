@@ -240,7 +240,8 @@ debate_analyzer/
 │           ├── app.py
 │           ├── auth.py
 │           ├── loader.py
-│           └── static/              # Admin and public UI
+│           └── static/              # Vue SPA build output (source in frontend/)
+├── frontend/         # Vue 3 SPA (Vite); build output copied to api/static in Docker
 ├── deploy/terraform-webapp/        # Terraform for web app (separate state)
 ├── tests/            # Test files
 ├── doc/              # Documentation

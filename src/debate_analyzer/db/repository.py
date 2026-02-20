@@ -126,6 +126,33 @@ class TranscriptRepository:
             .all()
         )
 
+    def update_transcript(
+        self,
+        transcript_id: str,
+        title: str | None = None,
+        video_path: str | None = None,
+    ) -> Transcript | None:
+        """Update transcript title and/or video_path. Returns updated transcript or None if not found."""
+        transcript = self.get_transcript_by_id(transcript_id)
+        if not transcript:
+            return None
+        if title is not None:
+            transcript.title = title
+        if video_path is not None:
+            transcript.video_path = video_path
+        self.session.commit()
+        self.session.refresh(transcript)
+        return transcript
+
+    def delete_transcript(self, transcript_id: str) -> bool:
+        """Delete transcript (cascades to segments and mappings). Returns True if deleted, False if not found."""
+        transcript = self.get_transcript_by_id(transcript_id)
+        if not transcript:
+            return False
+        self.session.delete(transcript)
+        self.session.commit()
+        return True
+
     def get_speaker_profile_by_id(self, profile_id: str) -> SpeakerProfile | None:
         """Return speaker profile by id or None."""
         return (
