@@ -265,3 +265,4 @@ For detailed documentation, see the [doc](./doc) folder:
 ## Contributing
 
 [Add contributing guidelines here]
+Nice!
