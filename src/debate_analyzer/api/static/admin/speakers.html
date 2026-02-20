@@ -30,8 +30,16 @@
   <h1>Manage speakers</h1>
   <p id="err" class="err"></p>
 
-  <div id="loginBox" class="hidden">
-    <p>Authentication required. <a href="/admin">Log in on the admin page</a> first.</p>
+  <div id="loginBox">
+    <h2 style="margin-top:0;">Admin login</h2>
+    <p>Log in to manage speakers. You can also <a href="/admin">log in on the admin page</a> first.</p>
+    <label for="loginUser">Username</label>
+    <input type="text" id="loginUser" placeholder="username" autocomplete="username">
+    <label for="loginPass">Password</label>
+    <input type="password" id="loginPass" placeholder="password" autocomplete="current-password">
+    <br>
+    <button type="button" id="loginBtn">Log in</button>
+    <p id="loginErr" class="err"></p>
   </div>
 
   <div id="content" class="hidden">
@@ -80,6 +88,16 @@
       const newBio = document.getElementById('newBio');
       const addBtn = document.getElementById('addBtn');
       const addStatus = document.getElementById('addStatus');
+      const loginUser = document.getElementById('loginUser');
+      const loginPass = document.getElementById('loginPass');
+      const loginBtn = document.getElementById('loginBtn');
+      const loginErr = document.getElementById('loginErr');
+
+      function setAuth(user, pass) {
+        try {
+          sessionStorage.setItem(ADMIN_AUTH_KEY, btoa(unescape(encodeURIComponent(user + ':' + pass))));
+        } catch (_) {}
+      }
 
       function getAuthHeader() {
         try {
@@ -120,8 +138,14 @@
             if (speakers && speakers._unauthorized) return;
             loginBox.classList.add('hidden');
             contentEl.classList.remove('hidden');
+            if (loginErr) loginErr.textContent = '';
             errEl.textContent = '';
-            if (!speakers || speakers.length === 0) {
+            if (!Array.isArray(speakers)) {
+              errEl.textContent = 'Invalid response from server (expected a list). Check the console.';
+              speakerListEl.innerHTML = '';
+              return;
+            }
+            if (speakers.length === 0) {
               speakerListEl.innerHTML = '<tr><td colspan="4">No speakers. Add one above.</td></tr>';
               return;
             }
@@ -180,7 +204,7 @@
               const id = row.dataset.id;
               const s = speakers.find(sp => sp.id === id);
               const name = s ? displayName(s) : id;
-              if (!confirm('Delete speaker “‘ + name + '”? All transcript mappings for this speaker will be removed.')) return;
+              if (!confirm('Delete speaker "' + name + '"? All transcript mappings for this speaker will be removed.')) return;
               apiFetch('/api/admin/speakers/' + id, { method: 'DELETE' })
                 .then(r => {
                   if (r.status === 404) throw new Error('Speaker not found');
@@ -195,9 +219,24 @@
             });
           })
           .catch(e => {
-            errEl.textContent = e.message;
+            errEl.textContent = 'Failed to load speakers: ' + (e && e.message ? e.message : String(e));
             contentEl.classList.add('hidden');
+            loginBox.classList.remove('hidden');
           });
+      }
+
+      if (loginBtn) {
+        loginBtn.addEventListener('click', function () {
+          const user = (loginUser && loginUser.value) ? loginUser.value.trim() : '';
+          const pass = (loginPass && loginPass.value) ? loginPass.value : '';
+          if (loginErr) loginErr.textContent = '';
+          if (!user || !pass) {
+            if (loginErr) loginErr.textContent = 'Enter username and password.';
+            return;
+          }
+          setAuth(user, pass);
+          loadSpeakers();
+        });
       }
 
       addBtn.addEventListener('click', function () {

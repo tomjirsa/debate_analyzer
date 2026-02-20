@@ -332,5 +332,8 @@ def admin_speakers_page() -> FileResponse:
     """Serve speaker management page (admin): add, edit, delete speakers."""
     p = STATIC_DIR / "admin" / "speakers.html"
     if p.exists():
-        return FileResponse(p)
+        return FileResponse(
+            p,
+            headers={"Cache-Control": "no-store"},
+        )
     raise HTTPException(status_code=404, detail="Not found")
