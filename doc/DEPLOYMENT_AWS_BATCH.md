@@ -159,6 +159,15 @@ The transcribe job syncs the video from S3 to the container, runs Whisper + pyan
 
 `<job-id>` is the Batch job ID (e.g. from the `submit-job` output or the Batch console).
 
+### Annotation page: loading video from S3 (CORS)
+
+When you use the **admin annotation page** to annotate speakers, the page can load the video directly from S3 (automatically from the transcript’s S3 path, or via a manual S3 URI). The browser requests the video using a **presigned GET URL** (valid for 1 hour). For this to work, the S3 bucket must allow **CORS** requests from the web app’s origin.
+
+- Add a CORS rule to the bucket with `AllowedOrigin` set to your web app’s origin (e.g. `https://your-app.example.com`) or a controlled wildcard if appropriate.
+- Without CORS, the browser may block the video request and the player will not load.
+
+The web app’s IAM role (or credentials) must have `s3:GetObject` on the bucket so it can generate presigned URLs.
+
 ## 6. Logs and troubleshooting
 
 - **Batch job status:** AWS Console → Batch → Jobs, or `aws batch describe-jobs --jobs <job-id> --region <region>`.

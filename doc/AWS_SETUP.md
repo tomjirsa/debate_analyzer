@@ -149,7 +149,13 @@ Use a `terraform.tfvars` file (do not commit) for sensitive values instead of `-
 After apply:
 
 - Build and push the web app image to the ECR repository (see `ecr_repository_url` output). Use `Dockerfile.webapp`; CI can push to `debate-analyzer-webapp:latest`.
-- Force a new ECS deployment so the service pulls the latest image (e.g. AWS Console → ECS → Service → Update service → Force new deployment).
+- **Reload web app from ECR:** After pushing a new image, force ECS to pull it:
+
+  ```bash
+  aws ecs update-service --cluster debate-analyzer-webapp --service debate-analyzer-webapp --force-new-deployment
+  ```
+
+  Add `--region <region>` (e.g. `eu-central-1`) if not using your default. Alternatively: AWS Console → ECS → Service → Update service → Force new deployment.
 
 Outputs: `alb_dns_name`, `rds_endpoint`, `ecr_repository_url`.
 

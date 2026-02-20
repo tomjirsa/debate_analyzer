@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from debate_analyzer.api.auth import get_admin_credentials
 from debate_analyzer.api.loader import load_transcript_payload
+from debate_analyzer.api.s3_utils import generate_presigned_get_url, parse_s3_uri
 from debate_analyzer.db import TranscriptRepository, init_db
 from debate_analyzer.db.base import get_db
 
@@ -171,6 +172,47 @@ def admin_save_mappings(
         raise HTTPException(status_code=404, detail="Transcript not found")
     repo.save_mappings_bulk(transcript_id, body.mappings)
     return {"ok": True}
+
+
+VIDEO_URL_EXPIRES_IN = 3600
+
+
+@app.get("/api/admin/transcripts/{transcript_id}/video-url")
+def admin_transcript_video_url(
+    transcript_id: str,
+    _: Annotated[object, Depends(get_admin_credentials)],
+    repo: Annotated[TranscriptRepository, Depends(get_repo_from_db)],
+    s3_uri: str | None = None,
+) -> dict:
+    """
+    Return a presigned GET URL for the transcript's video (admin).
+
+    If s3_uri is provided, presign that URI. Otherwise use the transcript's
+    video_path only when it starts with s3://.
+    """
+    transcript = repo.get_transcript_by_id(transcript_id)
+    if not transcript:
+        raise HTTPException(status_code=404, detail="Transcript not found")
+
+    uri_to_use = s3_uri and s3_uri.strip() or None
+    if not uri_to_use and transcript.video_path and transcript.video_path.strip().startswith("s3://"):
+        uri_to_use = transcript.video_path.strip()
+
+    if not uri_to_use or not uri_to_use.startswith("s3://"):
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "No S3 video URI. Use s3_uri query or set transcript video_path to s3://."
+            ),
+        )
+
+    try:
+        bucket, key = parse_s3_uri(uri_to_use)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+    url = generate_presigned_get_url(bucket, key, expires_in=VIDEO_URL_EXPIRES_IN)
+    return {"url": url, "expires_in": VIDEO_URL_EXPIRES_IN}
 
 
 @app.get("/api/admin/speakers")

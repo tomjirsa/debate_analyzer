@@ -12,4 +12,3 @@
 | [API.md](API.md) | API reference |
 | [DEPLOYMENT_AWS_BATCH.md](DEPLOYMENT_AWS_BATCH.md) | AWS Batch job submission and two-job flow |
 | [PROJECT_SETUP.md](PROJECT_SETUP.md) | Project setup checklist |
-| [AWS_STATS_WEB_INFRA_PLAN.md](AWS_STATS_WEB_INFRA_PLAN.md) | Plan for stats and static web (future) |
