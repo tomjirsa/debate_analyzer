@@ -77,6 +77,11 @@ class Transcript(Base):
     speaker_mappings = relationship(
         "SpeakerMapping", back_populates="transcript", cascade="all, delete-orphan"
     )
+    speaker_stats = relationship(
+        "TranscriptSpeakerStats",
+        back_populates="transcript",
+        cascade="all, delete-orphan",
+    )
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize to dict for API responses."""
@@ -141,3 +146,29 @@ class Segment(Base):
     confidence = Column(Float, nullable=True)
 
     transcript = relationship("Transcript", back_populates="segments")
+
+
+class TranscriptSpeakerStats(Base):
+    """Per-transcript, per-speaker stats (total_seconds, segment_count, word_count)."""
+
+    __tablename__ = "transcript_speaker_stats"
+    __table_args__ = (
+        UniqueConstraint(
+            "transcript_id",
+            "speaker_id_in_transcript",
+            name="uq_transcript_speaker_stats",
+        ),
+    )
+
+    transcript_id = Column(
+        String(36),
+        ForeignKey("transcript.id", ondelete="CASCADE"),
+        primary_key=True,
+        nullable=False,
+    )
+    speaker_id_in_transcript = Column(String(64), primary_key=True, nullable=False)
+    total_seconds = Column(Float, nullable=False)
+    segment_count = Column(Integer, nullable=False)
+    word_count = Column(Integer, nullable=False)
+
+    transcript = relationship("Transcript", back_populates="speaker_stats")

@@ -42,7 +42,7 @@ Provide required variables via `TF_VAR_*` environment variables, or a `terraform
 | `batch_compute_instance_types` | list(string) | `["g4dn.xlarge", "g4dn.2xlarge"]` | EC2 instance types for GPU compute environment. |
 | `batch_min_vcpus` | number | `0` | Min vCPUs for GPU compute environment (0 = scale to zero). |
 | `batch_max_vcpus` | number | `256` | Max vCPUs for GPU compute environment. |
-| `batch_cpu_instance_types` | list(string) | `["c5.xlarge"]` | EC2 instance types for CPU compute environment (download job). |
+| `batch_cpu_instance_types` | list(string) | `["c5.xlarge"]` | EC2 instance types for CPU compute environment (download and stats job). |
 | `batch_cpu_min_vcpus` | number | `0` | Min vCPUs for CPU compute environment. |
 | `batch_cpu_max_vcpus` | number | `64` | Max vCPUs for CPU compute environment. |
 | `vpc_id` | string | `null` | VPC ID; if null, default VPC is used. |
@@ -66,7 +66,7 @@ terraform apply   # type yes when prompted
 After apply, note the outputs (e.g. `terraform output`):
 
 - `batch_job_queue_name` — GPU queue (full pipeline + transcribe job)
-- `batch_job_queue_cpu_name` — CPU queue (download job)
+- `batch_job_queue_cpu_name` — CPU queue (download and stats job)
 - `batch_job_definition_name` — full pipeline job definition
 - `batch_job_definition_download_name` — download-only job definition
 - `batch_job_definition_transcribe_name` — transcribe-only job definition

@@ -44,7 +44,7 @@ output "batch_job_definition_arn" {
 }
 
 output "batch_job_queue_cpu_name" {
-  description = "Name of the CPU job queue (for download-only jobs)."
+  description = "Name of the CPU job queue (for download and stats jobs; CPU-only)."
   value       = aws_batch_job_queue.cpu.name
 }
 
@@ -56,6 +56,11 @@ output "batch_job_definition_download_name" {
 output "batch_job_definition_transcribe_name" {
   description = "Name of the transcribe-only job definition (Job 2)."
   value       = aws_batch_job_definition.transcribe.name
+}
+
+output "batch_job_definition_stats_name" {
+  description = "Name of the stats job definition (Job 3; run after transcribe)."
+  value       = aws_batch_job_definition.stats.name
 }
 
 output "output_s3_prefix_example" {

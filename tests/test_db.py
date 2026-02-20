@@ -141,3 +141,125 @@ def test_delete_speaker_profile(repo):
     assert repo.delete_speaker_profile(profile.id) is True
     assert repo.get_speaker_profile_by_id(profile.id) is None
     assert repo.delete_speaker_profile(profile.id) is False
+
+
+def test_save_and_get_speaker_stats_for_transcript(repo):
+    """Saving transcript speaker stats and fetching them returns the same data."""
+    payload = {
+        "duration": 10.0,
+        "transcription": [
+            {"start": 0, "end": 5, "text": "one two three", "speaker": "SPEAKER_00"},
+            {"start": 5, "end": 10, "text": "four five six", "speaker": "SPEAKER_01"},
+        ],
+    }
+    t = repo.create_transcript_from_payload("s3://b/k.json", payload)
+    rows = [
+        {
+            "speaker_id_in_transcript": "SPEAKER_00",
+            "total_seconds": 5.0,
+            "segment_count": 1,
+            "word_count": 3,
+        },
+        {
+            "speaker_id_in_transcript": "SPEAKER_01",
+            "total_seconds": 5.0,
+            "segment_count": 1,
+            "word_count": 3,
+        },
+    ]
+    repo.save_transcript_speaker_stats(t.id, rows)
+    got = repo.get_speaker_stats_for_transcript(t.id)
+    assert len(got) == 2
+    by_speaker = {r["speaker_id_in_transcript"]: r for r in got}
+    assert by_speaker["SPEAKER_00"]["total_seconds"] == 5.0
+    assert by_speaker["SPEAKER_00"]["word_count"] == 3
+    assert by_speaker["SPEAKER_01"]["segment_count"] == 1
+
+
+def test_save_transcript_speaker_stats_idempotent(repo):
+    """Re-saving stats for the same transcript replaces existing rows."""
+    payload = {
+        "duration": 1.0,
+        "transcription": [{"start": 0, "end": 1, "text": "x", "speaker": "SPEAKER_00"}],
+    }
+    t = repo.create_transcript_from_payload("s3://b/k.json", payload)
+    repo.save_transcript_speaker_stats(
+        t.id,
+        [
+            {
+                "speaker_id_in_transcript": "SPEAKER_00",
+                "total_seconds": 1.0,
+                "segment_count": 1,
+                "word_count": 1,
+            }
+        ],
+    )
+    repo.save_transcript_speaker_stats(
+        t.id,
+        [
+            {
+                "speaker_id_in_transcript": "SPEAKER_00",
+                "total_seconds": 2.0,
+                "segment_count": 2,
+                "word_count": 2,
+            }
+        ],
+    )
+    got = repo.get_speaker_stats_for_transcript(t.id)
+    assert len(got) == 1
+    assert got[0]["total_seconds"] == 2.0
+    assert got[0]["word_count"] == 2
+
+
+def test_get_speaker_stats_by_transcript(repo):
+    """Per-transcript breakdown joins stats with mapping and transcript."""
+    payload1 = {
+        "duration": 10.0,
+        "transcription": [
+            {"start": 0, "end": 10, "text": "a b c", "speaker": "SPEAKER_00"}
+        ],
+    }
+    payload2 = {
+        "duration": 5.0,
+        "transcription": [
+            {"start": 0, "end": 5, "text": "x y", "speaker": "SPEAKER_00"}
+        ],
+    }
+    t1 = repo.create_transcript_from_payload(
+        "s3://b/t1.json", payload1, title="Transcript A"
+    )
+    t2 = repo.create_transcript_from_payload(
+        "s3://b/t2.json", payload2, title="Transcript B"
+    )
+    profile = repo.create_speaker_profile("Alice", "Smith")
+    repo.save_mapping(t1.id, "SPEAKER_00", profile.id)
+    repo.save_mapping(t2.id, "SPEAKER_00", profile.id)
+    repo.save_transcript_speaker_stats(
+        t1.id,
+        [
+            {
+                "speaker_id_in_transcript": "SPEAKER_00",
+                "total_seconds": 10.0,
+                "segment_count": 1,
+                "word_count": 3,
+            }
+        ],
+    )
+    repo.save_transcript_speaker_stats(
+        t2.id,
+        [
+            {
+                "speaker_id_in_transcript": "SPEAKER_00",
+                "total_seconds": 5.0,
+                "segment_count": 1,
+                "word_count": 2,
+            }
+        ],
+    )
+    breakdown = repo.get_speaker_stats_by_transcript(profile.id)
+    assert len(breakdown) == 2
+    titles = {r["transcript_title"]: r for r in breakdown}
+    assert "Transcript A" in titles
+    assert "Transcript B" in titles
+    assert titles["Transcript A"]["total_seconds"] == 10.0
+    assert titles["Transcript B"]["word_count"] == 2

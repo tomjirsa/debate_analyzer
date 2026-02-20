@@ -24,6 +24,15 @@
           <br><span class="label">Words</span>
         </div>
       </div>
+      <section v-if="statsByTranscript && statsByTranscript.length" class="by-transcript">
+        <h2>By transcript</h2>
+        <ul class="transcript-list">
+          <li v-for="row in statsByTranscript" :key="row.transcript_id" class="transcript-row">
+            <span class="transcript-title">{{ row.transcript_title || 'Untitled' }}</span>
+            <span class="transcript-stats">{{ formatTime(row.total_seconds) }}, {{ formatNum(row.segment_count) }} segments</span>
+          </li>
+        </ul>
+      </section>
     </div>
   </div>
 </template>
@@ -35,6 +44,7 @@ import { useRoute } from 'vue-router'
 const route = useRoute()
 const profile = ref(null)
 const stats = ref({ transcript_count: 0, segment_count: 0, total_seconds: 0, word_count: 0 })
+const statsByTranscript = ref([])
 const error = ref('')
 
 const displayName = computed(() => {
@@ -68,6 +78,7 @@ onMounted(async () => {
     const data = await r.json()
     profile.value = data.profile
     stats.value = data.stats
+    statsByTranscript.value = data.stats_by_transcript || []
   } catch (e) {
     error.value = e.message
   }
@@ -88,4 +99,10 @@ onMounted(async () => {
 }
 .stat .value { font-size: 1.25rem; font-weight: 600; }
 .stat .label { font-size: 0.85rem; color: #666; }
+.by-transcript { margin-top: 1.5rem; }
+.by-transcript h2 { font-size: 1.1rem; margin-bottom: 0.5rem; }
+.transcript-list { list-style: none; padding: 0; margin: 0; }
+.transcript-row { padding: 0.5rem 0; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; gap: 1rem; }
+.transcript-title { font-weight: 500; }
+.transcript-stats { color: #666; font-size: 0.9rem; }
 </style>

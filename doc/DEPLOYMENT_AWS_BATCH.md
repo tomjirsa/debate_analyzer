@@ -51,8 +51,8 @@ Terraform creates:
 | **IAM** roles | Job role (S3 + Secrets Manager), execution role (ECR + CloudWatch), instance role (for Batch compute EC2). |
 | **ECR** repository | Holds the debate-analyzer Docker image (pushed by CI). |
 | **Batch** compute environment (GPU) | GPU (e.g. g4dn.xlarge), min 0 / max 256 vCPUs. |
-| **Batch** compute environment (CPU) | CPU (e.g. c5.xlarge), for download-only jobs; min 0 / max 64 vCPUs. |
-| **Batch** job queues | GPU queue (full pipeline + transcribe job); CPU queue (download job). |
+| **Batch** compute environment (CPU) | CPU (e.g. c5.xlarge), for download and stats jobs; min 0 / max 64 vCPUs. |
+| **Batch** job queues | GPU queue (full pipeline + transcribe job); CPU queue (download and stats job). |
 | **Batch** job definitions | Full pipeline (GPU); download-only (CPU, no HF token); transcribe-only (GPU, reads video from S3). |
 | **CloudWatch** log group | Container logs from each job. |
 
@@ -152,10 +152,27 @@ Or with explicit output prefix:
 
 The transcribe job syncs the video from S3 to the container, runs Whisper + pyannote, and uploads transcripts to `s3://<bucket>/jobs/<job-id>/transcripts/`.
 
+### Job 3: Speaker stats (CPU)
+
+- **When to run:** After the transcribe job has written transcript JSON files to the job folder. This job reads those JSON files, computes per-speaker statistics (total time, segment count, word count) per transcript, and writes `<stem>_speaker_stats.parquet` next to each `<stem>_transcription.json` in the same S3 prefix.
+- **Environment:** `TRANSCRIPTS_S3_PREFIX` (S3 prefix to the `transcripts/` folder, e.g. `s3://<bucket>/jobs/<job-id>/transcripts`).
+- **Queue:** CPU queue (`batch_job_queue_cpu_name`).
+- **Job definition:** `batch_job_definition_stats_name`.
+
+From the repo root (replace `<job-id>` with the transcribe job ID):
+
+```bash
+BUCKET=$(cd deploy/terraform && terraform output -raw s3_bucket_name)
+./deploy/scripts/submit-jobs/submit-stats-job.sh "s3://$BUCKET/jobs/<job-id>/transcripts"
+```
+
+Parquet files are written under the same prefix (e.g. `.../transcripts/foo_speaker_stats.parquet`). When you register a transcript from S3 in the web app, the app will load speaker stats from the corresponding parquet file (if present) and store them in the database for display.
+
 ## 5. Where downloaded videos and transcripts land in S3
 
 - **Downloaded video and subtitles:** `s3://<bucket>/jobs/<job-id>/videos/` and `s3://<bucket>/jobs/<job-id>/subtitles/`. Video files are stored **directly** under the `videos/` prefix (e.g. `.../videos/<filename>.mp4`), and subtitle files under `subtitles/` (e.g. `.../subtitles/<filename>.srt`).
 - **Transcription JSON (and optionally extracted audio):** `s3://<bucket>/jobs/<job-id>/transcripts/`
+- **Speaker stats parquet (after Job 3):** `s3://<bucket>/jobs/<job-id>/transcripts/<stem>_speaker_stats.parquet` (one file per transcript JSON).
 
 `<job-id>` is the Batch job ID (e.g. from the `submit-job` output or the Batch console).
 
@@ -202,5 +219,6 @@ The image includes Deno and EJS for YouTube. If you still see **"Sign in to conf
 2. Configure GitHub Actions (OIDC or static AWS credentials) and push to `main` to build and push the image to ECR.
 3. **Single job:** Use `./deploy/scripts/submit-jobs/submit-job.sh <video_url>` or `aws batch submit-job` with `VIDEO_URL` and `OUTPUT_S3_PREFIX=s3://<bucket>/jobs`.
 4. **Two jobs:** Use `./deploy/scripts/submit-jobs/submit-download-job.sh <video_url>`, then `./deploy/scripts/submit-jobs/submit-transcribe-job.sh s3://<bucket>/jobs/<job-id>/videos` (see section 4b).
-5. Find outputs in S3 under `jobs/<job-id>/videos/` and `jobs/<job-id>/transcripts/`, and logs in CloudWatch under `/aws/batch/debate-analyzer`.
-6. If YouTube shows "Sign in to confirm you're not a bot", use optional cookies (see section 7); set `YT_COOKIES_FILE`, `YT_COOKIES_S3_URI`, or `YT_COOKIES_SECRET_ARN` (or Terraform variable `yt_cookies_secret_arn`).
+5. **Optional Job 3 (stats):** After transcribe, run `./deploy/scripts/submit-jobs/submit-stats-job.sh s3://<bucket>/jobs/<job-id>/transcripts` to generate per-speaker stats parquet in the same folder. When you register transcripts from S3 in the web app, stats are loaded from these parquet files into the database.
+6. Find outputs in S3 under `jobs/<job-id>/videos/` and `jobs/<job-id>/transcripts/`, and logs in CloudWatch under `/aws/batch/debate-analyzer`.
+7. If YouTube shows "Sign in to confirm you're not a bot", use optional cookies (see section 7); set `YT_COOKIES_FILE`, `YT_COOKIES_S3_URI`, or `YT_COOKIES_SECRET_ARN` (or Terraform variable `yt_cookies_secret_arn`).

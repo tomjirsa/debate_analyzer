@@ -392,3 +392,31 @@ resource "aws_batch_job_definition" "transcribe" {
     }
   })
 }
+
+# Job 3: Stats only (CPU; reads transcript JSON from S3, writes parquet to same prefix)
+resource "aws_batch_job_definition" "stats" {
+  name                  = "${local.name}-job-stats"
+  type                  = "container"
+  platform_capabilities = ["EC2"]
+
+  container_properties = jsonencode({
+    image = local.ecr_image
+    command = ["/entrypoint_stats.sh"]
+    resourceRequirements = [
+      { type = "VCPU", value = "1" },
+      { type = "MEMORY", value = "2048" }
+    ]
+    jobRoleArn       = aws_iam_role.batch_job.arn
+    executionRoleArn = aws_iam_role.batch_execution.arn
+    secrets          = []
+    environment      = []
+    logConfiguration = {
+      logDriver = "awslogs"
+      options = {
+        "awslogs-group"         = aws_cloudwatch_log_group.batch.name
+        "awslogs-region"        = local.region
+        "awslogs-stream-prefix" = "batch"
+      }
+    }
+  })
+}

@@ -10,7 +10,10 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from debate_analyzer.api.auth import get_admin_credentials
-from debate_analyzer.api.loader import load_transcript_payload
+from debate_analyzer.api.loader import (
+    load_speaker_stats_parquet,
+    load_transcript_payload,
+)
 from debate_analyzer.api.s3_utils import generate_presigned_get_url, parse_s3_uri
 from debate_analyzer.db import TranscriptRepository, init_db
 from debate_analyzer.db.base import get_db
@@ -54,7 +57,12 @@ def get_speaker(
             status_code=status.HTTP_404_NOT_FOUND, detail="Speaker not found"
         )
     stats = repo.get_speaker_stats(profile.id)
-    return {"profile": profile.to_dict(), "stats": stats}
+    stats_by_transcript = repo.get_speaker_stats_by_transcript(profile.id)
+    return {
+        "profile": profile.to_dict(),
+        "stats": stats,
+        "stats_by_transcript": stats_by_transcript,
+    }
 
 
 # ---------- Admin API (basic auth) ----------
@@ -93,10 +101,12 @@ def admin_get_transcript(
         }
         for s in transcript.segments
     ]
+    speaker_stats = repo.get_speaker_stats_for_transcript(transcript_id)
     return {
         "transcript": transcript.to_dict(),
         "mappings": [m.to_dict() for m in mappings],
         "segments": segments,
+        "speaker_stats": speaker_stats,
     }
 
 
@@ -128,6 +138,16 @@ def admin_register_transcript(
         source_type=source_type,
         title=body.title,
     )
+    if (
+        body.source_uri.strip().startswith("s3://")
+        and "_transcription.json" in body.source_uri
+    ):
+        parquet_uri = body.source_uri.replace(
+            "_transcription.json", "_speaker_stats.parquet"
+        )
+        stats_rows = load_speaker_stats_parquet(parquet_uri)
+        if stats_rows:
+            repo.save_transcript_speaker_stats(transcript.id, stats_rows)
     return transcript.to_dict()
 
 

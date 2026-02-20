@@ -44,7 +44,7 @@ For a **step-by-step AWS setup** and full variable descriptions, see [doc/AWS_SE
 | `batch_compute_instance_types` | GPU instance types | `["g4dn.xlarge", "g4dn.2xlarge"]` |
 | `batch_min_vcpus` | Min vCPUs for GPU CE (0 = scale to zero) | `0` |
 | `batch_max_vcpus` | Max vCPUs for GPU CE | `256` |
-| `batch_cpu_instance_types` | CPU instance types (download job) | `["c5.xlarge"]` |
+| `batch_cpu_instance_types` | CPU instance types (download and stats job) | `["c5.xlarge"]` |
 | `batch_cpu_min_vcpus` | Min vCPUs for CPU CE (0 = scale to zero) | `0` |
 | `batch_cpu_max_vcpus` | Max vCPUs for CPU CE | `64` |
 | `vpc_id` | VPC ID (null = default VPC) | `null` |
@@ -54,7 +54,7 @@ For a **step-by-step AWS setup** and full variable descriptions, see [doc/AWS_SE
 ## Outputs
 
 - `batch_job_queue_name` – GPU queue (full pipeline and transcribe job)
-- `batch_job_queue_cpu_name` – CPU queue (download job)
+- `batch_job_queue_cpu_name` – CPU queue (download and stats job)
 - `batch_job_definition_name` – full pipeline (download + transcribe)
 - `batch_job_definition_download_name` – download-only (Job 1)
 - `batch_job_definition_transcribe_name` – transcribe-only (Job 2)

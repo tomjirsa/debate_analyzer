@@ -10,7 +10,9 @@ from sqlalchemy.orm import Session, sessionmaker
 # Set FORCE_SQLITE=1 to use SQLite even when DATABASE_URL is set (e.g. local dev with RDS in env).
 _default_sqlite = "sqlite:///./debate_analyzer.db"
 _raw = os.environ.get("DATABASE_URL", _default_sqlite)
-if os.environ.get("FORCE_SQLITE", "").lower() in ("1", "true") or not (_raw and _raw.strip()):
+if os.environ.get("FORCE_SQLITE", "").lower() in ("1", "true") or not (
+    _raw and _raw.strip()
+):
     DATABASE_URL = _default_sqlite
 else:
     DATABASE_URL = _raw.strip()

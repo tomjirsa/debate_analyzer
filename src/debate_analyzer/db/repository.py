@@ -12,6 +12,7 @@ from debate_analyzer.db.models import (
     SpeakerMapping,
     SpeakerProfile,
     Transcript,
+    TranscriptSpeakerStats,
 )
 
 
@@ -132,7 +133,9 @@ class TranscriptRepository:
         title: str | None = None,
         video_path: str | None = None,
     ) -> Transcript | None:
-        """Update transcript title and/or video_path. Returns updated transcript or None if not found."""
+        """Update transcript title and/or video_path.
+        Returns updated transcript or None if not found.
+        """
         transcript = self.get_transcript_by_id(transcript_id)
         if not transcript:
             return None
@@ -145,7 +148,9 @@ class TranscriptRepository:
         return transcript
 
     def delete_transcript(self, transcript_id: str) -> bool:
-        """Delete transcript (cascades to segments and mappings). Returns True if deleted, False if not found."""
+        """Delete transcript (cascades to segments and mappings).
+        Returns True if deleted, False if not found.
+        """
         transcript = self.get_transcript_by_id(transcript_id)
         if not transcript:
             return False
@@ -311,3 +316,85 @@ class TranscriptRepository:
             "transcript_count": int(transcript_count or 0),
             "word_count": word_count,
         }
+
+    def save_transcript_speaker_stats(
+        self,
+        transcript_id: str,
+        rows: list[dict[str, Any]],
+    ) -> None:
+        """
+        Replace all speaker stats for a transcript with the given rows.
+        Idempotent: deletes existing rows for this transcript then inserts.
+        """
+        self.session.query(TranscriptSpeakerStats).filter(
+            TranscriptSpeakerStats.transcript_id == transcript_id
+        ).delete()
+        for row in rows:
+            self.session.add(
+                TranscriptSpeakerStats(
+                    transcript_id=transcript_id,
+                    speaker_id_in_transcript=row["speaker_id_in_transcript"],
+                    total_seconds=float(row["total_seconds"]),
+                    segment_count=int(row["segment_count"]),
+                    word_count=int(row["word_count"]),
+                )
+            )
+        self.session.commit()
+
+    def get_speaker_stats_for_transcript(
+        self, transcript_id: str
+    ) -> list[dict[str, Any]]:
+        """Return per-speaker stats for a transcript (for admin transcript view)."""
+        rows = (
+            self.session.query(TranscriptSpeakerStats)
+            .filter(TranscriptSpeakerStats.transcript_id == transcript_id)
+            .all()
+        )
+        return [
+            {
+                "speaker_id_in_transcript": r.speaker_id_in_transcript,
+                "total_seconds": r.total_seconds,
+                "segment_count": r.segment_count,
+                "word_count": r.word_count,
+            }
+            for r in rows
+        ]
+
+    def get_speaker_stats_by_transcript(
+        self, speaker_profile_id: str
+    ) -> list[dict[str, Any]]:
+        """
+        Return per-transcript stats for a speaker (for public speaker page breakdown).
+        Joins transcript_speaker_stats with speaker_mapping and transcript.
+        """
+        q = (
+            self.session.query(
+                TranscriptSpeakerStats.transcript_id,
+                Transcript.title.label("transcript_title"),
+                TranscriptSpeakerStats.total_seconds,
+                TranscriptSpeakerStats.segment_count,
+                TranscriptSpeakerStats.word_count,
+            )
+            .join(
+                SpeakerMapping,
+                (TranscriptSpeakerStats.transcript_id == SpeakerMapping.transcript_id)
+                & (
+                    TranscriptSpeakerStats.speaker_id_in_transcript
+                    == SpeakerMapping.speaker_id_in_transcript
+                ),
+            )
+            .join(Transcript, TranscriptSpeakerStats.transcript_id == Transcript.id)
+            .filter(SpeakerMapping.speaker_profile_id == speaker_profile_id)
+            .order_by(Transcript.created_at.desc())
+        )
+        rows = q.all()
+        return [
+            {
+                "transcript_id": r.transcript_id,
+                "transcript_title": r.transcript_title,
+                "total_seconds": r.total_seconds,
+                "segment_count": r.segment_count,
+                "word_count": r.word_count,
+            }
+            for r in rows
+        ]
