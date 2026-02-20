@@ -34,7 +34,11 @@ terraform plan -var="existing_s3_bucket_name=YOUR_BUCKET" -var="admin_username=a
 terraform apply  # same vars
 ```
 
-After apply, build and push the **web app** Docker image to the ECR repository created here, then update the ECS service (or use CI/CD). The app expects `DATABASE_URL`, `ADMIN_USERNAME`, `ADMIN_PASSWORD`, and optionally `AWS_S3_BUCKET` (or use IAM role to discover bucket).
+After apply, the **web app** Docker image must be available in the ECR repository. Either build and push manually (see repo root) or use CI/CD.
+
+**GitHub Actions:** The workflow `.github/workflows/build-push-ecr.yml` builds both the pipeline image and the web app image (`Dockerfile.webapp`) and pushes the web app to this stack’s ECR repo (`debate-analyzer-webapp:latest`) on push to `main`. The IAM role used by GitHub Actions (`AWS_ROLE_ARN`) must be allowed to push to **both** ECR repositories (`debate-analyzer` and `debate-analyzer-webapp`). If the role was created only for the Batch stack, add an ECR policy granting `ecr:GetAuthorizationToken` and (on the web app repo) `ecr:PutImage`, `ecr:InitiateLayerUpload`, `ecr:UploadLayerPart`, `ecr:CompleteLayerUpload` for the `debate-analyzer-webapp` repository.
+
+Then force a new ECS deployment so the service pulls the latest image. The app expects `DATABASE_URL`, `ADMIN_USERNAME`, `ADMIN_PASSWORD` (injected by the task definition).
 
 ## Outputs
 

@@ -1,6 +1,9 @@
-# Build the debate-analyzer Docker image and push to Amazon ECR.
+# Build the debate-analyzer Docker images and push to Amazon ECR.
+# - Pipeline image (Batch): Dockerfile -> debate-analyzer
+# - Web app image (Fargate): Dockerfile.webapp -> debate-analyzer-webapp
 # For OIDC: set up an IAM role with trust for token.actions.githubusercontent.com
-#   and permissions for ECR GetAuthorizationToken, ECR PutImage, InitiateLayerUpload, UploadLayerPart, CompleteLayerUpload.
+#   and permissions for ECR GetAuthorizationToken, ECR PutImage, InitiateLayerUpload, UploadLayerPart, CompleteLayerUpload
+#   on BOTH ECR repositories (debate-analyzer and debate-analyzer-webapp).
 # Then set AWS_REGION and AWS_ROLE_ARN (or use repo secrets).
 
 name: Build and push to ECR
@@ -12,6 +15,7 @@ on:
 
 env:
   ECR_REPOSITORY: debate-analyzer
+  ECR_REPOSITORY_WEBAPP: debate-analyzer-webapp
   IMAGE_TAG: latest
 
 jobs:
@@ -38,7 +42,7 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build and push image (with layer cache)
+      - name: Build and push pipeline image (with layer cache)
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -46,3 +50,13 @@ jobs:
           tags: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }}
           cache-from: type=registry,ref=${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:buildcache
           cache-to: type=registry,ref=${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:buildcache,mode=max
+
+      - name: Build and push web app image (Fargate)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.webapp
+          push: true
+          tags: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY_WEBAPP }}:${{ env.IMAGE_TAG }}
+          cache-from: type=registry,ref=${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY_WEBAPP }}:buildcache
+          cache-to: type=registry,ref=${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY_WEBAPP }}:buildcache,mode=max
