@@ -5,6 +5,7 @@ This document contains step-by-step guides for common tasks in the Debate Analyz
 ## Table of Contents
 - [How to Download YouTube Videos](#how-to-download-youtube-videos)
 - [How to Transcribe Videos with Speaker Identification](#how-to-transcribe-videos-with-speaker-identification)
+- [How to Run the Web App Locally](#how-to-run-the-web-app-locally)
 - [How to Annotate Speaker Names](#how-to-annotate-speaker-names)
 - [How to Add a New Feature](#how-to-add-a-new-feature)
 - [How to Write Tests](#how-to-write-tests)
@@ -93,7 +94,7 @@ output_dir/
 
 ## How to Transcribe Videos with Speaker Identification
 
-The transcriber module provides state-of-the-art speech-to-text transcription with automatic speaker identification using open-source models (faster-whisper + pyannote.audio).
+The transcriber module provides state-of-the-art speech-to-text transcription with automatic speaker identification using open-source models (faster-whisper + pyannote.audio). For full CLI options, Python API, output format, and troubleshooting, see [TRANSCRIBE.md](TRANSCRIBE.md).
 
 ### Prerequisites
 
@@ -463,9 +464,25 @@ for seg in segments:
     print(f"[{seg.start:.2f}s] {seg.text}")
 ```
 
+## How to Run the Web App Locally
+
+To run the web app (speaker profiles, transcript registration, and annotation) on your machine:
+
+1. **Install:** `poetry install --extras webapp` (or `--extras transcribe --extras webapp`).
+2. **Optional:** Set `ADMIN_USERNAME` and `ADMIN_PASSWORD` for HTTP Basic auth on `/admin` and `/api/admin/*`.
+3. **Start:** `poetry run python -m debate_analyzer.api` — app runs at http://127.0.0.1:8000.
+4. **URLs:** `/` (speaker list), `/speakers/<id>` (speaker detail), `/admin` (register transcripts, annotate), `/docs` (API docs).
+
+For details (env vars, database, deployment), see [WEBAPP.md](WEBAPP.md).
+
 ## How to Annotate Speaker Names
 
-After transcribing a video, speaker IDs are generic (e.g. `SPEAKER_00`, `SPEAKER_01`). To assign real names, use the **speaker annotator** — a single HTML tool that runs in your browser (no server required).
+After transcribing a video, speaker IDs are generic (e.g. `SPEAKER_00`, `SPEAKER_01`). You can assign real names in two ways:
+
+- **Standalone tool:** Use the **speaker annotator** — a single HTML tool that runs in your browser (no server required).
+- **Web app:** Use the web app admin at `/admin/annotate?transcript_id=...` to map speaker IDs to speaker profiles (see [WEBAPP.md](WEBAPP.md)).
+
+**Standalone tool steps:**
 
 1. **Open the tool**: Open [tool/speaker_annotator.html](../tool/speaker_annotator.html) in your browser (e.g. double-click the file or use `file://`).
 2. **Load transcript and video**: Use the file inputs to select your transcript JSON (from the transcriber) and the corresponding video file.
@@ -751,3 +768,14 @@ rm -rf .coverage htmlcov/
 # Run tests again
 make test
 ```
+
+## Where to Read More
+
+- [TRANSCRIBE.md](TRANSCRIBE.md) — Transcribe module (CLI, API, output format, troubleshooting)
+- [WEBAPP.md](WEBAPP.md) — Web app and run locally
+- [ARCHITECTURE.md](ARCHITECTURE.md) — Project architecture
+- [ARCHITECTURE_AWS.md](ARCHITECTURE_AWS.md) — AWS deployment architecture
+- [AWS_SETUP.md](AWS_SETUP.md) — Step-by-step AWS setup
+- [DEPLOYMENT_AWS_BATCH.md](DEPLOYMENT_AWS_BATCH.md) — AWS Batch job submission
+- [DEVELOPMENT.md](DEVELOPMENT.md) — Development workflow
+- [API.md](API.md) — API reference

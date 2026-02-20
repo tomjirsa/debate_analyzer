@@ -2,6 +2,8 @@
 
 This directory provisions the **web app** (ECS Fargate, RDS, ALB) with its **own Terraform state**, independent of the Batch/S3 stack in `../terraform/`.
 
+For a **step-by-step AWS setup** and full variable descriptions, see [doc/AWS_SETUP.md](../../doc/AWS_SETUP.md). For the **AWS deployment architecture** (Batch and Web app stacks), see [doc/ARCHITECTURE_AWS.md](../../doc/ARCHITECTURE_AWS.md).
+
 ## Prerequisites
 
 - Terraform >= 1.0

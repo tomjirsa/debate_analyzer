@@ -2,6 +2,8 @@
 
 This directory provisions all AWS resources for running the debate-analyzer pipeline on AWS Batch: Secrets Manager (HF token), S3 bucket, IAM roles, ECR repository, GPU and CPU compute environments, job queues, and job definitions. You can run a single full-pipeline job (download + transcribe) or two separate jobs (download to S3, then transcribe from S3).
 
+For a **step-by-step AWS setup** and full variable descriptions, see [doc/AWS_SETUP.md](../../doc/AWS_SETUP.md). For the **AWS deployment architecture** (Batch and Web app stacks), see [doc/ARCHITECTURE_AWS.md](../../doc/ARCHITECTURE_AWS.md).
+
 ## Prerequisites
 
 - Terraform >= 1.0

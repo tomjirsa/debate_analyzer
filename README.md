@@ -256,9 +256,17 @@ debate_analyzer/
 ## Documentation
 
 For detailed documentation, see the [doc](./doc) folder:
-- [Architecture](./doc/ARCHITECTURE.md) - System architecture and design
-- [Development Guide](./doc/DEVELOPMENT.md) - Development workflow and guidelines
-- [API Reference](./doc/API.md) - API documentation
+
+- [Architecture](./doc/ARCHITECTURE.md) — System architecture and design
+- [AWS deployment architecture](./doc/ARCHITECTURE_AWS.md) — AWS Batch and Web app stacks
+- [AWS setup (step-by-step)](./doc/AWS_SETUP.md) — AWS setup guide and Terraform variables
+- [Web app & run locally](./doc/WEBAPP.md) — Web app and local run
+- [Transcribe module](./doc/TRANSCRIBE.md) — Transcribe CLI and API
+- [How-to guides](./doc/HOWTO.md) — Download, transcribe, annotate, dev tasks
+- [Development guide](./doc/DEVELOPMENT.md) — Development workflow and guidelines
+- [API reference](./doc/API.md) — API documentation
+- [Deploy to AWS Batch](./doc/DEPLOYMENT_AWS_BATCH.md) — Job submission and two-job flow
+- [Project setup](./doc/PROJECT_SETUP.md) — Setup checklist
 
 ## License
 
@@ -267,4 +275,3 @@ For detailed documentation, see the [doc](./doc) folder:
 ## Contributing
 
 [Add contributing guidelines here]
-Nice!
