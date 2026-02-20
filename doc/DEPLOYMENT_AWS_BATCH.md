@@ -154,7 +154,7 @@ The transcribe job syncs the video from S3 to the container, runs Whisper + pyan
 
 ## 5. Where downloaded videos and transcripts land in S3
 
-- **Downloaded video and subtitles:** `s3://<bucket>/jobs/<job-id>/videos/`
+- **Downloaded video and subtitles:** `s3://<bucket>/jobs/<job-id>/videos/` and `s3://<bucket>/jobs/<job-id>/subtitles/`. Video files are stored **directly** under the `videos/` prefix (e.g. `.../videos/<filename>.mp4`), and subtitle files under `subtitles/` (e.g. `.../subtitles/<filename>.srt`).
 - **Transcription JSON (and optionally extracted audio):** `s3://<bucket>/jobs/<job-id>/transcripts/`
 
 `<job-id>` is the Batch job ID (e.g. from the `submit-job` output or the Batch console).

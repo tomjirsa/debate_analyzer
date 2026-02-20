@@ -32,7 +32,7 @@ fi
 echo "Step 1/2: Downloading video from $VIDEO_URL"
 python -m debate_analyzer.video_downloader "$VIDEO_URL" --output-dir "$DOWNLOADS_DIR"
 
-echo "Step 2/2: Uploading downloaded video and subtitles to S3 ($PREFIX/videos/)"
-aws s3 sync "$DOWNLOADS_DIR" "$PREFIX/videos/" --no-progress
+echo "Step 2/2: Uploading downloaded video and subtitles to S3 ($PREFIX/)"
+aws s3 sync "$DOWNLOADS_DIR" "$PREFIX/" --no-progress
 
-echo "Done. Videos: $PREFIX/videos/"
+echo "Done. Videos: $PREFIX/videos/  Subtitles: $PREFIX/subtitles/"

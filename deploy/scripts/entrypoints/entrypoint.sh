@@ -40,8 +40,8 @@ if [[ -z "$VIDEO_FILE" ]] || [[ ! -f "$VIDEO_FILE" ]]; then
   exit 1
 fi
 
-echo "Step 2/4: Uploading downloaded video and subtitles to S3 ($PREFIX/videos/)"
-aws s3 sync "$DOWNLOADS_DIR" "$PREFIX/videos/" --no-progress
+echo "Step 2/4: Uploading downloaded video and subtitles to S3 ($PREFIX/)"
+aws s3 sync "$DOWNLOADS_DIR" "$PREFIX/" --no-progress
 
 echo "Step 3/4: Transcribing audio (GPU)"
 mkdir -p "$TRANSCRIPT_DIR"
@@ -50,4 +50,4 @@ python -m debate_analyzer.transcriber "$VIDEO_FILE" --output-dir "$TRANSCRIPT_DI
 echo "Step 4/4: Uploading transcripts to S3 ($PREFIX/transcripts/)"
 aws s3 sync "$TRANSCRIPT_DIR" "$PREFIX/transcripts/" --no-progress
 
-echo "Done. Videos: $PREFIX/videos/  Transcripts: $PREFIX/transcripts/"
+echo "Done. Videos: $PREFIX/videos/  Subtitles: $PREFIX/subtitles/  Transcripts: $PREFIX/transcripts/"

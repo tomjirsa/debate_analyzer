@@ -21,7 +21,7 @@ For step-by-step setup and variable definitions, see [AWS_SETUP.md](AWS_SETUP.md
 | Component | Purpose |
 |-----------|---------|
 | **Secrets Manager** | HuggingFace token (required for pyannote); optional YouTube cookies (from file or ARN) for bot check. |
-| **S3 bucket** | `debate-analyzer-<account_id>`. Prefixes: `jobs/<job-id>/videos/` (downloaded video/subtitles), `jobs/<job-id>/transcripts/` (transcription JSON, optional audio). |
+| **S3 bucket** | `debate-analyzer-<account_id>`. Prefixes: `jobs/<job-id>/videos/` (downloaded video files), `jobs/<job-id>/subtitles/` (downloaded subtitles), `jobs/<job-id>/transcripts/` (transcription JSON, optional audio). |
 | **IAM** | Job role (S3 read/write, Secrets Manager read); execution role (ECR pull, CloudWatch Logs, Secrets Manager read); instance role for Batch EC2 hosts. |
 | **ECR** | Repository for the **pipeline** Docker image (built from repo root `Dockerfile`; tag e.g. `latest`). Pushed by CI or manually. |
 | **VPC** | Default or custom (`vpc_id`, `subnet_ids`). Security group for Batch compute: egress only (no inbound). |
@@ -112,7 +112,8 @@ flowchart TB
 
 | Prefix | Purpose | Written by | Read by |
 |--------|---------|------------|---------|
-| `jobs/<job-id>/videos/` | Downloaded video and subtitles | Download job or full-pipeline job | Transcribe job (if two-job flow); optional manual use |
+| `jobs/<job-id>/videos/` | Downloaded video files (directly under this prefix, e.g. `<filename>.mp4`) | Download job or full-pipeline job | Transcribe job (if two-job flow); optional manual use |
+| `jobs/<job-id>/subtitles/` | Downloaded subtitle files (e.g. `.srt`) | Download job or full-pipeline job | Optional manual use |
 | `jobs/<job-id>/transcripts/` | Transcription JSON (and optionally audio) | Transcribe job or full-pipeline job | Web app (register transcript by S3 URI) |
 
 The web app stack does **not** create a new bucket; it uses `existing_s3_bucket_name` to grant the ECS task role read access to this bucket.
