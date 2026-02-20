@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Manage speakers – Admin</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 900px; margin: 0 auto; padding: 1.5rem; }
+    h1 { font-size: 1.25rem; margin-top: 0; }
+    a { color: #0d6efd; }
+    label { display: block; margin-bottom: 0.25rem; font-weight: 500; }
+    input[type="text"], textarea { padding: 0.35rem; margin-right: 0.5rem; margin-bottom: 0.5rem; }
+    textarea { min-width: 240px; min-height: 60px; }
+    button { padding: 0.5rem 1rem; margin-right: 0.5rem; margin-bottom: 0.5rem; cursor: pointer; }
+    table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
+    th, td { text-align: left; padding: 0.5rem; border-bottom: 1px solid #eee; }
+    th { font-weight: 600; }
+    .err { color: #c00; }
+    .ok { color: #0a0; }
+    #addForm { background: #f0f8ff; padding: 1rem; border-radius: 6px; margin-bottom: 1.5rem; }
+    #addForm input, #addForm textarea { max-width: 300px; }
+    .editRow td input, .editRow td textarea { width: 100%; max-width: 200px; box-sizing: border-box; }
+    .editRow td textarea { min-height: 50px; }
+    #loginBox { background: #fff3cd; padding: 1rem; border-radius: 6px; margin-bottom: 1rem; }
+    .hidden { display: none; }
+  </style>
+</head>
+<body>
+  <p><a href="/admin">← Transcripts</a></p>
+  <h1>Manage speakers</h1>
+  <p id="err" class="err"></p>
+
+  <div id="loginBox" class="hidden">
+    <p>Authentication required. <a href="/admin">Log in on the admin page</a> first.</p>
+  </div>
+
+  <div id="content" class="hidden">
+    <div id="addForm">
+      <h2>Add speaker</h2>
+      <label>First name</label>
+      <input type="text" id="newFirstName" placeholder="First name">
+      <label>Surname</label>
+      <input type="text" id="newSurname" placeholder="Surname">
+      <label>Slug (optional)</label>
+      <input type="text" id="newSlug" placeholder="url-slug">
+      <label>Short description (optional)</label>
+      <textarea id="newShortDescription" placeholder="Short description"></textarea>
+      <label>Bio (optional)</label>
+      <textarea id="newBio" placeholder="Bio"></textarea>
+      <br>
+      <button type="button" id="addBtn">Add speaker</button>
+      <span id="addStatus"></span>
+    </div>
+
+    <h2>Speakers</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Slug</th>
+          <th>Short description</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody id="speakerList"></tbody>
+    </table>
+  </div>
+
+  <script>
+    (function () {
+      const ADMIN_AUTH_KEY = 'debate_analyzer_admin_auth';
+      const errEl = document.getElementById('err');
+      const loginBox = document.getElementById('loginBox');
+      const contentEl = document.getElementById('content');
+      const speakerListEl = document.getElementById('speakerList');
+      const newFirstName = document.getElementById('newFirstName');
+      const newSurname = document.getElementById('newSurname');
+      const newSlug = document.getElementById('newSlug');
+      const newShortDescription = document.getElementById('newShortDescription');
+      const newBio = document.getElementById('newBio');
+      const addBtn = document.getElementById('addBtn');
+      const addStatus = document.getElementById('addStatus');
+
+      function getAuthHeader() {
+        try {
+          const raw = sessionStorage.getItem(ADMIN_AUTH_KEY);
+          return raw ? 'Basic ' + raw : null;
+        } catch (_) { return null; }
+      }
+
+      function apiFetch(url, options) {
+        const headers = { ...(options && options.headers) };
+        const auth = getAuthHeader();
+        if (auth) headers['Authorization'] = auth;
+        return fetch(url, { credentials: 'include', ...options, headers });
+      }
+
+      function displayName(p) {
+        return (p.first_name && p.surname) ? (p.first_name + ' ' + p.surname) : (p.display_name || p.id);
+      }
+
+      function escapeHtml(t) {
+        if (t == null) return '';
+        const div = document.createElement('div');
+        div.textContent = t;
+        return div.innerHTML;
+      }
+
+      function loadSpeakers() {
+        apiFetch('/api/admin/speakers')
+          .then(r => {
+            if (r.status === 401) {
+              contentEl.classList.add('hidden');
+              loginBox.classList.remove('hidden');
+              return { _unauthorized: true };
+            }
+            return r.ok ? r.json() : Promise.reject(new Error(r.statusText));
+          })
+          .then(speakers => {
+            if (speakers && speakers._unauthorized) return;
+            loginBox.classList.add('hidden');
+            contentEl.classList.remove('hidden');
+            errEl.textContent = '';
+            if (!speakers || speakers.length === 0) {
+              speakerListEl.innerHTML = '<tr><td colspan="4">No speakers. Add one above.</td></tr>';
+              return;
+            }
+            speakerListEl.innerHTML = speakers.map(s => {
+              const name = displayName(s);
+              const shortDesc = (s.short_description || '').substring(0, 60);
+              return '<tr data-id="' + escapeHtml(s.id) + '">' +
+                '<td>' + escapeHtml(name) + '</td>' +
+                '<td>' + escapeHtml(s.slug || '') + '</td>' +
+                '<td>' + escapeHtml(shortDesc) + (s.short_description && s.short_description.length > 60 ? '…' : '') + '</td>' +
+                '<td>' +
+                  '<button type="button" class="editBtn">Edit</button> ' +
+                  '<button type="button" class="deleteBtn">Delete</button>' +
+                '</td></tr>';
+            }).join('');
+
+            speakerListEl.querySelectorAll('.editBtn').forEach(btn => {
+              btn.addEventListener('click', function () {
+                const row = this.closest('tr');
+                const id = row.dataset.id;
+                const s = speakers.find(sp => sp.id === id);
+                if (!s) return;
+                row.classList.add('editRow');
+                row.innerHTML = '<td><input type="text" class="editFirstName" value="' + escapeHtml(s.first_name || '') + '"><input type="text" class="editSurname" value="' + escapeHtml(s.surname || '') + '"></td>' +
+                  '<td><input type="text" class="editSlug" value="' + escapeHtml(s.slug || '') + '"></td>' +
+                  '<td><textarea class="editShortDescription">' + escapeHtml(s.short_description || '') + '</textarea></td>' +
+                  '<td><button type="button" class="saveEditBtn">Save</button> <button type="button" class="cancelEditBtn">Cancel</button></td>';
+                row.querySelector('.saveEditBtn').addEventListener('click', function () {
+                  const first = row.querySelector('.editFirstName').value.trim();
+                  const last = row.querySelector('.editSurname').value.trim();
+                  if (!first || !last) { addStatus.textContent = 'First name and surname required'; addStatus.className = 'err'; return; }
+                  apiFetch('/api/admin/speakers/' + id, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      first_name: first,
+                      surname: last,
+                      slug: row.querySelector('.editSlug').value.trim() || null,
+                      short_description: row.querySelector('.editShortDescription').value.trim() || null,
+                    }),
+                  })
+                    .then(r => r.ok ? r.json() : Promise.reject(new Error(r.statusText)))
+                    .then(updated => {
+                      const idx = speakers.findIndex(sp => sp.id === id);
+                      if (idx >= 0) speakers[idx] = updated;
+                      loadSpeakers();
+                    })
+                    .catch(e => { addStatus.textContent = e.message; addStatus.className = 'err'; });
+                });
+                row.querySelector('.cancelEditBtn').addEventListener('click', () => loadSpeakers());
+              });
+            });
+
+            function deleteHandler() {
+              const row = this.closest('tr');
+              const id = row.dataset.id;
+              const s = speakers.find(sp => sp.id === id);
+              const name = s ? displayName(s) : id;
+              if (!confirm('Delete speaker “‘ + name + '”? All transcript mappings for this speaker will be removed.')) return;
+              apiFetch('/api/admin/speakers/' + id, { method: 'DELETE' })
+                .then(r => {
+                  if (r.status === 404) throw new Error('Speaker not found');
+                  if (r.status !== 204) throw new Error(r.statusText);
+                  loadSpeakers();
+                })
+                .catch(e => { addStatus.textContent = e.message; addStatus.className = 'err'; });
+            }
+
+            speakerListEl.querySelectorAll('.deleteBtn').forEach(btn => {
+              btn.addEventListener('click', deleteHandler);
+            });
+          })
+          .catch(e => {
+            errEl.textContent = e.message;
+            contentEl.classList.add('hidden');
+          });
+      }
+
+      addBtn.addEventListener('click', function () {
+        const firstName = newFirstName.value.trim();
+        const surname = newSurname.value.trim();
+        if (!firstName || !surname) {
+          addStatus.textContent = 'First name and surname required';
+          addStatus.className = 'err';
+          return;
+        }
+        addStatus.textContent = 'Adding...';
+        addStatus.className = '';
+        apiFetch('/api/admin/speakers', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            first_name: firstName,
+            surname: surname,
+            slug: newSlug.value.trim() || null,
+            short_description: newShortDescription.value.trim() || null,
+            bio: newBio.value.trim() || null,
+          }),
+        })
+          .then(r => r.ok ? r.json() : Promise.reject(new Error(r.detail || r.statusText)))
+          .then(() => {
+            newFirstName.value = '';
+            newSurname.value = '';
+            newSlug.value = '';
+            newShortDescription.value = '';
+            newBio.value = '';
+            addStatus.textContent = 'Added.';
+            addStatus.className = 'ok';
+            loadSpeakers();
+          })
+          .catch(e => {
+            addStatus.textContent = e.message || (typeof e.detail === 'string' ? e.detail : 'Failed');
+            addStatus.className = 'err';
+          });
+      });
+
+      loadSpeakers();
+    })();
+  </script>
+</body>
+</html>

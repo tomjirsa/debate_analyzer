@@ -39,8 +39,10 @@ const id = new URLSearchParams(location.search).get('id') || (pathParts[pathPart
             const m = Math.floor((sec % 3600) / 60);
             return (h ? h + ' h ' : '') + m + ' min';
           };
+          const title = (p.first_name && p.surname) ? (p.first_name + ' ' + p.surname) : (p.display_name || '');
           document.getElementById('content').innerHTML =
-            '<h1>' + escapeHtml(p.display_name) + '</h1>' +
+            '<h1>' + escapeHtml(title) + '</h1>' +
+            (p.short_description ? '<p class="short-desc">' + escapeHtml(p.short_description) + '</p>' : '') +
             (p.bio ? '<p>' + escapeHtml(p.bio) + '</p>' : '') +
             '<div class="stats">' +
             '<div class="stat"><span class="value">' + fmt(s.transcript_count) + '</span><br><span class="label">Transcripts</span></div>' +

@@ -32,7 +32,8 @@
           }
           ul.innerHTML = speakers.map(s => {
             const slug = (s.slug || s.id);
-            return '<li><a href="/speakers/' + encodeURIComponent(slug) + '">' + escapeHtml(s.display_name) + '</a></li>';
+            const name = (s.first_name && s.surname) ? (s.first_name + ' ' + s.surname) : (s.display_name || s.id);
+            return '<li><a href="/speakers/' + encodeURIComponent(slug) + '">' + escapeHtml(name) + '</a></li>';
           }).join('');
         })
         .catch(e => {

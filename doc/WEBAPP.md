@@ -6,7 +6,7 @@ The Debate Analyzer web app provides a database of **speaker profiles**, **trans
 
 ## What It Does
 
-- **Speaker profiles:** Create and manage speaker entities (name, slug, optional metadata).
+- **Speaker profiles:** Create and manage speaker entities (first name, surname, slug, optional bio and short description).
 - **Transcript registration:** Register transcripts by S3 URI (e.g. `s3://bucket/jobs/job-id/transcripts/file.json`) or local file path (e.g. `file:///path/to/transcription.json`). The app loads the JSON and stores segments and metadata.
 - **Speaker annotation:** In the admin UI, open a transcript and assign transcript speaker IDs (e.g. `SPEAKER_00`, `SPEAKER_01`) to existing speaker profiles. This links transcript segments to profiles for statistics.
 - **Public stats:** Public API and pages list speakers and show per-speaker statistics (e.g. number of transcripts, total segments, speaking time) derived from registered transcripts and annotations.
@@ -59,11 +59,12 @@ The app runs with uvicorn on **http://127.0.0.1:8000** (reload enabled for devel
 | `/` | Public: speaker list (static page). | None |
 | `/speakers/<id>` | Public: speaker detail and statistics (static page). | None |
 | `/admin` | Admin: register transcripts, open transcript, navigate to annotation. | HTTP Basic (ADMIN_USERNAME / ADMIN_PASSWORD) |
+| `/admin/speakers` | Admin: manage speaker profiles (add, edit, delete). | HTTP Basic |
 | `/admin/annotate?transcript_id=...` | Admin: assign speaker IDs to speaker profiles for a transcript. | HTTP Basic |
 | `/docs` | OpenAPI (Swagger) documentation. | None |
 | `/api/speakers` | Public API: list speaker profiles. | None |
 | `/api/speakers/{id_or_slug}` | Public API: get speaker profile and stats. | None |
-| `/api/admin/*` | Admin API: list/get transcripts, register transcript, update speaker mappings. | HTTP Basic |
+| `/api/admin/*` | Admin API: list/get transcripts, register transcript, speaker CRUD, update speaker mappings. | HTTP Basic |
 
 ---
 

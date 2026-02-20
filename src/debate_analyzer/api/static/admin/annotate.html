@@ -56,8 +56,10 @@
     <label>Assign each speaker ID to a profile (or create new)</label>
     <div id="mappings"></div>
     <div id="newSpeaker">
-      <input type="text" id="newDisplayName" placeholder="Display name">
+      <input type="text" id="newFirstName" placeholder="First name">
+      <input type="text" id="newSurname" placeholder="Surname">
       <input type="text" id="newSlug" placeholder="Slug (optional)">
+      <input type="text" id="newShortDescription" placeholder="Short description (optional)" style="min-width: 200px;">
       <button type="button" id="createSpeakerBtn">Create and assign</button>
     </div>
     <button type="button" id="saveBtn">Save mappings</button>
@@ -83,8 +85,10 @@
       const loadS3Btn = document.getElementById('loadS3Btn');
       const mappingsEl = document.getElementById('mappings');
       const newSpeakerDiv = document.getElementById('newSpeaker');
-      const newDisplayName = document.getElementById('newDisplayName');
+      const newFirstName = document.getElementById('newFirstName');
+      const newSurname = document.getElementById('newSurname');
       const newSlug = document.getElementById('newSlug');
+      const newShortDescription = document.getElementById('newShortDescription');
       const createSpeakerBtn = document.getElementById('createSpeakerBtn');
       const saveBtn = document.getElementById('saveBtn');
       const saveStatus = document.getElementById('saveStatus');
@@ -291,7 +295,7 @@
             if (this.value === '__new__') {
               creatingForSpeakerId = this.closest('.mapping').dataset.speakerId;
               newSpeakerDiv.style.display = 'block';
-              newDisplayName.focus();
+              newFirstName.focus();
             } else {
               updateTranscriptDisplayNames();
             }
@@ -314,12 +318,18 @@
       }
 
       createSpeakerBtn.addEventListener('click', function () {
-        const name = newDisplayName.value.trim();
-        if (!name) return;
+        const firstName = newFirstName.value.trim();
+        const surname = newSurname.value.trim();
+        if (!firstName || !surname) return;
         apiFetch('/api/admin/speakers', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ display_name: name, slug: newSlug.value.trim() || null }),
+          body: JSON.stringify({
+            first_name: firstName,
+            surname: surname,
+            slug: newSlug.value.trim() || null,
+            short_description: newShortDescription.value.trim() || null,
+          }),
         })
           .then(r => r.ok ? r.json() : Promise.reject(new Error(r.statusText)))
           .then(profile => {
@@ -329,7 +339,7 @@
               if (sel) {
                 const opt = document.createElement('option');
                 opt.value = profile.id;
-                opt.textContent = profile.display_name;
+                opt.textContent = profile.display_name || (profile.first_name + ' ' + profile.surname);
                 opt.selected = true;
                 sel.remove(sel.options[sel.options.length - 1]);
                 sel.appendChild(opt);
@@ -338,8 +348,10 @@
               }
             }
             newSpeakerDiv.style.display = 'none';
-            newDisplayName.value = '';
+            newFirstName.value = '';
+            newSurname.value = '';
             newSlug.value = '';
+            newShortDescription.value = '';
             creatingForSpeakerId = null;
             updateTranscriptDisplayNames();
           })

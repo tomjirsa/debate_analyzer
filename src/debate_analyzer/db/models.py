@@ -30,9 +30,11 @@ class SpeakerProfile(Base):
     __tablename__ = "speaker_profile"
 
     id = Column(String(36), primary_key=True, default=_uuid)
-    display_name = Column(String(255), nullable=False)
+    first_name = Column(String(255), nullable=False)
+    surname = Column(String(255), nullable=False)
     slug = Column(String(255), unique=True, nullable=True, index=True)
     bio = Column(Text, nullable=True)
+    short_description = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -40,11 +42,15 @@ class SpeakerProfile(Base):
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize to dict for API responses."""
+        display_name = f"{self.first_name} {self.surname}".strip()
         return {
             "id": self.id,
-            "display_name": self.display_name,
+            "first_name": self.first_name,
+            "surname": self.surname,
+            "display_name": display_name,
             "slug": self.slug,
             "bio": self.bio,
+            "short_description": self.short_description,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }

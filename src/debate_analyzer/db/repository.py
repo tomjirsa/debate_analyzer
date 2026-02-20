@@ -144,22 +144,66 @@ class TranscriptRepository:
 
     def create_speaker_profile(
         self,
-        display_name: str,
+        first_name: str,
+        surname: str,
         slug: str | None = None,
         bio: str | None = None,
+        short_description: str | None = None,
     ) -> SpeakerProfile:
         """Create a new speaker profile."""
-        profile = SpeakerProfile(display_name=display_name, slug=slug, bio=bio)
+        profile = SpeakerProfile(
+            first_name=first_name,
+            surname=surname,
+            slug=slug,
+            bio=bio,
+            short_description=short_description,
+        )
         self.session.add(profile)
         self.session.commit()
         self.session.refresh(profile)
         return profile
 
+    def update_speaker_profile(
+        self,
+        profile_id: str,
+        first_name: str | None = None,
+        surname: str | None = None,
+        slug: str | None = None,
+        bio: str | None = None,
+        short_description: str | None = None,
+    ) -> SpeakerProfile | None:
+        """Update a speaker profile by id. Returns the profile or None if not found."""
+        profile = self.get_speaker_profile_by_id(profile_id)
+        if not profile:
+            return None
+        if first_name is not None:
+            profile.first_name = first_name
+        if surname is not None:
+            profile.surname = surname
+        if slug is not None:
+            profile.slug = slug
+        if bio is not None:
+            profile.bio = bio
+        if short_description is not None:
+            profile.short_description = short_description
+        self.session.commit()
+        self.session.refresh(profile)
+        return profile
+
+    def delete_speaker_profile(self, profile_id: str) -> bool:
+        """Delete speaker profile by id (mappings CASCADE). Returns True if deleted."""
+        profile = self.get_speaker_profile_by_id(profile_id)
+        if not profile:
+            return False
+        self.session.delete(profile)
+        self.session.commit()
+        return True
+
     def list_speaker_profiles(self, limit: int = 200) -> list[SpeakerProfile]:
-        """List all speaker profiles ordered by display_name."""
+        """List all speaker profiles ordered by surname, then first_name."""
         return (
             self.session.query(SpeakerProfile)
-            .order_by(SpeakerProfile.display_name)
+            .order_by(SpeakerProfile.surname, SpeakerProfile.first_name)
             .limit(limit)
             .all()
         )

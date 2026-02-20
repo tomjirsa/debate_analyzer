@@ -480,13 +480,13 @@ For details (env vars, database, deployment), see [WEBAPP.md](WEBAPP.md).
 After transcribing a video, speaker IDs are generic (e.g. `SPEAKER_00`, `SPEAKER_01`). You can assign real names in two ways:
 
 - **Standalone tool:** Use the **speaker annotator** — a single HTML tool that runs in your browser (no server required).
-- **Web app:** Use the web app admin at `/admin/annotate?transcript_id=...` to map speaker IDs to speaker profiles (see [WEBAPP.md](WEBAPP.md)).
+- **Web app:** Use the web app admin at `/admin/annotate?transcript_id=...` to map speaker IDs to speaker profiles (first name, surname, optional short description). You can create and manage profiles at `/admin/speakers`. See [WEBAPP.md](WEBAPP.md).
 
 **Standalone tool steps:**
 
 1. **Open the tool**: Open [tool/speaker_annotator.html](../tool/speaker_annotator.html) in your browser (e.g. double-click the file or use `file://`).
 2. **Load transcript and video**: Use the file inputs to select your transcript JSON (from the transcriber) and the corresponding video file.
-3. **Assign names**: For each speaker ID, type the display name in the text field. The transcript list updates as you type.
+3. **Assign names**: For each speaker ID, type the name in the text field (standalone tool) or select/create a speaker profile with first name and surname (web app). The transcript list updates as you type or assign.
 4. **Use the transcript**: Click a segment to jump the video to that time. The current segment is highlighted as the video plays.
 5. **Save the mapping**: Click **Save speaker mapping (download JSON)** to download a JSON file with the `speaker_mapping`. Save it next to your transcript (e.g. `debate_transcription_speaker_metadata.json`). In Chrome/Edge you can use **Save as…** to choose the path.
 

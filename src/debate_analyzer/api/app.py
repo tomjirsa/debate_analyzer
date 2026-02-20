@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Annotated
 
 from fastapi import Depends, FastAPI, HTTPException, status
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -133,9 +133,21 @@ def admin_register_transcript(
 class CreateSpeakerRequest(BaseModel):
     """Request body for create speaker."""
 
-    display_name: str
+    first_name: str
+    surname: str
     slug: str | None = None
     bio: str | None = None
+    short_description: str | None = None
+
+
+class UpdateSpeakerRequest(BaseModel):
+    """Request body for update speaker (all fields optional)."""
+
+    first_name: str | None = None
+    surname: str | None = None
+    slug: str | None = None
+    bio: str | None = None
+    short_description: str | None = None
 
 
 @app.post("/api/admin/speakers")
@@ -146,11 +158,50 @@ def admin_create_speaker(
 ) -> dict:
     """Create a speaker profile (admin)."""
     profile = repo.create_speaker_profile(
-        display_name=body.display_name,
+        first_name=body.first_name,
+        surname=body.surname,
         slug=body.slug,
         bio=body.bio,
+        short_description=body.short_description,
     )
     return profile.to_dict()
+
+
+@app.put("/api/admin/speakers/{profile_id}")
+def admin_update_speaker(
+    profile_id: str,
+    body: UpdateSpeakerRequest,
+    _: Annotated[object, Depends(get_admin_credentials)],
+    repo: Annotated[TranscriptRepository, Depends(get_repo_from_db)],
+) -> dict:
+    """Update a speaker profile (admin)."""
+    profile = repo.update_speaker_profile(
+        profile_id,
+        first_name=body.first_name,
+        surname=body.surname,
+        slug=body.slug,
+        bio=body.bio,
+        short_description=body.short_description,
+    )
+    if not profile:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Speaker not found"
+        )
+    return profile.to_dict()
+
+
+@app.delete("/api/admin/speakers/{profile_id}")
+def admin_delete_speaker(
+    profile_id: str,
+    _: Annotated[object, Depends(get_admin_credentials)],
+    repo: Annotated[TranscriptRepository, Depends(get_repo_from_db)],
+) -> Response:
+    """Delete a speaker profile (admin). Mappings are CASCADE-deleted."""
+    if not repo.delete_speaker_profile(profile_id):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Speaker not found"
+        )
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 class SaveMappingsRequest(BaseModel):
@@ -195,7 +246,11 @@ def admin_transcript_video_url(
         raise HTTPException(status_code=404, detail="Transcript not found")
 
     uri_to_use = s3_uri and s3_uri.strip() or None
-    if not uri_to_use and transcript.video_path and transcript.video_path.strip().startswith("s3://"):
+    if (
+        not uri_to_use
+        and transcript.video_path
+        and transcript.video_path.strip().startswith("s3://")
+    ):
         uri_to_use = transcript.video_path.strip()
 
     if not uri_to_use or not uri_to_use.startswith("s3://"):
@@ -267,6 +322,15 @@ def admin_index() -> FileResponse | dict:
 def admin_annotate_page() -> FileResponse:
     """Serve speaker annotation page (admin)."""
     p = STATIC_DIR / "admin" / "annotate.html"
+    if p.exists():
+        return FileResponse(p)
+    raise HTTPException(status_code=404, detail="Not found")
+
+
+@app.get("/admin/speakers", response_model=None)
+def admin_speakers_page() -> FileResponse:
+    """Serve speaker management page (admin): add, edit, delete speakers."""
+    p = STATIC_DIR / "admin" / "speakers.html"
     if p.exists():
         return FileResponse(p)
     raise HTTPException(status_code=404, detail="Not found")

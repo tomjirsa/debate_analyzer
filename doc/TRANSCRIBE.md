@@ -2,7 +2,7 @@
 
 The transcriber module provides **speech-to-text** (faster-whisper) and **speaker diarization** (pyannote.audio) for video files. It produces a JSON transcript with segments and speaker IDs (e.g. `SPEAKER_00`, `SPEAKER_01`).
 
-For annotating speaker IDs with real names (standalone tool or web app), see [HOWTO.md](HOWTO.md#how-to-annotate-speaker-names) and [WEBAPP.md](WEBAPP.md). For running transcription on AWS Batch, see [DEPLOYMENT_AWS_BATCH.md](DEPLOYMENT_AWS_BATCH.md) and [AWS_SETUP.md](AWS_SETUP.md).
+For annotating speaker IDs with real names or speaker profiles (first name, surname; standalone tool or web app), see [HOWTO.md](HOWTO.md#how-to-annotate-speaker-names) and [WEBAPP.md](WEBAPP.md). For running transcription on AWS Batch, see [DEPLOYMENT_AWS_BATCH.md](DEPLOYMENT_AWS_BATCH.md) and [AWS_SETUP.md](AWS_SETUP.md).
 
 ---
 
@@ -146,7 +146,7 @@ output_dir/
 | FFmpeg not found | Install ffmpeg; verify with `ffmpeg -version`. |
 | CUDA out of memory | Use `--model-size small` or `--device cpu`. |
 | Poor quality | Try `--model-size large`, `--language en`, and ensure good audio. |
-| Speaker IDs arbitrary | Speaker IDs are not stable across videos. Use the web app or standalone annotator to map them to real names; see [HOWTO](HOWTO.md#how-to-annotate-speaker-names). |
+| Speaker IDs arbitrary | Speaker IDs are not stable across videos. Use the web app or standalone annotator to map them to speaker profiles (first name, surname) or names; see [HOWTO](HOWTO.md#how-to-annotate-speaker-names). |
 
 ---
 

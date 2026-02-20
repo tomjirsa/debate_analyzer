@@ -159,6 +159,27 @@ After apply:
 
 Outputs: `alb_dns_name`, `rds_endpoint`, `ecr_repository_url`.
 
+### Deploying schema changes (e.g. speaker profile)
+
+When you change the database schema (e.g. add or rename columns) and add an Alembic migration:
+
+1. **Run the migration against RDS** before or when deploying the new app:
+   - **From your machine:** Get the RDS endpoint and DB password (Terraform outputs or Secrets Manager). Set `DATABASE_URL` to the PostgreSQL URL (e.g. `postgresql://user:password@<rds_endpoint>:5432/dbname`). From the repo root:
+     ```bash
+     poetry run alembic upgrade head
+     ```
+   - **Alternatively:** Run migrations on container startup (e.g. `alembic upgrade head && uvicorn ...` in the container command) so each new deployment applies migrations before serving traffic.
+
+2. **Build and push the new web app image** (with the updated code and migration file) to the web app ECR repository.
+
+3. **Force ECS to deploy the new image:**
+   ```bash
+   aws ecs update-service --cluster debate-analyzer-webapp --service debate-analyzer-webapp --force-new-deployment
+   ```
+   Add `--region <region>` if needed.
+
+4. **Verify:** Open the web app and confirm the new schema (e.g. speaker first name, surname, short description) works.
+
 ---
 
 ## First-Time AWS Checklist
