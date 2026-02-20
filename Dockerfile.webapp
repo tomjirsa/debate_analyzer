@@ -1,0 +1,15 @@
+# Debate Analyzer Web App – FastAPI + SQLAlchemy (no GPU)
+FROM python:3.12-slim
+
+ENV PYTHONUNBUFFERED=1
+WORKDIR /app
+
+# Install Python deps only for the web app (no torch, whisper, pyannote)
+COPY pyproject.toml poetry.lock* README.md ./
+COPY src ./src
+
+# Install project (includes web app deps: fastapi, uvicorn, sqlalchemy, boto3).
+RUN pip install --no-cache-dir .
+
+EXPOSE 8000
+CMD ["uvicorn", "debate_analyzer.api.app:app", "--host", "0.0.0.0", "--port", "8000"]

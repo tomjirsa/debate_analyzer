@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Speaker annotation – Admin</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 900px; margin: 0 auto; padding: 1.5rem; }
+    h1 { font-size: 1.25rem; margin-top: 0; }
+    a { color: #0d6efd; }
+    .section { margin-bottom: 1.5rem; }
+    label { display: block; margin-bottom: 0.25rem; font-weight: 500; }
+    select { min-width: 200px; padding: 0.35rem; }
+    button { padding: 0.5rem 1rem; margin-right: 0.5rem; margin-top: 0.5rem; cursor: pointer; }
+    .mapping { display: flex; align-items: center; gap: 0.75rem; margin: 0.5rem 0; flex-wrap: wrap; }
+    .mapping label { margin: 0; font-weight: normal; min-width: 100px; cursor: pointer; }
+    .mapping label:hover { text-decoration: underline; }
+    .segment.highlight { background: #fff3cd; }
+    .err { color: #c00; }
+    .ok { color: #0a0; }
+    #newSpeaker { margin-top: 0.5rem; padding: 0.5rem; background: #f0f8ff; border-radius: 4px; display: none; }
+    #newSpeaker input { margin-right: 0.5rem; padding: 0.35rem; }
+    .transcript { max-height: 360px; overflow-y: auto; border: 1px solid #ccc; border-radius: 4px; padding: 0.5rem; }
+    .segment { padding: 0.35rem 0.5rem; margin: 2px 0; border-radius: 4px; cursor: pointer; }
+    .segment:hover { background: #f0f0f0; }
+    .segment.current { background: #e0e8ff; }
+    .segment .time { font-size: 0.85em; color: #666; margin-right: 0.5rem; }
+    .segment .speaker { font-weight: 600; margin-right: 0.5rem; color: #333; }
+    video { width: 100%; max-height: 320px; background: #111; border-radius: 4px; }
+  </style>
+</head>
+<body>
+  <p><a href="/admin">← Transcripts</a></p>
+  <h1>Speaker annotation</h1>
+  <p id="meta"></p>
+  <p id="err" class="err"></p>
+
+  <div class="section">
+    <label>Video (optional – load a local file to jump to segment times)</label>
+    <input type="file" id="videoFile" accept="video/mp4,video/webm,.mp4,.webm">
+    <video id="video" controls style="display:none;"></video>
+  </div>
+
+  <div class="section">
+    <label>Transcript (click a line to jump to that time in the video)</label>
+    <div id="transcriptList" class="transcript"></div>
+  </div>
+
+  <div class="section">
+    <label>Assign each speaker ID to a profile (or create new)</label>
+    <div id="mappings"></div>
+    <div id="newSpeaker">
+      <input type="text" id="newDisplayName" placeholder="Display name">
+      <input type="text" id="newSlug" placeholder="Slug (optional)">
+      <button type="button" id="createSpeakerBtn">Create and assign</button>
+    </div>
+    <button type="button" id="saveBtn">Save mappings</button>
+    <span id="saveStatus"></span>
+  </div>
+
+  <script>
+    (function () {
+      const params = new URLSearchParams(location.search);
+      const transcriptId = params.get('transcript_id');
+      if (!transcriptId) {
+        document.getElementById('err').textContent = 'Missing transcript_id in URL.';
+        return;
+      }
+
+      const metaEl = document.getElementById('meta');
+      const errEl = document.getElementById('err');
+      const transcriptListEl = document.getElementById('transcriptList');
+      const videoEl = document.getElementById('video');
+      const videoFileInput = document.getElementById('videoFile');
+      const mappingsEl = document.getElementById('mappings');
+      const newSpeakerDiv = document.getElementById('newSpeaker');
+      const newDisplayName = document.getElementById('newDisplayName');
+      const newSlug = document.getElementById('newSlug');
+      const createSpeakerBtn = document.getElementById('createSpeakerBtn');
+      const saveBtn = document.getElementById('saveBtn');
+      const saveStatus = document.getElementById('saveStatus');
+
+      const ADMIN_AUTH_KEY = 'debate_analyzer_admin_auth';
+
+      let transcript = null;
+      let mappings = [];
+      let speakers = [];
+      let creatingForSpeakerId = null;
+
+      function getAuthHeader() {
+        try {
+          const raw = sessionStorage.getItem(ADMIN_AUTH_KEY);
+          return raw ? 'Basic ' + raw : null;
+        } catch (_) { return null; }
+      }
+
+      function apiFetch(url, options) {
+        const headers = { ...(options && options.headers) };
+        const auth = getAuthHeader();
+        if (auth) headers['Authorization'] = auth;
+        return fetch(url, { credentials: 'include', ...options, headers });
+      }
+
+      function load() {
+        Promise.all([
+          apiFetch('/api/admin/transcripts/' + transcriptId).then(r => {
+            if (r.status === 401) return Promise.reject(new Error('Unauthorized'));
+            return r.ok ? r.json() : Promise.reject(new Error(r.statusText));
+          }),
+          apiFetch('/api/admin/speakers').then(r => {
+            if (r.status === 401) return Promise.reject(new Error('Unauthorized'));
+            return r.ok ? r.json() : Promise.reject(new Error(r.statusText));
+          }),
+        ]).then(([data, speakerList]) => {
+          transcript = data.transcript;
+          mappings = data.mappings || [];
+          speakers = speakerList || [];
+          metaEl.textContent = 'Transcript: ' + (transcript.title || transcript.id);
+          renderTranscriptList(data.segments || []);
+          renderMappings();
+        }).catch(e => {
+          if (e.message === 'Unauthorized') {
+            errEl.innerHTML = 'Authentication required. <a href="/admin">Log in on the admin page</a> first.';
+          } else {
+            errEl.textContent = e.message;
+          }
+        });
+      }
+
+      function getDisplayName(speakerIdInTranscript) {
+        const bySpeaker = {};
+        mappings.forEach(m => { bySpeaker[m.speaker_id_in_transcript] = m.speaker_profile_id; });
+        const profileId = bySpeaker[speakerIdInTranscript];
+        const profile = speakers.find(s => s.id === profileId);
+        return profile ? profile.display_name : speakerIdInTranscript;
+      }
+
+      function formatTime(sec) {
+        const m = Math.floor(sec / 60);
+        const s = Math.floor(sec % 60);
+        return m + ':' + (s < 10 ? '0' : '') + s;
+      }
+
+      function renderTranscriptList(segments) {
+        transcriptListEl.innerHTML = '';
+        segments.forEach(seg => {
+          const div = document.createElement('div');
+          div.className = 'segment';
+          div.dataset.start = seg.start;
+          div.dataset.end = seg.end;
+          div.dataset.speakerId = seg.speaker_id_in_transcript;
+          const timeSpan = document.createElement('span');
+          timeSpan.className = 'time';
+          timeSpan.textContent = formatTime(seg.start) + ' – ' + formatTime(seg.end);
+          const speakerSpan = document.createElement('span');
+          speakerSpan.className = 'speaker';
+          speakerSpan.textContent = getDisplayName(seg.speaker_id_in_transcript);
+          const textSpan = document.createElement('span');
+          textSpan.textContent = seg.text;
+          div.appendChild(timeSpan);
+          div.appendChild(speakerSpan);
+          div.appendChild(document.createTextNode(' '));
+          div.appendChild(textSpan);
+          div.addEventListener('click', function () {
+            if (videoEl.src) {
+              videoEl.currentTime = seg.start;
+              videoEl.play();
+            }
+          });
+          transcriptListEl.appendChild(div);
+        });
+        videoEl.addEventListener('timeupdate', updateCurrentSegment);
+      }
+
+      function updateCurrentSegment() {
+        const t = videoEl.currentTime;
+        transcriptListEl.querySelectorAll('.segment').forEach(el => {
+          const start = parseFloat(el.dataset.start);
+          const end = parseFloat(el.dataset.end);
+          el.classList.toggle('current', t >= start && t < end);
+        });
+      }
+
+      function updateTranscriptDisplayNames() {
+        transcriptListEl.querySelectorAll('.segment').forEach(el => {
+          const sid = el.dataset.speakerId;
+          const span = el.querySelector('.speaker');
+          if (span && sid) span.textContent = getDisplayName(sid);
+        });
+      }
+
+      videoFileInput.addEventListener('change', function () {
+        const file = videoFileInput.files[0];
+        if (!file) return;
+        if (videoEl.src) URL.revokeObjectURL(videoEl.src);
+        videoEl.src = URL.createObjectURL(file);
+        videoEl.style.display = 'block';
+      });
+
+      function renderMappings() {
+        const bySpeaker = {};
+        mappings.forEach(m => { bySpeaker[m.speaker_id_in_transcript] = m.speaker_profile_id; });
+        mappingsEl.innerHTML = mappings.map(m => {
+          const current = bySpeaker[m.speaker_id_in_transcript] || '';
+          const options = '<option value="">-- Unassigned --</option>' +
+            speakers.map(s => '<option value="' + s.id + '"' + (s.id === current ? ' selected' : '') + '>' + escapeHtml(s.display_name) + '</option>').join('') +
+            '<option value="__new__">+ Create new profile</option>';
+          return '<div class="mapping" data-speaker-id="' + escapeHtml(m.speaker_id_in_transcript) + '">' +
+            '<label>' + escapeHtml(m.speaker_id_in_transcript) + '</label>' +
+            '<select>' + options + '</select>' +
+            '</div>';
+        }).join('');
+
+        mappingsEl.querySelectorAll('select').forEach(sel => {
+          sel.addEventListener('change', function () {
+            if (this.value === '__new__') {
+              creatingForSpeakerId = this.closest('.mapping').dataset.speakerId;
+              newSpeakerDiv.style.display = 'block';
+              newDisplayName.focus();
+            } else {
+              updateTranscriptDisplayNames();
+            }
+          });
+        });
+
+        mappingsEl.addEventListener('click', function (e) {
+          if (!e.target.closest('.mapping label')) return;
+          const row = e.target.closest('.mapping');
+          if (!row) return;
+          const speakerId = row.dataset.speakerId;
+          if (!speakerId) return;
+          const firstSegment = transcriptListEl.querySelector('.segment[data-speaker-id="' + speakerId + '"]');
+          if (firstSegment) {
+            firstSegment.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            firstSegment.classList.add('highlight');
+            setTimeout(function () { firstSegment.classList.remove('highlight'); }, 1500);
+          }
+        });
+      }
+
+      createSpeakerBtn.addEventListener('click', function () {
+        const name = newDisplayName.value.trim();
+        if (!name) return;
+        apiFetch('/api/admin/speakers', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ display_name: name, slug: newSlug.value.trim() || null }),
+        })
+          .then(r => r.ok ? r.json() : Promise.reject(new Error(r.statusText)))
+          .then(profile => {
+            speakers.push(profile);
+            if (creatingForSpeakerId) {
+              const sel = mappingsEl.querySelector('[data-speaker-id="' + creatingForSpeakerId + '"] select');
+              if (sel) {
+                const opt = document.createElement('option');
+                opt.value = profile.id;
+                opt.textContent = profile.display_name;
+                opt.selected = true;
+                sel.remove(sel.options[sel.options.length - 1]);
+                sel.appendChild(opt);
+                sel.appendChild(document.createElement('option')).value = '__new__';
+                sel.lastChild.textContent = '+ Create new profile';
+              }
+            }
+            newSpeakerDiv.style.display = 'none';
+            newDisplayName.value = '';
+            newSlug.value = '';
+            creatingForSpeakerId = null;
+            updateTranscriptDisplayNames();
+          })
+          .catch(e => { saveStatus.textContent = e.message; saveStatus.className = 'err'; });
+      });
+
+      saveBtn.addEventListener('click', function () {
+        const body = {};
+        mappingsEl.querySelectorAll('.mapping').forEach(div => {
+          const speakerId = div.dataset.speakerId;
+          const val = div.querySelector('select').value;
+          body[speakerId] = (val && val !== '__new__') ? val : null;
+        });
+        saveStatus.textContent = 'Saving...';
+        saveStatus.className = '';
+        apiFetch('/api/admin/transcripts/' + transcriptId + '/mappings', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ mappings: body }),
+        })
+          .then(r => r.ok ? r.json() : Promise.reject(new Error(r.statusText)))
+          .then(() => {
+            saveStatus.textContent = 'Saved.';
+            saveStatus.className = 'ok';
+          })
+          .catch(e => {
+            saveStatus.textContent = e.message;
+            saveStatus.className = 'err';
+          });
+      });
+
+      load();
+      function escapeHtml(t) {
+        const div = document.createElement('div');
+        div.textContent = t;
+        return div.innerHTML;
+      }
+    })();
+  </script>
+</body>
+</html>

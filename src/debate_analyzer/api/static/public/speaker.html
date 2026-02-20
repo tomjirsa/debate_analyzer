@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Speaker – Debate Analyzer</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 720px; margin: 0 auto; padding: 1.5rem; }
+    h1 { font-size: 1.5rem; margin-top: 0; }
+    .stats { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 1rem; margin: 1rem 0; }
+    .stat { background: #f5f5f5; padding: 0.75rem; border-radius: 6px; }
+    .stat .value { font-size: 1.25rem; font-weight: 600; }
+    .stat .label { font-size: 0.85rem; color: #666; }
+    a { color: #0d6efd; }
+    #loadErr { color: #c00; }
+  </style>
+</head>
+<body>
+  <p><a href="/">← Speakers</a></p>
+  <div id="content">
+    <p id="loadErr"></p>
+  </div>
+  <script>
+    (function () {
+      const pathParts = location.pathname.split('/').filter(Boolean);
+const id = new URLSearchParams(location.search).get('id') || (pathParts[pathParts.length - 1] || '');
+      if (!id) {
+        document.getElementById('content').innerHTML = '<p>No speaker ID.</p>';
+        return;
+      }
+      fetch('/api/speakers/' + encodeURIComponent(id))
+        .then(r => r.ok ? r.json() : Promise.reject(new Error(r.status === 404 ? 'Speaker not found' : r.statusText)))
+        .then(data => {
+          const p = data.profile;
+          const s = data.stats;
+          const fmt = (n) => Number(n).toLocaleString();
+          const fmtTime = (sec) => {
+            const h = Math.floor(sec / 3600);
+            const m = Math.floor((sec % 3600) / 60);
+            return (h ? h + ' h ' : '') + m + ' min';
+          };
+          document.getElementById('content').innerHTML =
+            '<h1>' + escapeHtml(p.display_name) + '</h1>' +
+            (p.bio ? '<p>' + escapeHtml(p.bio) + '</p>' : '') +
+            '<div class="stats">' +
+            '<div class="stat"><span class="value">' + fmt(s.transcript_count) + '</span><br><span class="label">Transcripts</span></div>' +
+            '<div class="stat"><span class="value">' + fmt(s.segment_count) + '</span><br><span class="label">Segments</span></div>' +
+            '<div class="stat"><span class="value">' + fmtTime(s.total_seconds) + '</span><br><span class="label">Speaking time</span></div>' +
+            '<div class="stat"><span class="value">' + fmt(s.word_count) + '</span><br><span class="label">Words</span></div>' +
+            '</div>';
+        })
+        .catch(e => {
+          document.getElementById('loadErr').textContent = e.message;
+        });
+      function escapeHtml(t) {
+        const div = document.createElement('div');
+        div.textContent = t;
+        return div.innerHTML;
+      }
+    })();
+  </script>
+</body>
+</html>

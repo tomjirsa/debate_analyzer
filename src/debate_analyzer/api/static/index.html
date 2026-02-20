@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Speakers – Debate Analyzer</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 720px; margin: 0 auto; padding: 1.5rem; }
+    h1 { font-size: 1.5rem; margin-top: 0; }
+    ul { list-style: none; padding: 0; }
+    li { margin: 0.5rem 0; }
+    a { color: #0d6efd; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .empty { color: #666; }
+  </style>
+</head>
+<body>
+  <h1>Speakers</h1>
+  <p>Public statistics for speakers in the debate database.</p>
+  <ul id="speakers"></ul>
+  <p id="loadErr" class="hidden" style="color: #c00;"></p>
+  <script>
+    (function () {
+      const ul = document.getElementById('speakers');
+      const errEl = document.getElementById('loadErr');
+      fetch('/api/speakers')
+        .then(r => r.ok ? r.json() : Promise.reject(new Error(r.statusText)))
+        .then(speakers => {
+          if (speakers.length === 0) {
+            ul.innerHTML = '<li class="empty">No speakers yet. Register transcripts and assign speakers in the admin.</li>';
+            return;
+          }
+          ul.innerHTML = speakers.map(s => {
+            const slug = (s.slug || s.id);
+            return '<li><a href="/speakers/' + encodeURIComponent(slug) + '">' + escapeHtml(s.display_name) + '</a></li>';
+          }).join('');
+        })
+        .catch(e => {
+          errEl.textContent = 'Failed to load speakers: ' + e.message;
+          errEl.classList.remove('hidden');
+        });
+      function escapeHtml(t) {
+        const div = document.createElement('div');
+        div.textContent = t;
+        return div.innerHTML;
+      }
+    })();
+  </script>
+</body>
+</html>

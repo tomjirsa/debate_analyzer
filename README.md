@@ -169,6 +169,27 @@ Transcriptions are saved as JSON files in `data/transcripts/` with the following
 - Requires ~4GB RAM, ~3GB VRAM if GPU available
 - Models are cached locally for subsequent runs
 
+### Web App (speaker profiles and statistics)
+
+A web app provides a database of speaker profiles, mapping to transcript speakers, and public statistics.
+
+**Run locally (SQLite, no auth until you set env):**
+
+```bash
+# Optional: set admin credentials for /admin and /api/admin/*
+export ADMIN_USERNAME=admin
+export ADMIN_PASSWORD=admin
+
+poetry run python -m debate_analyzer.api
+# Open http://127.0.0.1:8000 (public speakers), http://127.0.0.1:8000/admin (admin)
+```
+
+- **Public:** `/` – speaker list; `/speakers/<id>` – speaker detail and stats.
+- **Admin (HTTP Basic):** `/admin` – register transcripts (S3 or local path), open transcript → annotate speakers; `/admin/annotate?transcript_id=...` – assign speaker IDs to profiles.
+- **API docs:** http://127.0.0.1:8000/docs
+
+Use `DATABASE_URL` for PostgreSQL (e.g. in production). Deploy to AWS with [deploy/terraform-webapp/](deploy/terraform-webapp/README.md) (separate state from the Batch stack).
+
 ## Development
 
 ### Running Tests
@@ -207,15 +228,18 @@ debate_analyzer/
 │       │   ├── __main__.py
 │       │   ├── cli.py              # Command-line interface
 │       │   └── downloader.py       # Core downloader logic
-│       └── transcriber/             # Transcription & speaker diarization
-│           ├── __init__.py
-│           ├── __main__.py
-│           ├── cli.py              # Command-line interface
-│           ├── audio_extractor.py  # Audio extraction from video
-│           ├── transcriber.py      # Speech-to-text (Whisper)
-│           ├── diarizer.py         # Speaker identification (pyannote)
-│           ├── merger.py           # Merge transcripts with speakers
-│           └── models.py           # Data models
+│       ├── transcriber/            # Transcription & speaker diarization
+│       │   ├── ...
+│       ├── db/                      # Web app: DB models, repository
+│       │   ├── models.py
+│       │   ├── repository.py
+│       │   └── base.py
+│       └── api/                     # Web app: FastAPI, auth, loader
+│           ├── app.py
+│           ├── auth.py
+│           ├── loader.py
+│           └── static/              # Admin and public UI
+├── deploy/terraform-webapp/        # Terraform for web app (separate state)
 ├── tests/            # Test files
 ├── doc/              # Documentation
 ├── data/             # Downloaded videos, subtitles, transcripts (generated)
