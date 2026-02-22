@@ -65,6 +65,14 @@ def get_speaker(
     }
 
 
+@app.get("/api/stat-definitions")
+def get_stat_definitions(
+    repo: Annotated[TranscriptRepository, Depends(get_repo_from_db)],
+) -> list[dict]:
+    """Return stat groups with stat definitions for grouped UI display (public)."""
+    return repo.get_stat_definitions()
+
+
 # ---------- Admin API (basic auth) ----------
 
 
@@ -138,10 +146,7 @@ def admin_register_transcript(
         source_type=source_type,
         title=body.title,
     )
-    if (
-        body.source_uri.strip().startswith("s3://")
-        and "_transcription.json" in body.source_uri
-    ):
+    if "_transcription.json" in body.source_uri:
         parquet_uri = body.source_uri.replace(
             "_transcription.json", "_speaker_stats.parquet"
         )

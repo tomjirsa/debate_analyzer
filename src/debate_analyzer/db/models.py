@@ -6,6 +6,7 @@ from typing import Any
 
 from sqlalchemy import (
     JSON,
+    Boolean,
     Column,
     DateTime,
     Float,
@@ -148,8 +149,42 @@ class Segment(Base):
     transcript = relationship("Transcript", back_populates="segments")
 
 
+class SpeakerStatGroup(Base):
+    """Group of speaker stats for UI (e.g. Speaking rate, Turn-taking)."""
+
+    __tablename__ = "speaker_stat_group"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    key = Column(String(64), unique=True, nullable=False, index=True)
+    label = Column(String(255), nullable=False)
+    sort_order = Column(Integer, nullable=False, default=0)
+
+    stat_definitions = relationship(
+        "SpeakerStatDefinition",
+        back_populates="group",
+        order_by="SpeakerStatDefinition.sort_order",
+    )
+
+
+class SpeakerStatDefinition(Base):
+    """Definition of a single stat (key, label, group) for display."""
+
+    __tablename__ = "speaker_stat_definition"
+
+    stat_key = Column(String(64), primary_key=True)
+    group_id = Column(
+        Integer,
+        ForeignKey("speaker_stat_group.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    label = Column(String(255), nullable=False)
+    sort_order = Column(Integer, nullable=False, default=0)
+
+    group = relationship("SpeakerStatGroup", back_populates="stat_definitions")
+
+
 class TranscriptSpeakerStats(Base):
-    """Per-transcript, per-speaker stats (total_seconds, segment_count, word_count)."""
+    """Per-transcript, per-speaker stats (core + extended: wpm, turns, shares)."""
 
     __tablename__ = "transcript_speaker_stats"
     __table_args__ = (
@@ -170,5 +205,17 @@ class TranscriptSpeakerStats(Base):
     total_seconds = Column(Float, nullable=False)
     segment_count = Column(Integer, nullable=False)
     word_count = Column(Integer, nullable=False)
+    wpm = Column(Float, nullable=True)
+    avg_segment_duration_sec = Column(Float, nullable=True)
+    shortest_talk_sec = Column(Float, nullable=True)
+    longest_talk_sec = Column(Float, nullable=True)
+    median_segment_duration_sec = Column(Float, nullable=True)
+    turn_count = Column(Integer, nullable=True)
+    avg_turn_length_sec = Column(Float, nullable=True)
+    avg_turn_length_segments = Column(Float, nullable=True)
+    is_first_speaker = Column(Boolean, nullable=False, default=False)
+    is_last_speaker = Column(Boolean, nullable=False, default=False)
+    share_speaking_time = Column(Float, nullable=True)
+    share_words = Column(Float, nullable=True)
 
     transcript = relationship("Transcript", back_populates="speaker_stats")

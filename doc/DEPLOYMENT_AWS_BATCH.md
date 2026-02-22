@@ -154,7 +154,7 @@ The transcribe job syncs the video from S3 to the container, runs Whisper + pyan
 
 ### Job 3: Speaker stats (CPU)
 
-- **When to run:** After the transcribe job has written transcript JSON files to the job folder. This job reads those JSON files, computes per-speaker statistics (total time, segment count, word count) per transcript, and writes `<stem>_speaker_stats.parquet` next to each `<stem>_transcription.json` in the same S3 prefix.
+- **When to run:** After the transcribe job has written transcript JSON files to the job folder. This job reads those JSON files, computes per-speaker statistics per transcript (total time, segment count, word count, words per minute, turn count, shortest/longest talk, first/last speaker, share of time/words, etc.), and writes `<stem>_speaker_stats.parquet` next to each `<stem>_transcription.json` in the same S3 prefix. If the transcript JSON includes a top-level `duration` (seconds), the job also computes each speaker’s share of total speaking time; otherwise that field is omitted.
 - **Environment:** `TRANSCRIPTS_S3_PREFIX` (S3 prefix to the `transcripts/` folder, e.g. `s3://<bucket>/jobs/<job-id>/transcripts`).
 - **Queue:** CPU queue (`batch_job_queue_cpu_name`).
 - **Job definition:** `batch_job_definition_stats_name`.

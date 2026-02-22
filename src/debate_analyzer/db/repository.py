@@ -5,12 +5,13 @@ from __future__ import annotations
 from typing import Any
 
 from sqlalchemy import func
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from debate_analyzer.db.models import (
     Segment,
     SpeakerMapping,
     SpeakerProfile,
+    SpeakerStatGroup,
     Transcript,
     TranscriptSpeakerStats,
 )
@@ -286,8 +287,12 @@ class TranscriptRepository:
 
     def get_speaker_stats(self, speaker_profile_id: str) -> dict[str, Any]:
         """
-        Aggregate stats for a speaker: total_seconds, segment_count, transcript_count,
-        word_count. Uses Segment joined with SpeakerMapping for this profile.
+        Aggregate stats for a speaker from segments and from transcript_speaker_stats.
+
+        Core stats (total_seconds, segment_count, word_count) come from Segment.
+        Extended stats (turn_count, shortest/longest talk, shares, etc.) are
+        aggregated from TranscriptSpeakerStats so the speaker profile UI can show
+        all stat groups.
         """
         q = (
             self.session.query(Segment)
@@ -310,12 +315,74 @@ class TranscriptRepository:
             .scalar()
         )
         word_count = sum(len((s.text or "").split()) for s in segments)
-        return {
+        wpm = (
+            (word_count / (total_seconds / 60.0))
+            if total_seconds and total_seconds > 0
+            else None
+        )
+        avg_segment_duration_sec = (
+            (total_seconds / segment_count) if segment_count else None
+        )
+        result: dict[str, Any] = {
             "total_seconds": total_seconds,
             "segment_count": segment_count,
             "transcript_count": int(transcript_count or 0),
             "word_count": word_count,
+            "wpm": wpm,
+            "avg_segment_duration_sec": avg_segment_duration_sec,
         }
+        # Aggregate extended stats from transcript_speaker_stats for this speaker
+        tss_rows = (
+            self.session.query(TranscriptSpeakerStats)
+            .join(
+                SpeakerMapping,
+                (TranscriptSpeakerStats.transcript_id == SpeakerMapping.transcript_id)
+                & (
+                    TranscriptSpeakerStats.speaker_id_in_transcript
+                    == SpeakerMapping.speaker_id_in_transcript
+                ),
+            )
+            .filter(SpeakerMapping.speaker_profile_id == speaker_profile_id)
+            .all()
+        )
+        if not tss_rows:
+            return result
+        shorts = [r.shortest_talk_sec for r in tss_rows if r.shortest_talk_sec is not None]
+        longs = [r.longest_talk_sec for r in tss_rows if r.longest_talk_sec is not None]
+        medians = [
+            r.median_segment_duration_sec
+            for r in tss_rows
+            if r.median_segment_duration_sec is not None
+        ]
+        turn_counts = [r.turn_count for r in tss_rows if r.turn_count is not None]
+        share_time = [
+            r.share_speaking_time
+            for r in tss_rows
+            if r.share_speaking_time is not None
+        ]
+        share_w = [r.share_words for r in tss_rows if r.share_words is not None]
+        total_turns = sum(turn_counts) if turn_counts else 0
+        result["shortest_talk_sec"] = min(shorts) if shorts else None
+        result["longest_talk_sec"] = max(longs) if longs else None
+        result["median_segment_duration_sec"] = (
+            sum(medians) / len(medians) if medians else None
+        )
+        result["turn_count"] = total_turns if total_turns else None
+        result["avg_turn_length_sec"] = (
+            (total_seconds / total_turns) if total_turns else None
+        )
+        result["avg_turn_length_segments"] = (
+            (segment_count / total_turns) if total_turns else None
+        )
+        result["is_first_speaker"] = any(r.is_first_speaker for r in tss_rows)
+        result["is_last_speaker"] = any(r.is_last_speaker for r in tss_rows)
+        result["share_speaking_time"] = (
+            sum(share_time) / len(share_time) if share_time else None
+        )
+        result["share_words"] = (
+            sum(share_w) / len(share_w) if share_w else None
+        )
+        return result
 
     def save_transcript_speaker_stats(
         self,
@@ -337,6 +404,54 @@ class TranscriptRepository:
                     total_seconds=float(row["total_seconds"]),
                     segment_count=int(row["segment_count"]),
                     word_count=int(row["word_count"]),
+                    wpm=float(row["wpm"]) if row.get("wpm") is not None else None,
+                    avg_segment_duration_sec=(
+                        float(row["avg_segment_duration_sec"])
+                        if row.get("avg_segment_duration_sec") is not None
+                        else None
+                    ),
+                    shortest_talk_sec=(
+                        float(row["shortest_talk_sec"])
+                        if row.get("shortest_talk_sec") is not None
+                        else None
+                    ),
+                    longest_talk_sec=(
+                        float(row["longest_talk_sec"])
+                        if row.get("longest_talk_sec") is not None
+                        else None
+                    ),
+                    median_segment_duration_sec=(
+                        float(row["median_segment_duration_sec"])
+                        if row.get("median_segment_duration_sec") is not None
+                        else None
+                    ),
+                    turn_count=(
+                        int(row["turn_count"])
+                        if row.get("turn_count") is not None
+                        else None
+                    ),
+                    avg_turn_length_sec=(
+                        float(row["avg_turn_length_sec"])
+                        if row.get("avg_turn_length_sec") is not None
+                        else None
+                    ),
+                    avg_turn_length_segments=(
+                        float(row["avg_turn_length_segments"])
+                        if row.get("avg_turn_length_segments") is not None
+                        else None
+                    ),
+                    is_first_speaker=bool(row.get("is_first_speaker", False)),
+                    is_last_speaker=bool(row.get("is_last_speaker", False)),
+                    share_speaking_time=(
+                        float(row["share_speaking_time"])
+                        if row.get("share_speaking_time") is not None
+                        else None
+                    ),
+                    share_words=(
+                        float(row["share_words"])
+                        if row.get("share_words") is not None
+                        else None
+                    ),
                 )
             )
         self.session.commit()
@@ -356,8 +471,51 @@ class TranscriptRepository:
                 "total_seconds": r.total_seconds,
                 "segment_count": r.segment_count,
                 "word_count": r.word_count,
+                "wpm": r.wpm,
+                "avg_segment_duration_sec": r.avg_segment_duration_sec,
+                "shortest_talk_sec": r.shortest_talk_sec,
+                "longest_talk_sec": r.longest_talk_sec,
+                "median_segment_duration_sec": r.median_segment_duration_sec,
+                "turn_count": r.turn_count,
+                "avg_turn_length_sec": r.avg_turn_length_sec,
+                "avg_turn_length_segments": r.avg_turn_length_segments,
+                "is_first_speaker": r.is_first_speaker,
+                "is_last_speaker": r.is_last_speaker,
+                "share_speaking_time": r.share_speaking_time,
+                "share_words": r.share_words,
             }
             for r in rows
+        ]
+
+    def get_stat_definitions(self) -> list[dict[str, Any]]:
+        """
+        Return stat groups with their stat definitions for UI (grouped display).
+
+        Returns:
+            List of dicts: { key, label, sort_order, stats: [ { stat_key, label,
+            sort_order } ] }.
+        """
+        groups = (
+            self.session.query(SpeakerStatGroup)
+            .options(joinedload(SpeakerStatGroup.stat_definitions))
+            .order_by(SpeakerStatGroup.sort_order)
+            .all()
+        )
+        return [
+            {
+                "key": g.key,
+                "label": g.label,
+                "sort_order": g.sort_order,
+                "stats": [
+                    {
+                        "stat_key": d.stat_key,
+                        "label": d.label,
+                        "sort_order": d.sort_order,
+                    }
+                    for d in g.stat_definitions
+                ],
+            }
+            for g in groups
         ]
 
     def get_speaker_stats_by_transcript(
@@ -374,6 +532,18 @@ class TranscriptRepository:
                 TranscriptSpeakerStats.total_seconds,
                 TranscriptSpeakerStats.segment_count,
                 TranscriptSpeakerStats.word_count,
+                TranscriptSpeakerStats.wpm,
+                TranscriptSpeakerStats.avg_segment_duration_sec,
+                TranscriptSpeakerStats.shortest_talk_sec,
+                TranscriptSpeakerStats.longest_talk_sec,
+                TranscriptSpeakerStats.median_segment_duration_sec,
+                TranscriptSpeakerStats.turn_count,
+                TranscriptSpeakerStats.avg_turn_length_sec,
+                TranscriptSpeakerStats.avg_turn_length_segments,
+                TranscriptSpeakerStats.is_first_speaker,
+                TranscriptSpeakerStats.is_last_speaker,
+                TranscriptSpeakerStats.share_speaking_time,
+                TranscriptSpeakerStats.share_words,
             )
             .join(
                 SpeakerMapping,
@@ -395,6 +565,18 @@ class TranscriptRepository:
                 "total_seconds": r.total_seconds,
                 "segment_count": r.segment_count,
                 "word_count": r.word_count,
+                "wpm": r.wpm,
+                "avg_segment_duration_sec": r.avg_segment_duration_sec,
+                "shortest_talk_sec": r.shortest_talk_sec,
+                "longest_talk_sec": r.longest_talk_sec,
+                "median_segment_duration_sec": r.median_segment_duration_sec,
+                "turn_count": r.turn_count,
+                "avg_turn_length_sec": r.avg_turn_length_sec,
+                "avg_turn_length_segments": r.avg_turn_length_segments,
+                "is_first_speaker": r.is_first_speaker,
+                "is_last_speaker": r.is_last_speaker,
+                "share_speaking_time": r.share_speaking_time,
+                "share_words": r.share_words,
             }
             for r in rows
         ]

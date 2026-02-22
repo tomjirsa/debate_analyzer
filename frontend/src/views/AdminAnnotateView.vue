@@ -63,6 +63,22 @@
         <button type="button" @click="saveMappings">Save mappings</button>
         <span :class="saveStatusClass">{{ saveStatus }}</span>
       </div>
+
+      <div v-if="speakerStats.length && statDefinitions.length" class="section speaker-stats-section">
+        <label>Speaker statistics</label>
+        <div v-for="s in speakerStats" :key="s.speaker_id_in_transcript" class="speaker-stat-card">
+          <h4 class="speaker-stat-id">{{ s.speaker_id_in_transcript }}</h4>
+          <div v-for="group in statDefinitions" :key="group.key" class="speaker-stat-group">
+            <span class="group-label">{{ group.label }}</span>
+            <ul class="stat-list">
+              <li v-for="defn in group.stats" :key="defn.stat_key" class="stat-line">
+                <span class="stat-label">{{ defn.label }}</span>
+                <span class="stat-value">{{ formatStatValue(defn.stat_key, s[defn.stat_key]) }}</span>
+              </li>
+            </ul>
+          </div>
+        </div>
+      </div>
     </template>
   </div>
 </template>
@@ -80,6 +96,8 @@ const transcriptId = computed(() => route.query.transcript_id || '')
 const transcript = ref(null)
 const segments = ref([])
 const mappings = ref([])
+const speakerStats = ref([])
+const statDefinitions = ref([])
 const speakers = ref([])
 const err = ref('')
 
@@ -134,6 +152,25 @@ function formatTime(sec) {
   return m + ':' + (s < 10 ? '0' : '') + s
 }
 
+function formatStatValue(statKey, value) {
+  if (value == null || value === '') return '—'
+  if (statKey === 'total_seconds') {
+    const s = Number(value) || 0
+    const m = Math.floor(s / 60)
+    const sec = Math.floor(s % 60)
+    return m + ' min ' + sec + ' s'
+  }
+  if (statKey === 'share_speaking_time' || statKey === 'share_words') {
+    return (Number(value) * 100).toFixed(1) + '%'
+  }
+  if (statKey === 'is_first_speaker' || statKey === 'is_last_speaker') {
+    return value ? 'Yes' : 'No'
+  }
+  if (typeof value === 'number' && Number.isInteger(value)) return String(value)
+  if (typeof value === 'number') return value.toFixed(1)
+  return String(value)
+}
+
 function load() {
   if (!transcriptId.value) return
   err.value = ''
@@ -146,10 +183,13 @@ function load() {
       if (r.status === 401) return Promise.reject(new Error('Unauthorized'))
       return r.ok ? r.json() : Promise.reject(new Error(r.statusText))
     }),
+    fetch('/api/stat-definitions').then((r) => (r.ok ? r.json() : [])),
   ])
-    .then(([data, speakerList]) => {
+    .then(([data, speakerList, defs]) => {
       transcript.value = data.transcript
       mappings.value = data.mappings || []
+      speakerStats.value = data.speaker_stats || []
+      statDefinitions.value = Array.isArray(defs) ? defs : []
       speakers.value = speakerList || []
       segments.value = data.segments || []
       if (transcript.value.video_path && transcript.value.video_path.trim().startsWith('s3://')) {
@@ -347,4 +387,19 @@ watch(transcriptId, () => { if (transcriptId.value) load() })
 .new-speaker { margin-top: 0.5rem; padding: 0.5rem; background: #f0f8ff; border-radius: 4px; }
 .new-speaker input { margin-right: 0.5rem; }
 select { min-width: 200px; }
+.speaker-stats-section { margin-top: 1rem; }
+.speaker-stat-card {
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  padding: 1rem;
+  margin-bottom: 1rem;
+  background: #fafafa;
+}
+.speaker-stat-id { margin: 0 0 0.5rem 0; font-size: 1rem; }
+.speaker-stat-group { margin-top: 0.75rem; }
+.speaker-stat-group .group-label { font-weight: 600; font-size: 0.9rem; }
+.stat-list { list-style: none; padding: 0; margin: 0.25rem 0 0 0.5rem; }
+.stat-line { display: flex; justify-content: space-between; gap: 1rem; padding: 0.2rem 0; font-size: 0.9rem; }
+.stat-label { color: #555; }
+.stat-value { font-weight: 500; }
 </style>

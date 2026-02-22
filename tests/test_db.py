@@ -114,6 +114,53 @@ def test_get_speaker_stats(repo):
     assert stats["segment_count"] == 2
     assert stats["transcript_count"] == 1
     assert stats["word_count"] == 5
+    assert stats["wpm"] == 50.0  # 5 words / (6/60) min
+    assert stats["avg_segment_duration_sec"] == 3.0
+
+
+def test_get_speaker_stats_includes_extended_from_transcript_stats(repo):
+    """When transcript_speaker_stats has extended fields, get_speaker_stats aggregates them."""
+    payload = {
+        "duration": 100.0,
+        "transcription": [
+            {"start": 0, "end": 10, "text": "one two", "speaker": "SPEAKER_00"},
+            {"start": 10, "end": 20, "text": "three four five", "speaker": "SPEAKER_00"},
+        ],
+    }
+    t = repo.create_transcript_from_payload("s3://b/k.json", payload)
+    profile = repo.create_speaker_profile("Alice", "Smith")
+    repo.save_mapping(t.id, "SPEAKER_00", profile.id)
+    repo.save_transcript_speaker_stats(
+        t.id,
+        [
+            {
+                "speaker_id_in_transcript": "SPEAKER_00",
+                "total_seconds": 20.0,
+                "segment_count": 2,
+                "word_count": 5,
+                "wpm": 15.0,
+                "avg_segment_duration_sec": 10.0,
+                "shortest_talk_sec": 8.0,
+                "longest_talk_sec": 12.0,
+                "median_segment_duration_sec": 10.0,
+                "turn_count": 2,
+                "avg_turn_length_sec": 10.0,
+                "avg_turn_length_segments": 1.0,
+                "is_first_speaker": True,
+                "is_last_speaker": False,
+                "share_speaking_time": 0.2,
+                "share_words": 0.25,
+            },
+        ],
+    )
+    stats = repo.get_speaker_stats(profile.id)
+    assert stats["shortest_talk_sec"] == 8.0
+    assert stats["longest_talk_sec"] == 12.0
+    assert stats["turn_count"] == 2
+    assert stats["share_speaking_time"] == 0.2
+    assert stats["share_words"] == 0.25
+    assert stats["is_first_speaker"] is True
+    assert stats["is_last_speaker"] is False
 
 
 def test_update_speaker_profile(repo):
@@ -144,7 +191,7 @@ def test_delete_speaker_profile(repo):
 
 
 def test_save_and_get_speaker_stats_for_transcript(repo):
-    """Saving transcript speaker stats and fetching them returns the same data."""
+    """Save and get transcript speaker stats returns same data (incl. extended)."""
     payload = {
         "duration": 10.0,
         "transcription": [
@@ -159,12 +206,23 @@ def test_save_and_get_speaker_stats_for_transcript(repo):
             "total_seconds": 5.0,
             "segment_count": 1,
             "word_count": 3,
+            "wpm": 36.0,
+            "turn_count": 1,
+            "is_first_speaker": True,
+            "share_speaking_time": 0.5,
+            "share_words": 0.5,
         },
         {
             "speaker_id_in_transcript": "SPEAKER_01",
             "total_seconds": 5.0,
             "segment_count": 1,
             "word_count": 3,
+            "wpm": 36.0,
+            "turn_count": 1,
+            "is_first_speaker": False,
+            "is_last_speaker": True,
+            "share_speaking_time": 0.5,
+            "share_words": 0.5,
         },
     ]
     repo.save_transcript_speaker_stats(t.id, rows)
@@ -173,7 +231,11 @@ def test_save_and_get_speaker_stats_for_transcript(repo):
     by_speaker = {r["speaker_id_in_transcript"]: r for r in got}
     assert by_speaker["SPEAKER_00"]["total_seconds"] == 5.0
     assert by_speaker["SPEAKER_00"]["word_count"] == 3
+    assert by_speaker["SPEAKER_00"]["wpm"] == 36.0
+    assert by_speaker["SPEAKER_00"]["turn_count"] == 1
+    assert by_speaker["SPEAKER_00"]["is_first_speaker"] is True
     assert by_speaker["SPEAKER_01"]["segment_count"] == 1
+    assert by_speaker["SPEAKER_01"]["is_last_speaker"] is True
 
 
 def test_save_transcript_speaker_stats_idempotent(repo):
@@ -263,3 +325,27 @@ def test_get_speaker_stats_by_transcript(repo):
     assert "Transcript B" in titles
     assert titles["Transcript A"]["total_seconds"] == 10.0
     assert titles["Transcript B"]["word_count"] == 2
+
+
+def test_get_stat_definitions(repo):
+    """Stat definitions returns groups with their stats in correct structure."""
+    from debate_analyzer.db.models import SpeakerStatDefinition, SpeakerStatGroup
+
+    group = SpeakerStatGroup(key="test_group", label="Test", sort_order=0)
+    repo.session.add(group)
+    repo.session.flush()
+    repo.session.add(
+        SpeakerStatDefinition(
+            stat_key="total_seconds", group_id=group.id, label="Total sec", sort_order=0
+        )
+    )
+    repo.session.commit()
+    groups = repo.get_stat_definitions()
+    assert len(groups) >= 1
+    test_group = next((g for g in groups if g["key"] == "test_group"), None)
+    assert test_group is not None
+    assert test_group["label"] == "Test"
+    assert "stats" in test_group
+    assert len(test_group["stats"]) == 1
+    assert test_group["stats"][0]["stat_key"] == "total_seconds"
+    assert test_group["stats"][0]["label"] == "Total sec"
