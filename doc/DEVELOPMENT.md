@@ -75,6 +75,25 @@ This will:
 - Build the package
 - Publish to PyPI (configure credentials first)
 
+### Running the stats job locally
+
+The speaker-stats batch task can be run against a **local directory** of transcript JSONs (no AWS required). Use this when developing or testing after running the transcriber locally.
+
+1. Ensure the directory contains `*_transcription.json` files (e.g. from `python -m debate_analyzer.transcriber`).
+2. Set `TRANSCRIPTS_PREFIX` (or `TRANSCRIPTS_S3_PREFIX`) to that directory path or a `file://` URI.
+3. Run the stats job module; it will write `<stem>_speaker_stats.parquet` next to each transcript JSON.
+
+```bash
+# Example: transcripts in data/transcripts/
+export TRANSCRIPTS_PREFIX=./data/transcripts
+python -m debate_analyzer.batch.stats_job
+
+# Or use the Makefile target
+make stats-local PREFIX=./data/transcripts
+```
+
+On AWS Batch, the same code uses `TRANSCRIPTS_S3_PREFIX=s3://bucket/...`; the job detects S3 vs local from the prefix value.
+
 ## Code Quality Standards
 
 ### Code Formatting

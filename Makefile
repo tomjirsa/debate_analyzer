@@ -1,9 +1,9 @@
-.PHONY: help reset_venv test deploy clean format lint typecheck all
+.PHONY: help reset_venv test deploy clean format lint typecheck all stats-local
 
 # Default target
 help:
 	@echo "Available targets:"
-	@echo "  make reset_venv  - Remove and recreate virtual environment"
+	@echo "  make reset_venv   - Remove and recreate virtual environment"
 	@echo "  make test        - Run tests with coverage"
 	@echo "  make deploy      - Build and deploy package"
 	@echo "  make clean       - Remove build artifacts and caches"
@@ -11,6 +11,7 @@ help:
 	@echo "  make lint        - Run ruff linter"
 	@echo "  make typecheck   - Run mypy type checker"
 	@echo "  make all         - Run format, lint, typecheck, and test"
+	@echo "  make stats-local - Run stats job locally (use PREFIX=./data/transcripts)"
 
 # Reset virtual environment
 reset_venv:
@@ -68,3 +69,9 @@ typecheck:
 # Run all checks
 all: format lint typecheck test
 	@echo "All checks passed!"
+
+# Run stats job against local transcript directory (no AWS)
+# Usage: make stats-local PREFIX=./data/transcripts
+stats-local:
+	@if [ -z "$(PREFIX)" ]; then echo "Usage: make stats-local PREFIX=<path to dir with *_transcription.json>"; exit 1; fi
+	TRANSCRIPTS_PREFIX="$(PREFIX)" poetry run python -m debate_analyzer.batch.stats_job

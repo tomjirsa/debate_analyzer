@@ -1,7 +1,11 @@
 """Tests for the batch stats job (per-speaker stats computation)."""
 
+import json
+from pathlib import Path
 
-from debate_analyzer.batch.stats_job import _compute_speaker_stats
+import pyarrow.parquet as pq  # type: ignore[import-untyped]
+
+from debate_analyzer.batch.stats_job import _compute_speaker_stats, _run_local, run
 
 
 def test_compute_speaker_stats_empty():
@@ -44,3 +48,35 @@ def test_compute_speaker_stats_missing_speaker_uses_unknown():
     rows = _compute_speaker_stats(transcription)
     assert len(rows) == 1
     assert rows[0]["speaker_id_in_transcript"] == "SPEAKER_UNKNOWN"
+
+
+def test_run_local_writes_parquet(tmp_path: Path) -> None:
+    """Local run reads *_transcription.json from directory and writes parquet."""
+    payload = {
+        "transcription": [
+            {"start": 0, "end": 2, "text": "hi", "speaker": "SPEAKER_00"},
+            {"start": 2, "end": 5, "text": "hello world", "speaker": "SPEAKER_01"},
+        ]
+    }
+    (tmp_path / "debate_transcription.json").write_text(
+        json.dumps(payload), encoding="utf-8"
+    )
+    n = _run_local(tmp_path)
+    assert n == 1
+    parquet_path = tmp_path / "debate_speaker_stats.parquet"
+    assert parquet_path.exists()
+    table = pq.read_table(parquet_path)
+    assert table.num_rows == 2
+    assert "speaker_id_in_transcript" in table.column_names
+    assert "total_seconds" in table.column_names
+
+
+def test_run_dispatches_to_local_for_file_uri(tmp_path: Path) -> None:
+    """run() with file:// prefix uses local path."""
+    payload = {"transcription": [{"start": 0, "end": 1, "text": "x", "speaker": "S0"}]}
+    (tmp_path / "clip_transcription.json").write_text(
+        json.dumps(payload), encoding="utf-8"
+    )
+    n = run(f"file://{tmp_path}")
+    assert n == 1
+    assert (tmp_path / "clip_speaker_stats.parquet").exists()

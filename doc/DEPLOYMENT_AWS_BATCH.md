@@ -168,6 +168,14 @@ BUCKET=$(cd deploy/terraform && terraform output -raw s3_bucket_name)
 
 Parquet files are written under the same prefix (e.g. `.../transcripts/foo_speaker_stats.parquet`). When you register a transcript from S3 in the web app, the app will load speaker stats from the corresponding parquet file (if present) and store them in the database for display.
 
+**Local development:** You can run the stats job against a local directory of transcript JSONs (e.g. after running the transcriber locally). Set `TRANSCRIPTS_PREFIX` or `TRANSCRIPTS_S3_PREFIX` to a local path or `file://` URI pointing to a directory that contains `*_transcription.json` files; the job will write `<stem>_speaker_stats.parquet` into the same directory. Example:
+
+```bash
+# From repo root, after producing transcripts in data/transcripts/
+export TRANSCRIPTS_PREFIX=./data/transcripts
+python -m debate_analyzer.batch.stats_job
+```
+
 ## 5. Where downloaded videos and transcripts land in S3
 
 - **Downloaded video and subtitles:** `s3://<bucket>/jobs/<job-id>/videos/` and `s3://<bucket>/jobs/<job-id>/subtitles/`. Video files are stored **directly** under the `videos/` prefix (e.g. `.../videos/<filename>.mp4`), and subtitle files under `subtitles/` (e.g. `.../subtitles/<filename>.srt`).

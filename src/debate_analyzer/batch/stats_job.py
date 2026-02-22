@@ -1,9 +1,11 @@
 """
-Compute per-speaker statistics per transcript and write to parquet in S3.
+Compute per-speaker statistics per transcript and write to parquet.
 
-Reads TRANSCRIPTS_S3_PREFIX from the environment, lists *_transcription.json objects,
-aggregates per-speaker stats (total_seconds, segment_count, word_count) per file,
-and writes <stem>_speaker_stats.parquet to the same S3 prefix.
+Reads TRANSCRIPTS_S3_PREFIX (or TRANSCRIPTS_PREFIX) from the environment:
+- If value is an s3:// URI: lists *_transcription.json in S3, writes
+  <stem>_speaker_stats.parquet to the same S3 prefix (AWS Batch).
+- If value is a local path or file:// URI: lists *_transcription.json in that
+  directory, writes <stem>_speaker_stats.parquet to the same directory (local dev).
 
 Invoked by the stats Batch job entrypoint
 (e.g. python -m debate_analyzer.batch.stats_job).
@@ -16,6 +18,7 @@ import os
 import sys
 from collections import defaultdict
 from io import BytesIO
+from pathlib import Path
 from typing import Any
 
 import boto3  # type: ignore[import-untyped]
@@ -68,16 +71,11 @@ def _compute_speaker_stats(transcription: list[dict[str, Any]]) -> list[dict[str
     ]
 
 
-def _write_parquet_to_s3(
-    rows: list[dict[str, Any]],
-    bucket: str,
-    key: str,
-    s3_client: Any,
-) -> None:
-    """Write rows as a parquet file to S3."""
+def _rows_to_parquet_table(rows: list[dict[str, Any]]) -> pa.Table:
+    """Build a pyarrow table from stat rows (shared by S3 and local write)."""
     if not rows:
-        return
-    table = pa.table(
+        return pa.table({})
+    return pa.table(
         {
             "speaker_id_in_transcript": [r["speaker_id_in_transcript"] for r in rows],
             "total_seconds": pa.array(
@@ -89,22 +87,41 @@ def _write_parquet_to_s3(
             "word_count": pa.array([r["word_count"] for r in rows], type=pa.int64()),
         }
     )
+
+
+def _write_parquet_to_s3(
+    rows: list[dict[str, Any]],
+    bucket: str,
+    key: str,
+    s3_client: Any,
+) -> None:
+    """Write rows as a parquet file to S3."""
+    if not rows:
+        return
+    table = _rows_to_parquet_table(rows)
     buf = BytesIO()
     pq.write_table(table, buf)
     buf.seek(0)
     s3_client.put_object(Bucket=bucket, Key=key, Body=buf.getvalue())
 
 
-def run(prefix: str) -> int:
+def _write_parquet_to_file(rows: list[dict[str, Any]], path: Path) -> None:
+    """Write rows as a parquet file to the local filesystem."""
+    if not rows:
+        return
+    table = _rows_to_parquet_table(rows)
+    pq.write_table(table, path)
+
+
+def _run_s3(prefix: str) -> int:
     """
-    List transcript JSONs under prefix, compute speaker stats,
-    write parquet to same prefix.
+    List transcript JSONs under S3 prefix, compute speaker stats, write parquet to S3.
 
     Args:
-        prefix: S3 prefix (e.g. s3://bucket/jobs/id/transcripts).
+        prefix: S3 URI (e.g. s3://bucket/jobs/id/transcripts).
 
     Returns:
-        Number of parquet files written (0 on error or no files).
+        Number of parquet files written.
     """
     bucket, prefix_key = _parse_s3_uri(prefix)
     if not prefix_key.endswith("/"):
@@ -136,11 +153,75 @@ def run(prefix: str) -> int:
     return count
 
 
+def _run_local(dir_path: Path) -> int:
+    """
+    List *_transcription.json in directory, compute speaker stats, write parquet locally.
+
+    Args:
+        dir_path: Directory containing transcript JSON files.
+
+    Returns:
+        Number of parquet files written.
+    """
+    if not dir_path.is_dir():
+        print(f"Error: not a directory: {dir_path}", file=sys.stderr)
+        return 0
+    count = 0
+    for path in sorted(dir_path.glob("*_transcription.json")):
+        stem = path.stem.replace("_transcription", "")
+        try:
+            with open(path, encoding="utf-8") as f:
+                data = json.load(f)
+        except Exception as e:
+            print(f"Warning: failed to read {path}: {e}", file=sys.stderr)
+            continue
+        transcription = data.get("transcription") or []
+        rows = _compute_speaker_stats(transcription)
+        if not rows:
+            continue
+        out_path = dir_path / f"{stem}_speaker_stats.parquet"
+        _write_parquet_to_file(rows, out_path)
+        count += 1
+        print(f"Wrote {out_path}")
+    return count
+
+
+def run(prefix: str) -> int:
+    """
+    List transcript JSONs under prefix, compute speaker stats, write parquet.
+
+    Prefix may be an S3 URI (s3://bucket/key) or a local path (file:///path or
+    /path). For local paths, reads and writes in that directory.
+
+    Args:
+        prefix: S3 prefix or local directory path.
+
+    Returns:
+        Number of parquet files written (0 on error or no files).
+    """
+    prefix = prefix.strip()
+    if prefix.startswith("s3://"):
+        return _run_s3(prefix)
+    # Local: strip file:// and resolve to absolute path
+    if prefix.startswith("file://"):
+        dir_path = Path(prefix[7:])
+    else:
+        dir_path = Path(prefix)
+    dir_path = dir_path.resolve()
+    return _run_local(dir_path)
+
+
 def main() -> None:
-    """Entry point: read TRANSCRIPTS_S3_PREFIX from env and run."""
-    prefix = os.environ.get("TRANSCRIPTS_S3_PREFIX", "").strip()
+    """Entry point: read TRANSCRIPTS_S3_PREFIX or TRANSCRIPTS_PREFIX from env and run."""
+    prefix = (
+        os.environ.get("TRANSCRIPTS_S3_PREFIX") or os.environ.get("TRANSCRIPTS_PREFIX")
+        or ""
+    ).strip()
     if not prefix:
-        print("Error: TRANSCRIPTS_S3_PREFIX must be set", file=sys.stderr)
+        print(
+            "Error: TRANSCRIPTS_S3_PREFIX or TRANSCRIPTS_PREFIX must be set",
+            file=sys.stderr,
+        )
         sys.exit(1)
     n = run(prefix)
     print(f"Done. Wrote {n} parquet file(s).")
