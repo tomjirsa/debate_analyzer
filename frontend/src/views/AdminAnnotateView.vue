@@ -72,7 +72,7 @@
             <span class="group-label">{{ group.label }}</span>
             <ul class="stat-list">
               <li v-for="defn in group.stats" :key="defn.stat_key" class="stat-line">
-                <span class="stat-label">{{ defn.label }}</span>
+                <span class="stat-label">{{ statLabel(defn.stat_key, defn.label, s[defn.stat_key]) }}</span>
                 <span class="stat-value">{{ formatStatValue(defn.stat_key, s[defn.stat_key]) }}</span>
               </li>
             </ul>
@@ -87,6 +87,7 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useAdminAuth } from '../composables/useAdminAuth'
+import { formatDuration, formatDurationStatLabel } from '../utils/format.js'
 
 const route = useRoute()
 const { apiFetch } = useAdminAuth()
@@ -147,18 +148,24 @@ function getDisplayName(speakerIdInTranscript) {
 }
 
 function formatTime(sec) {
-  const m = Math.floor(Number(sec) / 60)
-  const s = Math.floor(Number(sec) % 60)
-  return m + ':' + (s < 10 ? '0' : '') + s
+  return formatDuration(sec)
+}
+
+function isDurationStat(statKey) {
+  return statKey === 'total_seconds' || (typeof statKey === 'string' && statKey.endsWith('_sec'))
+}
+
+function statLabel(statKey, label, value) {
+  if (isDurationStat(statKey) && (value != null && value !== '')) {
+    return formatDurationStatLabel(label, value)
+  }
+  return label
 }
 
 function formatStatValue(statKey, value) {
   if (value == null || value === '') return '—'
-  if (statKey === 'total_seconds') {
-    const s = Number(value) || 0
-    const m = Math.floor(s / 60)
-    const sec = Math.floor(s % 60)
-    return m + ' min ' + sec + ' s'
+  if (isDurationStat(statKey)) {
+    return formatDuration(value)
   }
   if (statKey === 'share_speaking_time' || statKey === 'share_words') {
     return (Number(value) * 100).toFixed(1) + '%'
