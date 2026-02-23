@@ -62,3 +62,15 @@ variable "speaker_photos_s3_bucket" {
   type        = string
   default     = null
 }
+
+variable "rds_publicly_accessible" {
+  description = "If true, RDS instance gets a public endpoint. Default is false (DB private, no internet access)."
+  type        = bool
+  default     = false
+}
+
+variable "rds_allowed_cidr_blocks" {
+  description = "CIDR blocks allowed to connect to RDS on port 5432 when rds_publicly_accessible is true (e.g. [\"203.0.113.50/32\"]). Empty = no extra ingress (only ECS). For production, prefer a narrow range (office/VPN) over 0.0.0.0/0."
+  type        = list(string)
+  default     = []
+}

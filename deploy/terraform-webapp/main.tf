@@ -86,6 +86,18 @@ resource "aws_security_group" "rds" {
   }
 }
 
+# Allow specified CIDRs to RDS when publicly accessible (e.g. office IP or VPN).
+resource "aws_security_group_rule" "rds_ingress_cidrs" {
+  count             = var.rds_publicly_accessible && length(var.rds_allowed_cidr_blocks) > 0 ? 1 : 0
+  type              = "ingress"
+  from_port         = 5432
+  to_port           = 5432
+  protocol          = "tcp"
+  cidr_blocks       = var.rds_allowed_cidr_blocks
+  security_group_id = aws_security_group.rds.id
+  description       = "Postgres from allowed CIDRs (when RDS publicly accessible)"
+}
+
 resource "aws_db_instance" "app" {
   identifier     = local.name
   engine         = "postgres"
@@ -99,7 +111,7 @@ resource "aws_db_instance" "app" {
 
   db_subnet_group_name   = aws_db_subnet_group.app.name
   vpc_security_group_ids = [aws_security_group.rds.id]
-  publicly_accessible    = false
+  publicly_accessible    = var.rds_publicly_accessible
 
   skip_final_snapshot = true
 }
