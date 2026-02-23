@@ -1,36 +1,67 @@
 <template>
   <div>
-    <h1>Admin</h1>
-    <p>
+    <p class="mb-3">
       <router-link to="/">← Dashboard</router-link>
     </p>
 
-    <div v-if="showLogin" class="login-box">
-      <h2>Admin login</h2>
-      <p>Enter the admin username and password configured on the server.</p>
-      <label for="loginUser">Username</label>
-      <input id="loginUser" v-model="loginUser" type="text" placeholder="username" autocomplete="username">
-      <label for="loginPass">Password</label>
-      <input id="loginPass" v-model="loginPass" type="password" placeholder="password" autocomplete="current-password">
-      <br>
-      <button type="button" @click="doLogin">Log in</button>
-      <p class="err">{{ loginErr }}</p>
-    </div>
+    <Card>
+      <template #title>Admin</template>
+      <template #content>
+        <div v-if="showLogin" class="login-box">
+          <h3 class="mt-0">Admin login</h3>
+          <p>Enter the admin username and password configured on the server.</p>
+          <div class="flex flex-column gap-2">
+            <label for="loginUser">Username</label>
+            <InputText
+              id="loginUser"
+              v-model="loginUser"
+              type="text"
+              placeholder="username"
+              autocomplete="username"
+              class="w-full max-w-20rem"
+            />
+            <label for="loginPass">Password</label>
+            <Password
+              id="loginPass"
+              v-model="loginPass"
+              placeholder="password"
+              :feedback="false"
+              toggle-mask
+              class="w-full max-w-20rem"
+              input-class="w-full"
+            />
+            <Button label="Log in" @click="doLogin" />
+            <Message v-if="loginErr" severity="error">{{ loginErr }}</Message>
+          </div>
+        </div>
 
-    <template v-else>
-      <section class="dashboard-links">
-        <h2>Admin</h2>
-        <ul>
-          <li><router-link to="/admin/transcripts">Transcript Registration Management</router-link> — Register, update, or delete transcripts.</li>
-          <li><router-link to="/admin/speakers">Manage speakers</router-link> — Add, edit, or delete speaker profiles.</li>
-        </ul>
-      </section>
-    </template>
+        <template v-else>
+          <Panel header="Admin" class="dashboard-panel">
+            <ul class="dashboard-links">
+              <li>
+                <router-link to="/admin/transcripts">Transcript Registration Management</router-link>
+                — Register, update, or delete transcripts.
+              </li>
+              <li>
+                <router-link to="/admin/speakers">Manage speakers</router-link>
+                — Add, edit, or delete speaker profiles.
+              </li>
+            </ul>
+          </Panel>
+        </template>
+      </template>
+    </Card>
   </div>
 </template>
 
 <script setup>
 import { ref, onMounted } from 'vue'
+import Button from 'primevue/button'
+import Card from 'primevue/card'
+import InputText from 'primevue/inputtext'
+import Message from 'primevue/message'
+import Panel from 'primevue/panel'
+import Password from 'primevue/password'
 import { useAdminAuth } from '../composables/useAdminAuth'
 
 const { setAuth, clearAuth, apiFetch } = useAdminAuth()
@@ -82,14 +113,11 @@ onMounted(loadTranscripts)
 </script>
 
 <style scoped>
-.login-box {
-  background: #f0f8ff;
-  padding: 1rem;
-  border-radius: 6px;
-  margin-bottom: 1.5rem;
-  max-width: 320px;
-}
-.login-box input { width: 100%; }
-.dashboard-links ul { list-style: none; padding: 0; }
+.mb-3 { margin-bottom: 1rem; }
+.mt-0 { margin-top: 0; }
+.login-box { max-width: 320px; }
+.dashboard-links { list-style: none; padding: 0; margin: 0; }
 .dashboard-links li { margin: 0.75rem 0; }
+.dashboard-links a { text-decoration: none; }
+.dashboard-links a:hover { text-decoration: underline; }
 </style>

@@ -19,6 +19,7 @@ import {
   TooltipComponent,
   TitleComponent,
 } from 'echarts/components'
+import { chartTheme } from '../theme/chart-theme'
 
 use([
   CanvasRenderer,
@@ -58,10 +59,14 @@ const props = defineProps({
 
 const chartOption = computed(() => {
   const { labels, values, title, yAxisName, valueFormatter } = props
+  const { primaryColor, gridColor, textColor, tooltipBg } = chartTheme
   return {
-    title: title ? { text: title, left: 'center' } : undefined,
+    title: title ? { text: title, left: 'center', textStyle: { color: textColor } } : undefined,
     tooltip: {
       trigger: 'axis',
+      backgroundColor: tooltipBg,
+      borderColor: gridColor,
+      textStyle: { color: textColor },
       formatter: (items) => {
         if (!items || !items.length) return ''
         const item = items[0]
@@ -87,12 +92,19 @@ const chartOption = computed(() => {
         width: 120,
         overflow: 'truncate',
         interval: 0,
+        color: textColor,
       },
+      axisLine: { lineStyle: { color: gridColor } },
+      splitLine: { show: false },
     },
     yAxis: {
       type: 'value',
       name: yAxisName,
       nameGap: 40,
+      nameTextStyle: { color: textColor },
+      axisLabel: { color: textColor },
+      axisLine: { show: false },
+      splitLine: { lineStyle: { color: gridColor, type: 'dashed' } },
     },
     series: [
       {
@@ -100,7 +112,7 @@ const chartOption = computed(() => {
         type: 'bar',
         data: values,
         itemStyle: {
-          color: '#5470c6',
+          color: primaryColor,
         },
       },
     ],

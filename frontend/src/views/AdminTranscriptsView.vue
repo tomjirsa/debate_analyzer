@@ -1,87 +1,115 @@
 <template>
   <div>
-    <h1>Transcript Registration Management</h1>
-    <p>
+    <p class="mb-3">
       <router-link to="/admin">← Admin</router-link>
       | <router-link to="/admin/speakers">Manage speakers</router-link>
     </p>
 
-    <div v-if="showLogin" class="login-box">
-      <h2>Admin login</h2>
-      <p>Enter the admin username and password configured on the server.</p>
-      <label for="loginUser">Username</label>
-      <input id="loginUser" v-model="loginUser" type="text" placeholder="username" autocomplete="username">
-      <label for="loginPass">Password</label>
-      <input id="loginPass" v-model="loginPass" type="password" placeholder="password" autocomplete="current-password">
-      <br>
-      <button type="button" @click="doLogin">Log in</button>
-      <p class="err">{{ loginErr }}</p>
-    </div>
+    <Card v-if="showLogin">
+      <template #title>Admin login</template>
+      <template #content>
+        <p>Enter the admin username and password configured on the server.</p>
+        <div class="flex flex-column gap-2" style="max-width: 320px;">
+          <label for="loginUser">Username</label>
+          <InputText id="loginUser" v-model="loginUser" placeholder="username" autocomplete="username" />
+          <label for="loginPass">Password</label>
+          <Password id="loginPass" v-model="loginPass" placeholder="password" :feedback="false" toggle-mask input-class="w-full" />
+          <Button label="Log in" @click="doLogin" />
+          <Message v-if="loginErr" severity="error">{{ loginErr }}</Message>
+        </div>
+      </template>
+    </Card>
 
     <template v-else>
-      <section class="register-section">
-        <h2>Register transcript</h2>
-        <p>Enter S3 URI (e.g. <code>s3://bucket/jobs/xxx/transcripts/file.json</code>) or local path.</p>
-        <label for="sourceUri">Source URI or path</label>
-        <input id="sourceUri" v-model="sourceUri" type="text" placeholder="s3://... or path">
-        <label for="title">Title (optional)</label>
-        <input id="title" v-model="title" type="text" placeholder="Optional display title">
-        <br>
-        <button type="button" :disabled="registering" @click="register">Register</button>
-        <p class="err">{{ registerErr }}</p>
-      </section>
+      <Card class="mb-4">
+        <template #title>Register transcript</template>
+        <template #content>
+          <p>Enter S3 URI (e.g. <code>s3://bucket/jobs/xxx/transcripts/file.json</code>) or local path.</p>
+          <div class="flex flex-column gap-2" style="max-width: 480px;">
+            <label for="sourceUri">Source URI or path</label>
+            <InputText id="sourceUri" v-model="sourceUri" placeholder="s3://... or path" />
+            <label for="title">Title (optional)</label>
+            <InputText id="title" v-model="title" placeholder="Optional display title" />
+            <Button label="Register" :loading="registering" :disabled="registering" @click="register" />
+            <Message v-if="registerErr" severity="error">{{ registerErr }}</Message>
+          </div>
+        </template>
+      </Card>
 
-      <section>
-        <h2>Transcripts</h2>
-        <p class="err">{{ listErr }}</p>
-        <table v-if="transcripts.length" class="transcript-table">
-          <thead>
-            <tr>
-              <th>Title</th>
-              <th>Source URI</th>
-              <th>Speakers</th>
-              <th>Created</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            <template v-for="t in transcripts" :key="t.id">
-              <tr v-if="editingId !== t.id">
-                <td>{{ t.title || '—' }}</td>
-                <td class="uri-cell">{{ t.source_uri }}</td>
-                <td>{{ t.speakers_count ?? '—' }}</td>
-                <td>{{ formatDate(t.created_at) }}</td>
-                <td>
-                  <router-link :to="'/admin/annotate?transcript_id=' + encodeURIComponent(t.id)">Annotate</router-link>
-                  <button type="button" @click="startEdit(t)">Edit</button>
-                  <button type="button" @click="confirmDelete(t)">Delete</button>
-                </td>
-              </tr>
-              <tr v-else class="edit-row">
-                <td colspan="5">
-                  <label>Title</label>
-                  <input v-model="editTitle" type="text" placeholder="Title">
-                  <label>Video path (optional)</label>
-                  <input v-model="editVideoPath" type="text" placeholder="s3://... or path">
-                  <button type="button" @click="saveEdit(t.id)">Save</button>
-                  <button type="button" @click="cancelEdit">Cancel</button>
-                  <span :class="editStatusClass">{{ editStatus }}</span>
-                </td>
-              </tr>
-            </template>
-          </tbody>
-        </table>
-        <p v-else>No transcripts. Register one above.</p>
-      </section>
+      <Card>
+        <template #title>Transcripts</template>
+        <template #content>
+          <Message v-if="listErr" severity="error">{{ listErr }}</Message>
+          <DataTable
+            v-else-if="transcripts.length"
+            :value="transcripts"
+            striped-rows
+            responsive-layout="scroll"
+            class="p-datatable-sm"
+          >
+            <Column field="title" header="Title">
+              <template #body="{ data }">
+                {{ data.title || '—' }}
+              </template>
+            </Column>
+            <Column field="source_uri" header="Source URI">
+              <template #body="{ data }">
+                <span class="uri-cell">{{ data.source_uri }}</span>
+              </template>
+            </Column>
+            <Column field="speakers_count" header="Speakers">
+              <template #body="{ data }">
+                {{ data.speakers_count ?? '—' }}
+              </template>
+            </Column>
+            <Column field="created_at" header="Created">
+              <template #body="{ data }">
+                {{ formatDate(data.created_at) }}
+              </template>
+            </Column>
+            <Column header="Actions">
+              <template #body="{ data }">
+                <template v-if="editingId !== data.id">
+                  <router-link :to="'/admin/annotate?transcript_id=' + encodeURIComponent(data.id)" class="action-link">Annotate</router-link>
+                  <Button label="Edit" text size="small" class="ml-1" @click="startEdit(data)" />
+                  <Button label="Delete" severity="danger" text size="small" class="ml-1" @click="(e) => confirmDelete(e, data)" />
+                </template>
+                <template v-else>
+                  <div class="flex flex-wrap align-items-center gap-2">
+                    <InputText v-model="editTitle" placeholder="Title" class="flex-1" style="min-width: 120px;" />
+                    <InputText v-model="editVideoPath" placeholder="Video path (optional)" class="flex-1" style="min-width: 180px;" />
+                    <Button label="Save" size="small" @click="saveEdit(data.id)" />
+                    <Button label="Cancel" text size="small" @click="cancelEdit" />
+                    <Message v-if="editStatus" :severity="editStatus === 'Saved.' ? 'success' : 'error'">{{ editStatus }}</Message>
+                  </div>
+                </template>
+              </template>
+            </Column>
+          </DataTable>
+          <p v-else>No transcripts. Register one above.</p>
+        </template>
+      </Card>
     </template>
+
+    <ConfirmPopup />
   </div>
 </template>
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import Button from 'primevue/button'
+import Card from 'primevue/card'
+import Column from 'primevue/column'
+import ConfirmPopup from 'primevue/confirmpopup'
+import DataTable from 'primevue/datatable'
+import InputText from 'primevue/inputtext'
+import Message from 'primevue/message'
+import Password from 'primevue/password'
+import { useConfirm } from 'primevue/useconfirm'
 import { useAdminAuth } from '../composables/useAdminAuth'
 
 const { setAuth, clearAuth, apiFetch } = useAdminAuth()
+const confirm = useConfirm()
 
 const showLogin = ref(false)
 const loginUser = ref('')
@@ -99,7 +127,6 @@ const editingId = ref(null)
 const editTitle = ref('')
 const editVideoPath = ref('')
 const editStatus = ref('')
-const editStatusClass = computed(() => (editStatus.value === 'Saved.' ? 'ok' : editStatus.value ? 'err' : ''))
 
 function formatDate(iso) {
   if (!iso) return '—'
@@ -213,35 +240,37 @@ function saveEdit(id) {
     .catch((e) => { editStatus.value = e.message || (e.detail || '') })
 }
 
-function confirmDelete(t) {
+function confirmDelete(event, t) {
   const name = t.title || t.source_uri || t.id
-  if (!confirm('Delete this transcript? Segments and speaker mappings will be removed.\n\n' + name)) return
-  apiFetch('/api/admin/transcripts/' + t.id, { method: 'DELETE' })
-    .then((r) => {
-      if (r.status === 404) throw new Error('Transcript not found')
-      if (r.status !== 204) throw new Error(r.statusText)
-      loadTranscripts()
-    })
-    .catch((e) => { listErr.value = e.message })
+  confirm.require({
+    target: event.currentTarget,
+    message: 'Delete this transcript? Segments and speaker mappings will be removed.\n\n' + name,
+    accept: () => {
+      apiFetch('/api/admin/transcripts/' + t.id, { method: 'DELETE' })
+        .then((r) => {
+          if (r.status === 404) throw new Error('Transcript not found')
+          if (r.status !== 204) throw new Error(r.statusText)
+          loadTranscripts()
+        })
+        .catch((e) => { listErr.value = e.message })
+    },
+  })
 }
 
 onMounted(loadTranscripts)
 </script>
 
 <style scoped>
-.login-box {
-  background: #f0f8ff;
-  padding: 1rem;
-  border-radius: 6px;
-  margin-bottom: 1.5rem;
-  max-width: 320px;
+.mb-3 { margin-bottom: 1rem; }
+.mb-4 { margin-bottom: 1.5rem; }
+.ml-1 { margin-left: 0.25rem; }
+.action-link { margin-right: 0.25rem; text-decoration: none; }
+.action-link:hover { text-decoration: underline; }
+.uri-cell {
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: inline-block;
 }
-.login-box input { width: 100%; }
-.register-section { margin-bottom: 2rem; }
-.register-section input[type="text"] { max-width: 480px; width: 100%; }
-.transcript-table { width: 100%; }
-.uri-cell { max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.edit-row td { background: #f9f9f9; padding: 0.75rem; }
-.edit-row label { display: inline-block; margin-right: 0.5rem; }
-.edit-row input { margin-right: 0.5rem; max-width: 300px; }
 </style>

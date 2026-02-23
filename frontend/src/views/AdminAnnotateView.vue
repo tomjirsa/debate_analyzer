@@ -1,84 +1,127 @@
 <template>
   <div>
-    <p><router-link to="/admin/transcripts">← Transcripts</router-link></p>
-    <h1>Speaker annotation</h1>
+    <p class="mb-3">
+      <router-link to="/admin/transcripts">← Transcripts</router-link>
+    </p>
+    <h2 class="mt-0">Speaker annotation</h2>
     <p v-if="transcript">{{ transcript.title || transcript.id }}</p>
-    <p class="err">{{ err }}</p>
 
-    <div v-if="!transcriptId" class="err">Missing transcript_id in URL.</div>
+    <Message v-if="err" severity="error">{{ err }}</Message>
+
+    <div v-if="!transcriptId" class="mb-3">
+      <Message severity="error">Missing transcript_id in URL.</Message>
+    </div>
+
     <template v-else-if="transcript">
-      <div class="section">
-        <label>Video (optional – load from S3 or choose a local file)</label>
-        <p :class="['video-status', videoS3Err ? 'err' : '']">{{ videoS3Status }}</p>
-        <div style="margin-bottom: 0.5rem;">
-          <input v-model="s3UriInput" type="text" placeholder="s3://bucket/key.mp4" style="width:100%;max-width:400px;margin-right:0.5rem;">
-          <button type="button" @click="loadS3Video">Load video from S3</button>
-        </div>
-        <label style="margin-top:0.5rem;">Or load a local file</label>
-        <input type="file" accept="video/mp4,video/webm,.mp4,.webm" @change="onVideoFile">
-        <video
-          ref="videoEl"
-          controls
-          style="display: none; width: 100%; max-height: 320px; background: #111; border-radius: 4px;"
-          @timeupdate="updateCurrentSegment"
-        />
-      </div>
-
-      <div class="section">
-        <label>Transcript (click a line to jump to that time in the video)</label>
-        <div ref="transcriptListEl" class="transcript">
-          <div
-            v-for="(seg, i) in segments"
-            :key="i"
-            :class="['segment', { current: currentSegmentIndex === i, highlight: highlightIndex === i }]"
-            :data-start="seg.start"
-            :data-end="seg.end"
-            :data-speaker-id="seg.speaker_id_in_transcript"
-            @click="seekTo(seg.start)"
-          >
-            <span class="time">{{ formatTime(seg.start) }} – {{ formatTime(seg.end) }}</span>
-            <span class="speaker">{{ getDisplayName(seg.speaker_id_in_transcript) }}</span>
-            {{ seg.text }}
+      <Card class="mb-4">
+        <template #title>Video</template>
+        <template #subtitle>Optional – load from S3 or choose a local file</template>
+        <template #content>
+          <Message v-if="videoS3Err" severity="warn">{{ videoS3Status }}</Message>
+          <p v-else-if="videoS3Status" class="video-status">{{ videoS3Status }}</p>
+          <div class="flex flex-wrap align-items-center gap-2 mb-2">
+            <InputText
+              v-model="s3UriInput"
+              placeholder="s3://bucket/key.mp4"
+              class="flex-1"
+              style="min-width: 200px; max-width: 400px;"
+            />
+            <Button label="Load video from S3" @click="loadS3Video" />
           </div>
-        </div>
-      </div>
+          <label class="block mb-1">Or load a local file</label>
+          <input type="file" accept="video/mp4,video/webm,.mp4,.webm" @change="onVideoFile" class="mb-2" />
+          <video
+            ref="videoEl"
+            controls
+            class="video-player"
+            style="display: none; width: 100%; max-height: 320px; background: #111; border-radius: 4px;"
+            @timeupdate="updateCurrentSegment"
+          />
+        </template>
+      </Card>
 
-      <div class="section">
-        <label>Assign each speaker ID to a profile (or create new)</label>
-        <div v-for="m in mappingRows" :key="m.speaker_id_in_transcript" class="mapping">
-          <label @click="scrollToSegment(m.speaker_id_in_transcript)">{{ m.speaker_id_in_transcript }}</label>
-          <select :value="mappingBySpeaker[m.speaker_id_in_transcript] || ''" @change="onMappingChange(m.speaker_id_in_transcript, $event)">
-            <option value="">-- Unassigned --</option>
-            <option v-for="s in speakers" :key="s.id" :value="s.id">{{ displayName(s) }}</option>
-            <option value="__new__">+ Create new profile</option>
-          </select>
-        </div>
-        <div v-if="showNewSpeaker" id="newSpeaker" class="new-speaker">
-          <input v-model="newFirstName" type="text" placeholder="First name">
-          <input v-model="newSurname" type="text" placeholder="Surname">
-          <input v-model="newSlug" type="text" placeholder="Slug (optional)">
-          <input v-model="newShortDescription" type="text" placeholder="Short description (optional)" style="min-width: 200px;">
-          <button type="button" @click="createAndAssign">Create and assign</button>
-        </div>
-        <button type="button" @click="saveMappings">Save mappings</button>
-        <span :class="saveStatusClass">{{ saveStatus }}</span>
-      </div>
-
-      <div v-if="speakerStats.length && statDefinitions.length" class="section speaker-stats-section">
-        <label>Speaker statistics</label>
-        <div v-for="s in speakerStats" :key="s.speaker_id_in_transcript" class="speaker-stat-card">
-          <h4 class="speaker-stat-id">{{ s.speaker_id_in_transcript }}</h4>
-          <div v-for="group in statDefinitions" :key="group.key" class="speaker-stat-group">
-            <span class="group-label">{{ group.label }}</span>
-            <ul class="stat-list">
-              <li v-for="defn in group.stats" :key="defn.stat_key" class="stat-line">
-                <span class="stat-label">{{ statLabel(defn.stat_key, defn.label, s[defn.stat_key]) }}</span>
-                <span class="stat-value">{{ formatStatValue(defn.stat_key, s[defn.stat_key]) }}</span>
-              </li>
-            </ul>
+      <Card class="mb-4">
+        <template #title>Transcript</template>
+        <template #subtitle>Click a line to jump to that time in the video</template>
+        <template #content>
+          <div ref="transcriptListEl" class="transcript">
+            <div
+              v-for="(seg, i) in segments"
+              :key="i"
+              :class="['segment', { current: currentSegmentIndex === i, highlight: highlightIndex === i }]"
+              :data-start="seg.start"
+              :data-end="seg.end"
+              :data-speaker-id="seg.speaker_id_in_transcript"
+              @click="seekTo(seg.start)"
+            >
+              <span class="time">{{ formatTime(seg.start) }} – {{ formatTime(seg.end) }}</span>
+              <span class="speaker">{{ getDisplayName(seg.speaker_id_in_transcript) }}</span>
+              {{ seg.text }}
+            </div>
           </div>
-        </div>
-      </div>
+        </template>
+      </Card>
+
+      <Card class="mb-4">
+        <template #title>Assign speaker IDs</template>
+        <template #subtitle>Assign each speaker ID to a profile (or create new)</template>
+        <template #content>
+          <div v-for="m in mappingRows" :key="m.speaker_id_in_transcript" class="mapping">
+            <label class="mapping-label" @click="scrollToSegment(m.speaker_id_in_transcript)">{{ m.speaker_id_in_transcript }}</label>
+            <Select
+              :model-value="mappingBySpeaker[m.speaker_id_in_transcript] || ''"
+              :options="speakerSelectOptions"
+              option-label="label"
+              option-value="value"
+              class="mapping-select"
+              @update:model-value="(val) => onMappingChangeValue(m.speaker_id_in_transcript, val)"
+            />
+          </div>
+          <Panel v-if="showNewSpeaker" header="Create new profile" class="mt-2">
+            <div class="flex flex-wrap gap-2 align-items-end">
+              <div class="flex flex-column">
+                <label>First name</label>
+                <InputText v-model="newFirstName" placeholder="First name" />
+              </div>
+              <div class="flex flex-column">
+                <label>Surname</label>
+                <InputText v-model="newSurname" placeholder="Surname" />
+              </div>
+              <div class="flex flex-column">
+                <label>Slug (optional)</label>
+                <InputText v-model="newSlug" placeholder="Slug" />
+              </div>
+              <div class="flex flex-column">
+                <label>Short description (optional)</label>
+                <InputText v-model="newShortDescription" placeholder="Short description" style="min-width: 200px;" />
+              </div>
+              <Button label="Create and assign" @click="createAndAssign" />
+            </div>
+          </Panel>
+          <div class="flex align-items-center gap-2 mt-2">
+            <Button label="Save mappings" @click="saveMappings" />
+            <Message v-if="saveStatus" :severity="saveStatus === 'Saved.' ? 'success' : 'error'">{{ saveStatus }}</Message>
+          </div>
+        </template>
+      </Card>
+
+      <Card v-if="speakerStats.length && statDefinitions.length">
+        <template #title>Speaker statistics</template>
+        <template #content>
+          <div v-for="s in speakerStats" :key="s.speaker_id_in_transcript" class="speaker-stat-card">
+            <h4 class="speaker-stat-id">{{ s.speaker_id_in_transcript }}</h4>
+            <div v-for="group in statDefinitions" :key="group.key" class="speaker-stat-group">
+              <span class="group-label">{{ group.label }}</span>
+              <ul class="stat-list">
+                <li v-for="defn in group.stats" :key="defn.stat_key" class="stat-line">
+                  <span class="stat-label">{{ statLabel(defn.stat_key, defn.label, s[defn.stat_key]) }}</span>
+                  <span class="stat-value">{{ formatStatValue(defn.stat_key, s[defn.stat_key]) }}</span>
+                </li>
+              </ul>
+            </div>
+          </div>
+        </template>
+      </Card>
     </template>
   </div>
 </template>
@@ -86,6 +129,12 @@
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
+import Button from 'primevue/button'
+import Card from 'primevue/card'
+import InputText from 'primevue/inputtext'
+import Message from 'primevue/message'
+import Panel from 'primevue/panel'
+import Select from 'primevue/select'
 import { useAdminAuth } from '../composables/useAdminAuth'
 import { formatDuration, formatDurationStatLabel } from '../utils/format.js'
 
@@ -118,7 +167,6 @@ const newSlug = ref('')
 const newShortDescription = ref('')
 
 const saveStatus = ref('')
-const saveStatusClass = computed(() => (saveStatus.value === 'Saved.' ? 'ok' : saveStatus.value ? 'err' : ''))
 
 const mappingBySpeaker = computed(() => {
   const out = {}
@@ -126,6 +174,15 @@ const mappingBySpeaker = computed(() => {
     if (m.speaker_profile_id) out[m.speaker_id_in_transcript] = m.speaker_profile_id
   })
   return out
+})
+
+const speakerSelectOptions = computed(() => {
+  const opts = [{ value: '', label: '-- Unassigned --' }]
+  speakers.value.forEach((s) => {
+    opts.push({ value: s.id, label: displayName(s) })
+  })
+  opts.push({ value: '__new__', label: '+ Create new profile' })
+  return opts
 })
 
 const mappingRows = computed(() => {
@@ -302,18 +359,18 @@ function scrollToSegment(speakerId) {
   }
 }
 
-function onMappingChange(speakerId, ev) {
-  const val = ev.target.value
+function onMappingChangeValue(speakerId, val) {
   if (val === '__new__') {
     creatingForSpeakerId.value = speakerId
     showNewSpeaker.value = true
+    return
+  }
+  const profileId = (val && val !== '') ? val : null
+  const existing = mappings.value.find((m) => m.speaker_id_in_transcript === speakerId)
+  if (existing) {
+    existing.speaker_profile_id = profileId
   } else {
-    const existing = mappings.value.find((m) => m.speaker_id_in_transcript === speakerId)
-    if (existing) {
-      existing.speaker_profile_id = val || null
-    } else {
-      mappings.value.push({ speaker_id_in_transcript: speakerId, speaker_profile_id: val || null })
-    }
+    mappings.value.push({ speaker_id_in_transcript: speakerId, speaker_profile_id: profileId })
   }
 }
 
@@ -380,33 +437,33 @@ watch(transcriptId, () => { if (transcriptId.value) load() })
 </script>
 
 <style scoped>
-.section { margin-bottom: 1.5rem; }
+.mb-3 { margin-bottom: 1rem; }
+.mb-4 { margin-bottom: 1.5rem; }
+.mt-0 { margin-top: 0; }
+.mt-2 { margin-top: 0.5rem; }
+.block { display: block; }
 .mapping { display: flex; align-items: center; gap: 0.75rem; margin: 0.5rem 0; flex-wrap: wrap; }
-.mapping label { margin: 0; font-weight: normal; min-width: 100px; cursor: pointer; }
-.mapping label:hover { text-decoration: underline; }
-.transcript { max-height: 360px; overflow-y: auto; border: 1px solid #ccc; border-radius: 4px; padding: 0.5rem; }
+.mapping-label { margin: 0; font-weight: normal; min-width: 100px; cursor: pointer; }
+.mapping-label:hover { text-decoration: underline; }
+.mapping-select { min-width: 200px; }
+.transcript { max-height: 360px; overflow-y: auto; border: 1px solid var(--p-surface-300, #d1d5db); border-radius: 4px; padding: 0.5rem; }
 .segment { padding: 0.35rem 0.5rem; margin: 2px 0; border-radius: 4px; cursor: pointer; }
-.segment:hover { background: #f0f0f0; }
-.segment.current { background: #e0e8ff; }
-.segment.highlight { background: #fff3cd; }
-.segment .time { font-size: 0.85em; color: #666; margin-right: 0.5rem; }
-.segment .speaker { font-weight: 600; margin-right: 0.5rem; color: #333; }
-.new-speaker { margin-top: 0.5rem; padding: 0.5rem; background: #f0f8ff; border-radius: 4px; }
-.new-speaker input { margin-right: 0.5rem; }
-select { min-width: 200px; }
-.speaker-stats-section { margin-top: 1rem; }
+.segment:hover { background: var(--p-surface-100, #f3f4f6); }
+.segment.current { background: var(--p-primary-100, #dbeafe); }
+.segment.highlight { background: var(--p-yellow-100, #fef3c7); }
+.segment .time { font-size: 0.85em; opacity: 0.85; margin-right: 0.5rem; }
+.segment .speaker { font-weight: 600; margin-right: 0.5rem; }
 .speaker-stat-card {
-  border: 1px solid #ddd;
+  border: 1px solid var(--p-surface-200, #e5e7eb);
   border-radius: 6px;
   padding: 1rem;
   margin-bottom: 1rem;
-  background: #fafafa;
 }
 .speaker-stat-id { margin: 0 0 0.5rem 0; font-size: 1rem; }
 .speaker-stat-group { margin-top: 0.75rem; }
 .speaker-stat-group .group-label { font-weight: 600; font-size: 0.9rem; }
 .stat-list { list-style: none; padding: 0; margin: 0.25rem 0 0 0.5rem; }
 .stat-line { display: flex; justify-content: space-between; gap: 1rem; padding: 0.2rem 0; font-size: 0.9rem; }
-.stat-label { color: #555; }
+.stat-label { opacity: 0.85; }
 .stat-value { font-weight: 500; }
 </style>

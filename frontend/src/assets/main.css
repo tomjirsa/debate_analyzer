@@ -1,25 +1,53 @@
-body {
-  font-family: system-ui, sans-serif;
-  max-width: 900px;
-  margin: 0 auto;
-  padding: 1.5rem;
+/* App layout */
+#app {
+  margin: 0;
+  padding: 0;
+  min-height: 100vh;
 }
-h1 { font-size: 1.5rem; margin-top: 0; }
-h2 { font-size: 1.25rem; margin-top: 1rem; }
-a { color: #0d6efd; text-decoration: none; }
-a:hover { text-decoration: underline; }
-ul { list-style: none; padding: 0; }
-li { margin: 0.5rem 0; }
-.err { color: #c00; }
-.ok { color: #0a0; }
-.hidden { display: none; }
-label { display: block; margin-bottom: 0.25rem; font-weight: 500; }
-input[type="text"], input[type="password"], textarea, select {
-  padding: 0.35rem 0.5rem;
-  margin-bottom: 0.5rem;
+
+/* Dashboard content area: max-width and spacing */
+.app-main {
+  max-width: 1200px;
+  margin: 0 auto;
+  width: 100%;
   box-sizing: border-box;
 }
-button { padding: 0.5rem 1rem; margin-right: 0.5rem; margin-bottom: 0.5rem; cursor: pointer; }
-table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
-th, td { text-align: left; padding: 0.5rem; border-bottom: 1px solid #eee; }
-th { font-weight: 600; }
+
+/* Dashboard widgets: cards and panels look like widgets */
+.p-card,
+.p-panel {
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.08), 0 1px 2px -1px rgba(0, 0, 0, 0.06);
+  border: 1px solid var(--p-surface-200, #e5e7eb);
+  border-radius: 8px;
+}
+
+.p-card .p-card-header,
+.p-panel .p-panel-header {
+  border-bottom: 1px solid var(--p-surface-200, #e5e7eb);
+  background: var(--p-surface-50, #f9fafb);
+}
+
+.p-card .p-card-title {
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+.p-card .p-card-content,
+.p-panel .p-panel-content {
+  padding: 1.25rem;
+}
+
+/* Consistent spacing between dashboard sections */
+.mb-3 { margin-bottom: 1rem; }
+.mb-4 { margin-bottom: 1.5rem; }
+
+/* Admin DataTables: striped rows and hover */
+.p-datatable .p-datatable-tbody > tr:nth-child(even) {
+  background: var(--p-surface-50, #f9fafb);
+}
+.p-datatable .p-datatable-tbody > tr:hover {
+  background: var(--p-surface-100, #f3f4f6) !important;
+}
+.p-datatable .p-datatable-tbody > tr {
+  transition: background 0.15s ease;
+}
