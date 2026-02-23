@@ -62,24 +62,54 @@
               :value-formatter="chartValueFormatter"
             />
           </div>
-            <ul class="speaker-list">
-            <li v-for="row in speakerStats" :key="row.speaker_id_in_transcript" class="speaker-row">
-              <div class="speaker-main">
-                <span class="speaker-id">{{ row.speaker_display_name || row.speaker_id_in_transcript }}</span>
-                <span class="speaker-stats">{{ formatTime(row.total_seconds) }}, {{ formatNum(row.word_count) }} words</span>
-              </div>
-              <div v-if="hasShareStats(row)" class="relative-share">
-                <div v-if="row.share_speaking_time != null" class="share-bar">
-                  <label>Share of speaking time</label>
-                  <ProgressBar :value="(row.share_speaking_time ?? 0) * 100" :show-value="true" />
-                </div>
-                <div v-if="row.share_words != null" class="share-bar">
-                  <label>Share of words</label>
-                  <ProgressBar :value="(row.share_words ?? 0) * 100" :show-value="true" />
-                </div>
-              </div>
-            </li>
-          </ul>
+          <DataTable
+            :value="speakerStats"
+            data-key="speaker_id_in_transcript"
+            sort-mode="single"
+            removable-sort
+            class="speaker-stats-table"
+          >
+            <Column field="speaker_display_name" header="Speaker" sortable>
+              <template #body="{ data }">
+                {{ data.speaker_display_name || data.speaker_id_in_transcript }}
+              </template>
+            </Column>
+            <Column field="share_speaking_time" header="Share of speaking time" sortable>
+              <template #body="{ data }">
+                {{ formatShare(data.share_speaking_time) }}
+              </template>
+            </Column>
+            <Column field="share_words" header="Share of words" sortable>
+              <template #body="{ data }">
+                {{ formatShare(data.share_words) }}
+              </template>
+            </Column>
+            <Column field="total_seconds" header="Speaking time" sortable>
+              <template #body="{ data }">
+                {{ formatTime(data.total_seconds) }}
+              </template>
+            </Column>
+            <Column field="word_count" header="Words" sortable>
+              <template #body="{ data }">
+                {{ formatNum(data.word_count) }}
+              </template>
+            </Column>
+            <Column field="segment_count" header="Segments" sortable>
+              <template #body="{ data }">
+                {{ formatNum(data.segment_count) }}
+              </template>
+            </Column>
+            <Column field="wpm" header="WPM" sortable>
+              <template #body="{ data }">
+                {{ formatNum(data.wpm) }}
+              </template>
+            </Column>
+            <Column field="turn_count" header="Turns" sortable>
+              <template #body="{ data }">
+                {{ formatNum(data.turn_count) }}
+              </template>
+            </Column>
+          </DataTable>
         </template>
       </Card>
     </template>
@@ -91,8 +121,9 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import Breadcrumb from 'primevue/breadcrumb'
 import Card from 'primevue/card'
+import Column from 'primevue/column'
+import DataTable from 'primevue/datatable'
 import Message from 'primevue/message'
-import ProgressBar from 'primevue/progressbar'
 import Select from 'primevue/select'
 import StatBarChart from '../components/StatBarChart.vue'
 import { formatDuration } from '../utils/format.js'
@@ -153,9 +184,11 @@ function formatTime(sec) {
   return formatDuration(sec)
 }
 
-function hasShareStats(row) {
-  return (row.share_speaking_time != null && row.share_speaking_time !== '') ||
-    (row.share_words != null && row.share_words !== '')
+function formatShare(value) {
+  if (value == null || value === '') return '—'
+  const num = Number(value)
+  if (Number.isNaN(num)) return '—'
+  return (num * 100).toFixed(1) + '%'
 }
 
 function truncateLabel(str, maxLen = 20) {
@@ -275,18 +308,5 @@ watch([groupIdOrSlug, transcriptId], load)
 }
 .chart-label { font-size: 0.9rem; }
 .chart-select { min-width: 200px; }
-.speaker-list { list-style: none; padding: 0; margin: 0; }
-.speaker-row {
-  padding: 0.75rem 0;
-  border-bottom: 1px solid var(--p-surface-200, #e5e7eb);
-  display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
-}
-.speaker-main { display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
-.speaker-id { font-weight: 500; }
-.speaker-stats { font-size: 0.9rem; opacity: 0.85; }
-.relative-share { margin-top: 0.5rem; }
-.share-bar { margin-bottom: 0.5rem; }
-.share-bar label { display: block; font-size: 0.85rem; margin-bottom: 0.25rem; }
+.speaker-stats-table { margin-top: 1rem; }
 </style>
