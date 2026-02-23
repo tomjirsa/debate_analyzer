@@ -28,17 +28,21 @@
         <Message v-if="!transcripts.length" severity="info">
           No transcripts in this group yet. Add them in the admin.
         </Message>
-        <ul v-else id="transcripts" class="transcript-list">
-          <li v-for="t in transcripts" :key="t.id" class="transcript-item">
-            <router-link :to="transcriptLink(t)">
-              {{ t.title || t.source_uri || t.id }}
-            </router-link>
-            <span v-if="t.created_at" class="transcript-date">{{ formatDate(t.created_at) }}</span>
-            <div v-if="hasStats(t)" class="transcript-stats">
-              {{ formatDuration(t.duration) }} · {{ formatNum(t.stats_total_words) }} words · {{ formatNum(t.stats_segment_count) }} segments · {{ formatNum(t.speakers_count) }} speakers
-            </div>
-          </li>
-        </ul>
+        <DataTable v-else id="transcripts" :value="transcripts" data-key="id" class="dashboard-table">
+          <Column field="title" header="Name" sortable>
+            <template #body="{ data }">
+              <router-link :to="transcriptLink(data)">
+                {{ data.title || data.source_uri || data.id }}
+              </router-link>
+            </template>
+          </Column>
+          <Column field="source_type" header="Source type" sortable />
+          <Column field="created_at" header="Created" sortable>
+            <template #body="{ data }">
+              {{ formatDate(data.created_at) }}
+            </template>
+          </Column>
+        </DataTable>
       </template>
     </Card>
 
@@ -48,13 +52,21 @@
         <Message v-if="!speakers.length" severity="info">
           No speakers in this group yet. Add transcripts and assign speakers in the admin.
         </Message>
-        <ul v-else id="speakers" class="speaker-list">
-          <li v-for="s in speakers" :key="s.id">
-            <router-link :to="speakerLink(s)">
-              {{ displayName(s) }}
-            </router-link>
-          </li>
-        </ul>
+        <DataTable v-else id="speakers" :value="speakers" data-key="id" class="dashboard-table">
+          <Column field="display_name" header="Name" sortable>
+            <template #body="{ data }">
+              <router-link :to="speakerLink(data)">
+                {{ displayName(data) }}
+              </router-link>
+            </template>
+          </Column>
+          <Column field="slug" header="Slug" sortable />
+          <Column field="short_description" header="Short description" sortable>
+            <template #body="{ data }">
+              <span class="cell-truncate" :title="data.short_description">{{ data.short_description || '—' }}</span>
+            </template>
+          </Column>
+        </DataTable>
       </template>
     </Card>
   </div>
@@ -63,10 +75,12 @@
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
+import Breadcrumb from 'primevue/breadcrumb'
 import Card from 'primevue/card'
+import Column from 'primevue/column'
+import DataTable from 'primevue/datatable'
 import Message from 'primevue/message'
 import ProgressSpinner from 'primevue/progressspinner'
-import Breadcrumb from 'primevue/breadcrumb'
 
 const route = useRoute()
 const groupIdOrSlug = computed(() => route.params.idOrSlug)
@@ -111,24 +125,6 @@ function formatDate(iso) {
   }
 }
 
-function hasStats(t) {
-  return t.duration != null || t.stats_total_words != null || t.stats_segment_count != null || t.speakers_count != null
-}
-
-function formatDuration(seconds) {
-  if (seconds == null || typeof seconds !== 'number') return '—'
-  const m = Math.floor(seconds / 60)
-  const s = Math.floor(seconds % 60)
-  return `${m}:${String(s).padStart(2, '0')}`
-}
-
-function formatNum(n) {
-  if (n == null || n === '') return '—'
-  const num = Number(n)
-  if (Number.isNaN(num)) return '—'
-  return num.toLocaleString()
-}
-
 async function load() {
   if (!groupIdOrSlug.value) return
   loading.value = true
@@ -161,12 +157,9 @@ watch(groupIdOrSlug, load)
 
 <style scoped>
 .dashboard-stats { margin: 0; font-size: 1rem; }
-.speaker-list, .transcript-list { list-style: none; padding: 0; margin: 0; }
-.speaker-list li, .transcript-list li { margin: 0.5rem 0; }
-.speaker-list a, .transcript-list a { text-decoration: none; }
-.speaker-list a:hover, .transcript-list a:hover { text-decoration: underline; }
-.transcript-item { display: flex; flex-direction: column; gap: 0.25rem; }
-.transcript-date { margin-left: 0.5rem; font-size: 0.9rem; color: var(--p-text-muted-color, #6b7280); }
-.transcript-stats { font-size: 0.85rem; color: var(--p-text-muted-color, #6b7280); }
+.dashboard-table { margin-top: 0.25rem; }
+.dashboard-table a { text-decoration: none; }
+.dashboard-table a:hover { text-decoration: underline; }
+.cell-truncate { display: inline-block; max-width: 20rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mb-3 { margin-bottom: 1rem; }
 </style>
