@@ -9,6 +9,7 @@
       <template #content>
         <div v-if="showLogin" class="login-box">
           <h3 class="mt-0">Admin login</h3>
+          <Message v-if="sessionExpired" severity="warn" class="mb-2">Session expired. Please log in again.</Message>
           <p>Enter the admin username and password configured on the server.</p>
           <div class="flex flex-column gap-2">
             <label for="loginUser">Username</label>
@@ -55,7 +56,8 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
+import { useRoute } from 'vue-router'
 import Button from 'primevue/button'
 import Card from 'primevue/card'
 import InputText from 'primevue/inputtext'
@@ -64,9 +66,11 @@ import Panel from 'primevue/panel'
 import Password from 'primevue/password'
 import { useAdminAuth } from '../composables/useAdminAuth'
 
-const { setAuth, clearAuth, apiFetch } = useAdminAuth()
+const route = useRoute()
+const { setAuth, clearAuth, apiFetch, isLoggedIn } = useAdminAuth()
 
-const showLogin = ref(false)
+const showLogin = computed(() => !isLoggedIn.value)
+const sessionExpired = computed(() => route.query.expired === '1')
 const loginUser = ref('')
 const loginPass = ref('')
 const loginErr = ref('')
@@ -90,21 +94,14 @@ function doLogin() {
       if (!r.ok) throw new Error(r.statusText)
       return r.json()
     })
-    .then(() => {
-      showLogin.value = false
-    })
+    .then(() => {})
     .catch((e) => { loginErr.value = e.message })
 }
 
 function loadTranscripts() {
   apiFetch('/api/admin/transcripts')
     .then((r) => {
-      if (r.status === 401) {
-        clearAuth()
-        showLogin.value = true
-        return
-      }
-      if (r.ok) showLogin.value = false
+      if (r.status === 401) clearAuth()
     })
     .catch(() => {})
 }
@@ -116,6 +113,7 @@ onMounted(loadTranscripts)
 .mb-3 { margin-bottom: 1rem; }
 .mt-0 { margin-top: 0; }
 .login-box { max-width: 320px; }
+.mb-2 { margin-bottom: 0.5rem; }
 .dashboard-links { list-style: none; padding: 0; margin: 0; }
 .dashboard-links li { margin: 0.75rem 0; }
 .dashboard-links a { text-decoration: none; }

@@ -5,23 +5,7 @@
       | <router-link to="/admin/speakers">Manage speakers</router-link>
     </p>
 
-    <Card v-if="showLogin">
-      <template #title>Admin login</template>
-      <template #content>
-        <p>Enter the admin username and password configured on the server.</p>
-        <div class="flex flex-column gap-2" style="max-width: 320px;">
-          <label for="loginUser">Username</label>
-          <InputText id="loginUser" v-model="loginUser" placeholder="username" autocomplete="username" />
-          <label for="loginPass">Password</label>
-          <Password id="loginPass" v-model="loginPass" placeholder="password" :feedback="false" toggle-mask input-class="w-full" />
-          <Button label="Log in" @click="doLogin" />
-          <Message v-if="loginErr" severity="error">{{ loginErr }}</Message>
-        </div>
-      </template>
-    </Card>
-
-    <template v-else>
-      <Card class="mb-4">
+    <Card class="mb-4">
         <template #title>Register transcript</template>
         <template #content>
           <p>Enter S3 URI (e.g. <code>s3://bucket/jobs/xxx/transcripts/file.json</code>) or local path.</p>
@@ -89,14 +73,14 @@
           <p v-else>No transcripts. Register one above.</p>
         </template>
       </Card>
-    </template>
 
     <ConfirmPopup />
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import Button from 'primevue/button'
 import Card from 'primevue/card'
 import Column from 'primevue/column'
@@ -104,17 +88,12 @@ import ConfirmPopup from 'primevue/confirmpopup'
 import DataTable from 'primevue/datatable'
 import InputText from 'primevue/inputtext'
 import Message from 'primevue/message'
-import Password from 'primevue/password'
 import { useConfirm } from 'primevue/useconfirm'
 import { useAdminAuth } from '../composables/useAdminAuth'
 
-const { setAuth, clearAuth, apiFetch } = useAdminAuth()
+const router = useRouter()
+const { clearAuth, apiFetch } = useAdminAuth()
 const confirm = useConfirm()
-
-const showLogin = ref(false)
-const loginUser = ref('')
-const loginPass = ref('')
-const loginErr = ref('')
 
 const transcripts = ref([])
 const listErr = ref('')
@@ -138,52 +117,27 @@ function formatDate(iso) {
   }
 }
 
+function redirectToLogin() {
+  clearAuth()
+  router.push('/admin?expired=1')
+}
+
 function loadTranscripts() {
   listErr.value = ''
   apiFetch('/api/admin/transcripts')
     .then((r) => {
       if (r.status === 401) {
-        clearAuth()
-        showLogin.value = true
+        redirectToLogin()
         return { _unauthorized: true }
       }
       return r.ok ? r.json() : Promise.reject(new Error(r.statusText))
     })
     .then((data) => {
       if (data && data._unauthorized) return
-      showLogin.value = false
       transcripts.value = Array.isArray(data) ? data : []
       editingId.value = null
     })
     .catch((e) => { listErr.value = e.message })
-}
-
-function doLogin() {
-  loginErr.value = ''
-  const user = loginUser.value.trim()
-  const pass = loginPass.value
-  if (!user || !pass) {
-    loginErr.value = 'Enter username and password.'
-    return
-  }
-  setAuth(user, pass)
-  apiFetch('/api/admin/transcripts')
-    .then((r) => {
-      if (r.status === 401) {
-        clearAuth()
-        loginErr.value = 'Invalid username or password.'
-        return
-      }
-      if (!r.ok) throw new Error(r.statusText)
-      return r.json()
-    })
-    .then((data) => {
-      if (data && Array.isArray(data)) {
-        showLogin.value = false
-        transcripts.value = data
-      }
-    })
-    .catch((e) => { loginErr.value = e.message })
 }
 
 function register() {
@@ -198,11 +152,19 @@ function register() {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ source_uri: sourceUri.value.trim(), title: title.value.trim() || null }),
   })
-    .then((r) => (r.ok ? r.json() : r.json().then((j) => Promise.reject(new Error(j.detail || r.statusText)))))
-    .then(() => {
-      sourceUri.value = ''
-      title.value = ''
-      loadTranscripts()
+    .then((r) => {
+      if (r.status === 401) {
+        redirectToLogin()
+        return
+      }
+      return r.ok ? r.json() : r.json().then((j) => Promise.reject(new Error(j.detail || r.statusText)))
+    })
+    .then((data) => {
+      if (data) {
+        sourceUri.value = ''
+        title.value = ''
+        loadTranscripts()
+      }
     })
     .catch((e) => { registerErr.value = e.message || (e.detail || '') })
     .finally(() => { registering.value = false })
@@ -230,8 +192,15 @@ function saveEdit(id) {
       video_path: editVideoPath.value.trim() || null,
     }),
   })
-    .then((r) => (r.ok ? r.json() : r.json().then((j) => Promise.reject(new Error(j.detail || r.statusText)))))
+    .then((r) => {
+      if (r.status === 401) {
+        redirectToLogin()
+        return
+      }
+      return r.ok ? r.json() : r.json().then((j) => Promise.reject(new Error(j.detail || r.statusText)))
+    })
     .then((updated) => {
+      if (!updated) return
       const idx = transcripts.value.findIndex((x) => x.id === id)
       if (idx >= 0) transcripts.value[idx] = updated
       editingId.value = null
@@ -248,6 +217,10 @@ function confirmDelete(event, t) {
     accept: () => {
       apiFetch('/api/admin/transcripts/' + t.id, { method: 'DELETE' })
         .then((r) => {
+          if (r.status === 401) {
+            redirectToLogin()
+            return
+          }
           if (r.status === 404) throw new Error('Transcript not found')
           if (r.status !== 204) throw new Error(r.statusText)
           loadTranscripts()

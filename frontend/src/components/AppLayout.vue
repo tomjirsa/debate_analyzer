@@ -11,9 +11,12 @@
         </router-link>
         <div class="sidebar-group">
           <span class="sidebar-group-label">Admin</span>
-          <router-link to="/admin" class="sidebar-item" active-class="sidebar-item-active">Admin</router-link>
-          <router-link to="/admin/transcripts" class="sidebar-item" active-class="sidebar-item-active">Transcripts</router-link>
-          <router-link to="/admin/speakers" class="sidebar-item" active-class="sidebar-item-active">Speakers</router-link>
+          <template v-if="isLoggedIn">
+            <router-link to="/admin" class="sidebar-item" active-class="sidebar-item-active">Admin</router-link>
+            <router-link to="/admin/transcripts" class="sidebar-item" active-class="sidebar-item-active">Transcripts</router-link>
+            <router-link to="/admin/speakers" class="sidebar-item" active-class="sidebar-item-active">Speakers</router-link>
+          </template>
+          <router-link v-else to="/admin" class="sidebar-item" active-class="sidebar-item-active">Admin login</router-link>
         </div>
       </nav>
     </aside>
@@ -38,7 +41,9 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
+import { useAdminAuth } from '../composables/useAdminAuth'
 
+const { isLoggedIn } = useAdminAuth()
 const THEME_KEY = 'debate-analyzer-theme'
 const isDark = ref(false)
 

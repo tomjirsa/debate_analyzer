@@ -128,7 +128,7 @@
 
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import Button from 'primevue/button'
 import Card from 'primevue/card'
 import InputText from 'primevue/inputtext'
@@ -139,7 +139,8 @@ import { useAdminAuth } from '../composables/useAdminAuth'
 import { formatDuration, formatDurationStatLabel } from '../utils/format.js'
 
 const route = useRoute()
-const { apiFetch } = useAdminAuth()
+const router = useRouter()
+const { clearAuth, apiFetch } = useAdminAuth()
 
 const transcriptId = computed(() => route.query.transcript_id || '')
 
@@ -263,7 +264,8 @@ function load() {
     })
     .catch((e) => {
       if (e.message === 'Unauthorized') {
-        err.value = 'Authentication required. Log in on the admin page first.'
+        clearAuth()
+        router.push('/admin?expired=1')
       } else {
         err.value = e.message
       }
@@ -292,8 +294,16 @@ function tryAutoLoadVideo() {
   videoS3Status.value = 'Loading video from S3…'
   videoS3Err.value = false
   apiFetch('/api/admin/transcripts/' + transcriptId.value + '/video-url?s3_uri=' + encodeURIComponent(derived))
-    .then((r) => (r.ok ? r.json() : r.json().then((j) => Promise.reject(new Error(j.detail || r.statusText)))))
+    .then((r) => {
+      if (r.status === 401) {
+        clearAuth()
+        router.push('/admin?expired=1')
+        return
+      }
+      return r.ok ? r.json() : r.json().then((j) => Promise.reject(new Error(j.detail || r.statusText)))
+    })
     .then((data) => {
+      if (!data) return
       setVideoFromUrl(data.url)
       videoS3Status.value = ''
     })
@@ -313,8 +323,16 @@ function loadS3Video() {
   videoS3Status.value = 'Loading…'
   videoS3Err.value = false
   apiFetch('/api/admin/transcripts/' + transcriptId.value + '/video-url?s3_uri=' + encodeURIComponent(uri))
-    .then((r) => (r.ok ? r.json() : r.json().then((j) => Promise.reject(new Error(j.detail || r.statusText)))))
+    .then((r) => {
+      if (r.status === 401) {
+        clearAuth()
+        router.push('/admin?expired=1')
+        return
+      }
+      return r.ok ? r.json() : r.json().then((j) => Promise.reject(new Error(j.detail || r.statusText)))
+    })
     .then((data) => {
+      if (!data) return
       setVideoFromUrl(data.url)
       videoS3Status.value = ''
     })
@@ -388,8 +406,16 @@ function createAndAssign() {
       short_description: newShortDescription.value.trim() || null,
     }),
   })
-    .then((r) => (r.ok ? r.json() : Promise.reject(new Error(r.statusText))))
+    .then((r) => {
+      if (r.status === 401) {
+        clearAuth()
+        router.push('/admin?expired=1')
+        return
+      }
+      return r.ok ? r.json() : Promise.reject(new Error(r.statusText))
+    })
     .then((profile) => {
+      if (!profile) return
       speakers.value.push(profile)
       if (creatingForSpeakerId.value) {
         const m = mappings.value.find((x) => x.speaker_id_in_transcript === creatingForSpeakerId.value)
@@ -423,7 +449,14 @@ function saveMappings() {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ mappings: body }),
   })
-    .then((r) => (r.ok ? r.json() : Promise.reject(new Error(r.statusText))))
+    .then((r) => {
+      if (r.status === 401) {
+        clearAuth()
+        router.push('/admin?expired=1')
+        return
+      }
+      return r.ok ? r.json() : Promise.reject(new Error(r.statusText))
+    })
     .then(() => {
       saveStatus.value = 'Saved.'
     })

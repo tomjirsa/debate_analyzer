@@ -1,4 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import { ADMIN_AUTH_KEY } from '../composables/useAdminAuth'
 import HomeView from '../views/HomeView.vue'
 import SpeakerView from '../views/SpeakerView.vue'
 import AdminView from '../views/AdminView.vue'
@@ -16,6 +17,18 @@ const router = createRouter({
     { path: '/admin/speakers', name: 'admin-speakers', component: AdminSpeakersView },
     { path: '/admin/annotate', name: 'admin-annotate', component: AdminAnnotateView },
   ],
+})
+
+router.beforeEach((to) => {
+  if (to.path.startsWith('/admin') && to.path !== '/admin') {
+    try {
+      if (!sessionStorage.getItem(ADMIN_AUTH_KEY)) {
+        return { path: '/admin' }
+      }
+    } catch (_) {
+      return { path: '/admin' }
+    }
+  }
 })
 
 export default router

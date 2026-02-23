@@ -4,23 +4,7 @@
       <router-link to="/admin">← Admin</router-link>
     </p>
 
-    <Card v-if="showLogin">
-      <template #title>Admin login</template>
-      <template #content>
-        <p>Log in to manage speakers. You can also <router-link to="/admin">log in on the Admin page</router-link> first.</p>
-        <div class="flex flex-column gap-2" style="max-width: 320px;">
-          <label for="loginUser">Username</label>
-          <InputText id="loginUser" v-model="loginUser" placeholder="username" autocomplete="username" />
-          <label for="loginPass">Password</label>
-          <Password id="loginPass" v-model="loginPass" placeholder="password" :feedback="false" toggle-mask input-class="w-full" />
-          <Button label="Log in" @click="doLogin" />
-          <Message v-if="loginErr" severity="error">{{ loginErr }}</Message>
-        </div>
-      </template>
-    </Card>
-
-    <template v-else>
-      <Card class="mb-4">
+    <Card class="mb-4">
         <template #title>Add speaker</template>
         <template #content>
           <div class="flex flex-column gap-2" style="max-width: 400px;">
@@ -100,7 +84,6 @@
           <p v-else>No speakers. Add one above.</p>
         </template>
       </Card>
-    </template>
 
     <ConfirmPopup />
   </div>
@@ -108,6 +91,7 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import Button from 'primevue/button'
 import Card from 'primevue/card'
 import Column from 'primevue/column'
@@ -115,18 +99,14 @@ import ConfirmPopup from 'primevue/confirmpopup'
 import DataTable from 'primevue/datatable'
 import InputText from 'primevue/inputtext'
 import Message from 'primevue/message'
-import Password from 'primevue/password'
 import Textarea from 'primevue/textarea'
 import { useConfirm } from 'primevue/useconfirm'
 import { useAdminAuth } from '../composables/useAdminAuth'
 
-const { setAuth, clearAuth, apiFetch } = useAdminAuth()
+const router = useRouter()
+const { clearAuth, apiFetch } = useAdminAuth()
 const confirm = useConfirm()
 
-const showLogin = ref(true)
-const loginUser = ref('')
-const loginPass = ref('')
-const loginErr = ref('')
 const err = ref('')
 const speakers = ref([])
 
@@ -147,38 +127,29 @@ function displayName(p) {
   return (p.first_name && p.surname) ? `${p.first_name} ${p.surname}` : (p.display_name || p.id)
 }
 
+function redirectToLogin() {
+  clearAuth()
+  router.push('/admin?expired=1')
+}
+
 function loadSpeakers() {
   err.value = ''
   apiFetch('/api/admin/speakers')
     .then((r) => {
       if (r.status === 401) {
-        showLogin.value = true
+        redirectToLogin()
         return { _unauthorized: true }
       }
       return r.ok ? r.json() : Promise.reject(new Error(r.statusText))
     })
     .then((data) => {
       if (data && data._unauthorized) return
-      showLogin.value = false
       speakers.value = Array.isArray(data) ? data : []
       editingId.value = null
     })
     .catch((e) => {
       err.value = 'Failed to load speakers: ' + e.message
-      showLogin.value = true
     })
-}
-
-function doLogin() {
-  loginErr.value = ''
-  const user = loginUser.value.trim()
-  const pass = loginPass.value
-  if (!user || !pass) {
-    loginErr.value = 'Enter username and password.'
-    return
-  }
-  setAuth(user, pass)
-  loadSpeakers()
 }
 
 function addSpeaker() {
@@ -200,8 +171,15 @@ function addSpeaker() {
       bio: newBio.value.trim() || null,
     }),
   })
-    .then((r) => (r.ok ? r.json() : r.json().then((j) => Promise.reject(new Error(j.detail || r.statusText)))))
-    .then(() => {
+    .then((r) => {
+      if (r.status === 401) {
+        redirectToLogin()
+        return
+      }
+      return r.ok ? r.json() : r.json().then((j) => Promise.reject(new Error(j.detail || r.statusText)))
+    })
+    .then((data) => {
+      if (!data) return
       newFirstName.value = ''
       newSurname.value = ''
       newSlug.value = ''
@@ -244,7 +222,13 @@ function saveEdit(id) {
       short_description: editShortDescription.value.trim() || null,
     }),
   })
-    .then((r) => (r.ok ? r.json() : Promise.reject(new Error(r.statusText))))
+    .then((r) => {
+      if (r.status === 401) {
+        redirectToLogin()
+        return
+      }
+      return r.ok ? r.json() : Promise.reject(new Error(r.statusText))
+    })
     .then(() => loadSpeakers())
     .catch((e) => { addStatus.value = e.message })
 }
@@ -257,6 +241,10 @@ function confirmDelete(event, s) {
     accept: () => {
       apiFetch('/api/admin/speakers/' + s.id, { method: 'DELETE' })
         .then((r) => {
+          if (r.status === 401) {
+            redirectToLogin()
+            return
+          }
           if (r.status === 404) throw new Error('Speaker not found')
           if (r.status !== 204) throw new Error(r.statusText)
           loadSpeakers()
