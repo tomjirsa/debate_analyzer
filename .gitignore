@@ -161,3 +161,6 @@ data/*
 data/*/**
 !data/*/.gitkeep
 deploy/cookie_header.txt
+
+# Note files
+**/deployNotes.txt
