@@ -74,6 +74,93 @@ resource "aws_s3_bucket_versioning" "output" {
   }
 }
 
+# --- S3 CORS (for browser presigned PUT uploads to speaker-photos) ---
+resource "aws_s3_bucket_cors_configuration" "output" {
+  count  = length(var.cors_allowed_origins) > 0 ? 1 : 0
+  bucket = aws_s3_bucket.output.id
+
+  cors_rule {
+    allowed_headers = ["*"]
+    allowed_methods = ["GET", "PUT", "HEAD"]
+    allowed_origins = var.cors_allowed_origins
+    expose_headers  = ["ETag"]
+    max_age_seconds = 3600
+  }
+}
+
+# --- CloudFront: Origin Access Control (OAC) for S3 ---
+resource "aws_cloudfront_origin_access_control" "s3" {
+  name                              = "${local.name}-s3-oac"
+  description                       = "OAC for S3 bucket ${aws_s3_bucket.output.id}"
+  origin_access_control_origin_type = "s3"
+  signing_behavior                  = "always"
+  signing_protocol                  = "sigv4"
+}
+
+# --- CloudFront: distribution for stable URLs (speaker photos, optional video) ---
+resource "aws_cloudfront_distribution" "s3" {
+  comment = "Debate Analyzer S3 (speaker photos, jobs)"
+  enabled = true
+
+  origin {
+    domain_name              = aws_s3_bucket.output.bucket_regional_domain_name
+    origin_id                = "S3-${aws_s3_bucket.output.id}"
+    origin_access_control_id = aws_cloudfront_origin_access_control.s3.id
+  }
+
+  default_cache_behavior {
+    allowed_methods        = ["GET", "HEAD", "OPTIONS"]
+    cached_methods         = ["GET", "HEAD"]
+    target_origin_id       = "S3-${aws_s3_bucket.output.id}"
+    compress               = true
+    viewer_protocol_policy = "redirect-to-https"
+
+    forwarded_values {
+      query_string = false
+      cookies { forward = "none" }
+    }
+
+    min_ttl     = 0
+    default_ttl = 86400
+    max_ttl     = 31536000
+  }
+
+  restrictions {
+    geo_restriction {
+      restriction_type = "none"
+    }
+  }
+
+  viewer_certificate {
+    cloudfront_default_certificate = true
+  }
+}
+
+# --- S3 bucket policy: allow CloudFront to read (OAC) ---
+resource "aws_s3_bucket_policy" "output" {
+  bucket = aws_s3_bucket.output.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid       = "AllowCloudFrontServicePrincipal"
+        Effect    = "Allow"
+        Principal = { Service = "cloudfront.amazonaws.com" }
+        Action    = "s3:GetObject"
+        Resource  = "${aws_s3_bucket.output.arn}/*"
+        Condition = {
+          StringEquals = {
+            "AWS:SourceArn" = aws_cloudfront_distribution.s3.arn
+          }
+        }
+      }
+    ]
+  })
+
+  depends_on = [aws_s3_bucket_versioning.output]
+}
+
 # --- IAM: Batch job role (used by the container at runtime) ---
 resource "aws_iam_role" "batch_job" {
   name = "${local.name}-batch-job-role"

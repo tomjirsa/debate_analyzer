@@ -221,6 +221,15 @@ The image includes Deno and EJS for YouTube. If you still see **"Sign in to conf
 
 **Security:** The cookie file is as sensitive as a browser session. Use a private bucket or Secrets Manager and least-privilege IAM. Do not commit or log the file.
 
+## 8. Speaker profile photos (CloudFront + stable URLs)
+
+Speaker profile photos are stored in the same S3 bucket under the prefix `speaker-photos/<group_id>/<speaker_id>.<ext>` (e.g. `speaker-photos/<uuid>/<uuid>.jpg`). They are delivered at **stable, non-expiring** public URLs via a **CloudFront** distribution that the Batch stack creates in front of the bucket (Origin Access Control).
+
+- **Batch stack:** After `terraform apply`, the stack creates a CloudFront distribution and outputs `cloudfront_domain_name` and `cloudfront_speaker_photos_url` (e.g. `https://d123.cloudfront.net`). Configure **CORS** for the bucket if the web app origin needs to upload photos from the browser: set the variable `cors_allowed_origins` (e.g. `["https://your-webapp.example.com"]`) so that presigned PUT requests from the admin UI succeed.
+- **Web app stack:** When applying or updating the web app Terraform stack, set `cloudfront_speaker_photos_url` to the Batch stack output (e.g. `https://d123.cloudfront.net`) so the app receives `SPEAKER_PHOTOS_BASE_URL`. Optionally set `speaker_photos_s3_bucket` if you use a different bucket for uploads; otherwise it defaults to `existing_s3_bucket_name`. Redeploy the web app so the ECS task gets these environment variables; then the API will return `photo_url` for speakers that have a `photo_key` set.
+
+**Deployment order:** Apply the Batch stack first (to create CloudFront and bucket policy). Note the `cloudfront_speaker_photos_url` output. Apply or update the web app stack with `cloudfront_speaker_photos_url` (and optionally `speaker_photos_s3_bucket`), then deploy the app so migrations run and the new env vars are present.
+
 ## Summary
 
 1. Set `TF_VAR_hf_token`, run `terraform init` and `terraform apply` in `deploy/terraform/`.
@@ -230,3 +239,4 @@ The image includes Deno and EJS for YouTube. If you still see **"Sign in to conf
 5. **Optional Job 3 (stats):** After transcribe, run `./deploy/scripts/submit-jobs/submit-stats-job.sh s3://<bucket>/jobs/<job-id>/transcripts` to generate per-speaker stats parquet in the same folder. When you register transcripts from S3 in the web app, stats are loaded from these parquet files into the database.
 6. Find outputs in S3 under `jobs/<job-id>/videos/` and `jobs/<job-id>/transcripts/`, and logs in CloudWatch under `/aws/batch/debate-analyzer`.
 7. If YouTube shows "Sign in to confirm you're not a bot", use optional cookies (see section 7); set `YT_COOKIES_FILE`, `YT_COOKIES_S3_URI`, or `YT_COOKIES_SECRET_ARN` (or Terraform variable `yt_cookies_secret_arn`).
+8. **Speaker photos:** After applying the Batch stack, set the web app variable `cloudfront_speaker_photos_url` to the Batch output and (optionally) `cors_allowed_origins` for the bucket; then apply/update the web app stack and redeploy the app (see section 8).

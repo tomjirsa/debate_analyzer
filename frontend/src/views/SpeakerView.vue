@@ -16,8 +16,28 @@
 
     <template v-else-if="profile">
       <Card class="mb-4">
-        <template #title>{{ displayName }}</template>
-        <template #subtitle>{{ profile.short_description || '' }}</template>
+        <template #title>
+          <div class="flex align-items-center gap-3">
+            <Avatar
+              v-if="profile.photo_url"
+              :image="profile.photo_url"
+              shape="circle"
+              size="xlarge"
+              class="speaker-profile-avatar"
+            />
+            <Avatar
+              v-else
+              :label="profileInitials"
+              shape="circle"
+              size="xlarge"
+              class="speaker-profile-avatar"
+            />
+            <div>
+              <span class="block">{{ displayName }}</span>
+              <span v-if="profile.short_description" class="block text-color-secondary text-sm">{{ profile.short_description }}</span>
+            </div>
+          </div>
+        </template>
         <template #content>
           <p v-if="profile.bio">{{ profile.bio }}</p>
         </template>
@@ -128,6 +148,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import Avatar from 'primevue/avatar'
 import Breadcrumb from 'primevue/breadcrumb'
 import Card from 'primevue/card'
 import Message from 'primevue/message'
@@ -182,6 +203,14 @@ const displayName = computed(() => {
   const p = profile.value
   if (p.first_name && p.surname) return `${p.first_name} ${p.surname}`
   return p.display_name || ''
+})
+
+const profileInitials = computed(() => {
+  if (!profile.value) return '?'
+  const p = profile.value
+  const a = (p.first_name || '').trim().slice(0, 1)
+  const b = (p.surname || '').trim().slice(0, 1)
+  return (a + b).toUpperCase() || '?'
 })
 
 function hasShareStats(row) {
@@ -371,4 +400,5 @@ onMounted(async () => {
 .transcript-group { margin-top: 0.2rem; }
 .group-mini-label { font-weight: 500; margin-right: 0.5rem; }
 .group-values .mini-stat { margin-right: 1rem; }
+.speaker-profile-avatar { flex-shrink: 0; }
 </style>

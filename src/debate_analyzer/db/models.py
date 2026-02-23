@@ -73,6 +73,7 @@ class SpeakerProfile(Base):
     slug = Column(String(255), nullable=True, index=True)
     bio = Column(Text, nullable=True)
     short_description = Column(Text, nullable=True)
+    photo_key = Column(String(512), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -91,6 +92,7 @@ class SpeakerProfile(Base):
             "slug": self.slug,
             "bio": self.bio,
             "short_description": self.short_description,
+            "photo_key": self.photo_key,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }

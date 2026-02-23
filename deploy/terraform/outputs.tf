@@ -23,6 +23,16 @@ output "s3_bucket_arn" {
   value       = aws_s3_bucket.output.arn
 }
 
+output "cloudfront_domain_name" {
+  description = "CloudFront distribution domain (e.g. d123.cloudfront.net) for stable URLs."
+  value       = aws_cloudfront_distribution.s3.domain_name
+}
+
+output "cloudfront_speaker_photos_url" {
+  description = "Base URL for speaker profile photos (set as SPEAKER_PHOTOS_BASE_URL in web app)."
+  value       = "https://${aws_cloudfront_distribution.s3.domain_name}"
+}
+
 output "batch_job_queue_name" {
   description = "Name of the Batch job queue (use when submitting jobs)."
   value       = aws_batch_job_queue.this.name

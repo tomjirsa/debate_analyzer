@@ -1,5 +1,6 @@
 """FastAPI application: public and admin API, static files."""
 
+import os
 from pathlib import Path
 from typing import Annotated
 
@@ -15,11 +16,37 @@ from debate_analyzer.api.loader import (
     load_transcript_payload,
     load_transcript_stats_json,
 )
-from debate_analyzer.api.s3_utils import generate_presigned_get_url, parse_s3_uri
-from debate_analyzer.db import TranscriptRepository, init_db
+from debate_analyzer.api.s3_utils import (
+    generate_presigned_get_url,
+    generate_presigned_put_url,
+    parse_s3_uri,
+)
+from debate_analyzer.db import SpeakerProfile, TranscriptRepository, init_db
 from debate_analyzer.db.base import get_db
 
 app = FastAPI(title="Debate Analyzer Web", version="0.1.0")
+
+# Allowed extension and Content-Type for speaker photo uploads
+SPEAKER_PHOTO_EXT_ALLOWLIST = {"jpg", "jpeg", "png", "webp"}
+SPEAKER_PHOTO_CONTENT_TYPES = {
+    "jpg": "image/jpeg",
+    "jpeg": "image/jpeg",
+    "png": "image/png",
+    "webp": "image/webp",
+}
+
+
+def _speaker_to_dict(profile: SpeakerProfile) -> dict:
+    """Serialize speaker profile to dict and add photo_url from config."""
+    d = profile.to_dict()
+    base = os.environ.get("SPEAKER_PHOTOS_BASE_URL", "").strip()
+    if profile.photo_key and base:
+        base_rstrip = base.rstrip("/")
+        key_strip = profile.photo_key.lstrip("/")
+        d["photo_url"] = f"{base_rstrip}/{key_strip}" if key_strip else None
+    else:
+        d["photo_url"] = None
+    return d
 
 
 @app.on_event("startup")
@@ -50,9 +77,9 @@ def get_group(
     repo: Annotated[TranscriptRepository, Depends(get_repo_from_db)],
 ) -> dict:
     """Get a single group by id or slug (public)."""
-    group = repo.get_group_by_id(
+    group = repo.get_group_by_id(group_id_or_slug) or repo.get_group_by_slug(
         group_id_or_slug
-    ) or repo.get_group_by_slug(group_id_or_slug)
+    )
     if not group:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Group not found"
@@ -72,14 +99,14 @@ def list_speakers_in_group(
     repo: Annotated[TranscriptRepository, Depends(get_repo_from_db)],
 ) -> list[dict]:
     """List speaker profiles in a group (public)."""
-    group = repo.get_group_by_id(
+    group = repo.get_group_by_id(group_id_or_slug) or repo.get_group_by_slug(
         group_id_or_slug
-    ) or repo.get_group_by_slug(group_id_or_slug)
+    )
     if not group:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Group not found"
         )
-    return [p.to_dict() for p in repo.list_speaker_profiles(group_id=group.id)]
+    return [_speaker_to_dict(p) for p in repo.list_speaker_profiles(group_id=group.id)]
 
 
 @app.get("/api/groups/{group_id_or_slug}/transcripts")
@@ -89,9 +116,9 @@ def list_transcripts_in_group(
     limit: int = 50,
 ) -> list[dict]:
     """List transcripts in a group (public). Returns minimal fields for dashboard."""
-    group = repo.get_group_by_id(
+    group = repo.get_group_by_id(group_id_or_slug) or repo.get_group_by_slug(
         group_id_or_slug
-    ) or repo.get_group_by_slug(group_id_or_slug)
+    )
     if not group:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Group not found"
@@ -107,9 +134,9 @@ def get_transcript_in_group(
     repo: Annotated[TranscriptRepository, Depends(get_repo_from_db)],
 ) -> dict:
     """Get transcript and per-speaker stats by id within a group (public)."""
-    group = repo.get_group_by_id(
+    group = repo.get_group_by_id(group_id_or_slug) or repo.get_group_by_slug(
         group_id_or_slug
-    ) or repo.get_group_by_slug(group_id_or_slug)
+    )
     if not group:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Group not found"
@@ -133,9 +160,9 @@ def get_speaker_in_group(
     repo: Annotated[TranscriptRepository, Depends(get_repo_from_db)],
 ) -> dict:
     """Get speaker profile and stats by id or slug within a group (public)."""
-    group = repo.get_group_by_id(
+    group = repo.get_group_by_id(group_id_or_slug) or repo.get_group_by_slug(
         group_id_or_slug
-    ) or repo.get_group_by_slug(group_id_or_slug)
+    )
     if not group:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Group not found"
@@ -150,7 +177,7 @@ def get_speaker_in_group(
     stats = repo.get_speaker_stats(profile.id)
     stats_by_transcript = repo.get_speaker_stats_by_transcript(profile.id)
     return {
-        "profile": profile.to_dict(),
+        "profile": _speaker_to_dict(profile),
         "stats": stats,
         "stats_by_transcript": stats_by_transcript,
     }
@@ -162,7 +189,7 @@ def list_speakers(
     group_id: str | None = None,
 ) -> list[dict]:
     """List speaker profiles (public). Optional group_id to filter by group."""
-    return [p.to_dict() for p in repo.list_speaker_profiles(group_id=group_id)]
+    return [_speaker_to_dict(p) for p in repo.list_speaker_profiles(group_id=group_id)]
 
 
 @app.get("/api/speakers/{id_or_slug}")
@@ -186,7 +213,7 @@ def get_speaker(
     stats = repo.get_speaker_stats(profile.id)
     stats_by_transcript = repo.get_speaker_stats_by_transcript(profile.id)
     return {
-        "profile": profile.to_dict(),
+        "profile": _speaker_to_dict(profile),
         "stats": stats,
         "stats_by_transcript": stats_by_transcript,
     }
@@ -253,9 +280,9 @@ def admin_get_group(
     repo: Annotated[TranscriptRepository, Depends(get_repo_from_db)],
 ) -> dict:
     """Get group by id or slug (admin)."""
-    group = repo.get_group_by_id(
+    group = repo.get_group_by_id(group_id_or_slug) or repo.get_group_by_slug(
         group_id_or_slug
-    ) or repo.get_group_by_slug(group_id_or_slug)
+    )
     if not group:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Group not found"
@@ -271,9 +298,9 @@ def admin_update_group(
     repo: Annotated[TranscriptRepository, Depends(get_repo_from_db)],
 ) -> dict:
     """Update group (admin)."""
-    group = repo.get_group_by_id(
+    group = repo.get_group_by_id(group_id_or_slug) or repo.get_group_by_slug(
         group_id_or_slug
-    ) or repo.get_group_by_slug(group_id_or_slug)
+    )
     if not group:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Group not found"
@@ -294,9 +321,9 @@ def admin_delete_group(
     repo: Annotated[TranscriptRepository, Depends(get_repo_from_db)],
 ) -> Response:
     """Delete group (admin). Fails if group has transcripts or speakers."""
-    group = repo.get_group_by_id(
+    group = repo.get_group_by_id(group_id_or_slug) or repo.get_group_by_slug(
         group_id_or_slug
-    ) or repo.get_group_by_slug(group_id_or_slug)
+    )
     if not group:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Group not found"
@@ -323,9 +350,7 @@ def admin_list_transcripts(
     """List transcripts (admin). Optional group_id to filter."""
     return [
         t.to_dict()
-        for t in repo.list_transcripts(
-            limit=limit, offset=offset, group_id=group_id
-        )
+        for t in repo.list_transcripts(limit=limit, offset=offset, group_id=group_id)
     ]
 
 
@@ -455,6 +480,7 @@ class CreateSpeakerRequest(BaseModel):
     slug: str | None = None
     bio: str | None = None
     short_description: str | None = None
+    photo_key: str | None = None
 
 
 class UpdateSpeakerRequest(BaseModel):
@@ -465,6 +491,7 @@ class UpdateSpeakerRequest(BaseModel):
     slug: str | None = None
     bio: str | None = None
     short_description: str | None = None
+    photo_key: str | None = None
 
 
 @app.post("/api/admin/speakers")
@@ -481,8 +508,9 @@ def admin_create_speaker(
         slug=body.slug,
         bio=body.bio,
         short_description=body.short_description,
+        photo_key=body.photo_key,
     )
-    return profile.to_dict()
+    return _speaker_to_dict(profile)
 
 
 @app.put("/api/admin/speakers/{profile_id}")
@@ -500,12 +528,13 @@ def admin_update_speaker(
         slug=body.slug,
         bio=body.bio,
         short_description=body.short_description,
+        photo_key=body.photo_key,
     )
     if not profile:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Speaker not found"
         )
-    return profile.to_dict()
+    return _speaker_to_dict(profile)
 
 
 @app.delete("/api/admin/speakers/{profile_id}")
@@ -520,6 +549,59 @@ def admin_delete_speaker(
             status_code=status.HTTP_404_NOT_FOUND, detail="Speaker not found"
         )
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+PHOTO_UPLOAD_EXPIRES_IN = 3600
+
+
+@app.get("/api/admin/speakers/{profile_id}/photo-upload-url")
+def admin_speaker_photo_upload_url(
+    profile_id: str,
+    _: Annotated[object, Depends(get_admin_credentials)],
+    repo: Annotated[TranscriptRepository, Depends(get_repo_from_db)],
+    ext: str = "jpg",
+) -> dict:
+    """
+    Return a presigned PUT URL for uploading a speaker profile photo (admin).
+
+    Query param ext must be one of: jpg, jpeg, png, webp. The client should PUT
+    the file to put_url with the corresponding Content-Type, then PATCH the
+    speaker with photo_key set to the returned key.
+    """
+    profile = repo.get_speaker_profile_by_id(profile_id)
+    if not profile:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Speaker not found"
+        )
+    ext_lower = ext.lower().lstrip(".")
+    if ext_lower not in SPEAKER_PHOTO_EXT_ALLOWLIST:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"ext must be one of: {', '.join(sorted(SPEAKER_PHOTO_EXT_ALLOWLIST))}",
+        )
+    bucket = os.environ.get("SPEAKER_PHOTOS_S3_BUCKET", "").strip()
+    if not bucket:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=(
+                "Speaker photo upload is not configured: set SPEAKER_PHOTOS_S3_BUCKET "
+                "(and optionally SPEAKER_PHOTOS_BASE_URL for stable image URLs). "
+                "See doc/DEVELOPMENT.md for local testing."
+            ),
+        )
+    key = f"speaker-photos/{profile.group_id}/{profile_id}.{ext_lower}"
+    content_type = SPEAKER_PHOTO_CONTENT_TYPES.get(ext_lower)
+    put_url = generate_presigned_put_url(
+        bucket=bucket,
+        key=key,
+        expires_in=PHOTO_UPLOAD_EXPIRES_IN,
+        content_type=content_type,
+    )
+    return {
+        "put_url": put_url,
+        "key": key,
+        "expires_in": PHOTO_UPLOAD_EXPIRES_IN,
+    }
 
 
 class SaveMappingsRequest(BaseModel):
@@ -595,10 +677,7 @@ def admin_list_speakers(
     group_id: str | None = None,
 ) -> list[dict]:
     """List speaker profiles (admin). Optional group_id to filter."""
-    return [
-        p.to_dict()
-        for p in repo.list_speaker_profiles(group_id=group_id)
-    ]
+    return [_speaker_to_dict(p) for p in repo.list_speaker_profiles(group_id=group_id)]
 
 
 # ---------- Static / UI (Vue SPA) ----------

@@ -145,7 +145,12 @@ def test_get_speaker_stats_includes_extended_from_transcript_stats(repo, default
         "duration": 100.0,
         "transcription": [
             {"start": 0, "end": 10, "text": "one two", "speaker": "SPEAKER_00"},
-            {"start": 10, "end": 20, "text": "three four five", "speaker": "SPEAKER_00"},
+            {
+                "start": 10,
+                "end": 20,
+                "text": "three four five",
+                "speaker": "SPEAKER_00",
+            },
         ],
     }
     t = repo.create_transcript_from_payload(

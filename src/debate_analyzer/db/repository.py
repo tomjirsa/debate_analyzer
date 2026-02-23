@@ -286,6 +286,7 @@ class TranscriptRepository:
         slug: str | None = None,
         bio: str | None = None,
         short_description: str | None = None,
+        photo_key: str | None = None,
     ) -> SpeakerProfile:
         """Create a new speaker profile in the given group."""
         profile = SpeakerProfile(
@@ -295,6 +296,7 @@ class TranscriptRepository:
             slug=slug,
             bio=bio,
             short_description=short_description,
+            photo_key=photo_key,
         )
         self.session.add(profile)
         self.session.commit()
@@ -309,6 +311,7 @@ class TranscriptRepository:
         slug: str | None = None,
         bio: str | None = None,
         short_description: str | None = None,
+        photo_key: str | None = None,
     ) -> SpeakerProfile | None:
         """Update a speaker profile by id. Returns the profile or None if not found."""
         profile = self.get_speaker_profile_by_id(profile_id)
@@ -324,6 +327,8 @@ class TranscriptRepository:
             profile.bio = bio
         if short_description is not None:
             profile.short_description = short_description
+        if photo_key is not None:
+            profile.photo_key = photo_key if photo_key else None
         self.session.commit()
         self.session.refresh(profile)
         return profile
@@ -344,9 +349,7 @@ class TranscriptRepository:
         q = self.session.query(SpeakerProfile)
         if group_id is not None:
             q = q.filter(SpeakerProfile.group_id == group_id)
-        q = q.order_by(SpeakerProfile.surname, SpeakerProfile.first_name).limit(
-            limit
-        )
+        q = q.order_by(SpeakerProfile.surname, SpeakerProfile.first_name).limit(limit)
         return q.all()
 
     def get_mappings_for_transcript(self, transcript_id: str) -> list[SpeakerMapping]:
@@ -462,7 +465,9 @@ class TranscriptRepository:
         )
         if not tss_rows:
             return result
-        shorts = [r.shortest_talk_sec for r in tss_rows if r.shortest_talk_sec is not None]
+        shorts = [
+            r.shortest_talk_sec for r in tss_rows if r.shortest_talk_sec is not None
+        ]
         longs = [r.longest_talk_sec for r in tss_rows if r.longest_talk_sec is not None]
         medians = [
             r.median_segment_duration_sec
@@ -471,9 +476,7 @@ class TranscriptRepository:
         ]
         turn_counts = [r.turn_count for r in tss_rows if r.turn_count is not None]
         share_time = [
-            r.share_speaking_time
-            for r in tss_rows
-            if r.share_speaking_time is not None
+            r.share_speaking_time for r in tss_rows if r.share_speaking_time is not None
         ]
         share_w = [r.share_words for r in tss_rows if r.share_words is not None]
         total_turns = sum(turn_counts) if turn_counts else 0
@@ -494,9 +497,7 @@ class TranscriptRepository:
         result["share_speaking_time"] = (
             sum(share_time) / len(share_time) if share_time else None
         )
-        result["share_words"] = (
-            sum(share_w) / len(share_w) if share_w else None
-        )
+        result["share_words"] = sum(share_w) / len(share_w) if share_w else None
         return result
 
     def save_transcript_speaker_stats(
@@ -574,7 +575,9 @@ class TranscriptRepository:
             transcript = self.get_transcript_by_id(transcript_id)
             if transcript:
                 total_sec = sum(float(r["total_seconds"]) for r in rows)
-                transcript.duration = total_sec if total_sec > 0 else transcript.duration
+                transcript.duration = (
+                    total_sec if total_sec > 0 else transcript.duration
+                )
                 transcript.speakers_count = len(rows)
                 transcript.stats_total_words = sum(int(r["word_count"]) for r in rows)
                 transcript.stats_segment_count = sum(

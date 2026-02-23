@@ -164,11 +164,18 @@ resource "aws_iam_role_policy" "ecs_task_s3" {
   role   = aws_iam_role.ecs_task.id
   policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [{
-      Effect   = "Allow"
-      Action   = ["s3:GetObject", "s3:ListBucket"]
-      Resource = ["arn:aws:s3:::${var.existing_s3_bucket_name}", "arn:aws:s3:::${var.existing_s3_bucket_name}/*"]
-    }]
+    Statement = [
+      {
+        Effect   = "Allow"
+        Action   = ["s3:GetObject", "s3:ListBucket"]
+        Resource = ["arn:aws:s3:::${var.existing_s3_bucket_name}", "arn:aws:s3:::${var.existing_s3_bucket_name}/*"]
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["s3:PutObject", "s3:GetObject"]
+        Resource = "arn:aws:s3:::${var.existing_s3_bucket_name}/speaker-photos/*"
+      }
+    ]
   })
 }
 
@@ -256,9 +263,12 @@ resource "aws_security_group_rule" "ecs_from_alb" {
 
 # --- ECS task definition and service ---
 locals {
-  app_image = "${local.account_id}.dkr.ecr.${local.region}.amazonaws.com/${aws_ecr_repository.app.name}:${var.ecr_image_tag}"
-  db_host   = aws_db_instance.app.address
-  db_url    = "postgresql://app:${var.db_password}@${local.db_host}:5432/debate_analyzer"
+  app_image                    = "${local.account_id}.dkr.ecr.${local.region}.amazonaws.com/${aws_ecr_repository.app.name}:${var.ecr_image_tag}"
+  db_host                      = aws_db_instance.app.address
+  db_url                       = "postgresql://app:${var.db_password}@${local.db_host}:5432/debate_analyzer"
+  speaker_photos_s3_bucket     = coalesce(var.speaker_photos_s3_bucket, var.existing_s3_bucket_name)
+  task_env_speaker_photos_base = var.cloudfront_speaker_photos_url != null ? [{ name = "SPEAKER_PHOTOS_BASE_URL", value = var.cloudfront_speaker_photos_url }] : []
+  task_env_speaker_photos_s3   = [{ name = "SPEAKER_PHOTOS_S3_BUCKET", value = local.speaker_photos_s3_bucket }]
 }
 
 resource "aws_ecs_task_definition" "app" {
@@ -278,11 +288,15 @@ resource "aws_ecs_task_definition" "app" {
       containerPort = 8000
       protocol      = "tcp"
     }]
-    environment = [
-      { name = "DATABASE_URL", value = local.db_url },
-      { name = "ADMIN_USERNAME", value = var.admin_username },
-      { name = "ADMIN_PASSWORD", value = var.admin_password },
-    ]
+    environment = concat(
+      [
+        { name = "DATABASE_URL", value = local.db_url },
+        { name = "ADMIN_USERNAME", value = var.admin_username },
+        { name = "ADMIN_PASSWORD", value = var.admin_password },
+      ],
+      local.task_env_speaker_photos_base,
+      local.task_env_speaker_photos_s3
+    )
     logConfiguration = {
       logDriver = "awslogs"
       options = {

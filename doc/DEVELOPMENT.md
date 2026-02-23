@@ -94,6 +94,23 @@ make stats-local PREFIX=./data/transcripts
 
 On AWS Batch, the same code uses `TRANSCRIPTS_S3_PREFIX=s3://bucket/...`; the job detects S3 vs local from the prefix value.
 
+### Running the web app locally (speaker photo upload)
+
+To run the web app with SQLite and admin auth:
+
+```bash
+export FORCE_SQLITE=1 ADMIN_USERNAME=admin ADMIN_PASSWORD=admin
+poetry run python -m debate_analyzer.api
+```
+
+**Speaker profile photos:** Upload in the admin UI requires S3. If `SPEAKER_PHOTOS_S3_BUCKET` is not set, the photo-upload endpoint returns 503 and the UI will show an error when you click "Upload". To test uploads locally:
+
+1. Set `SPEAKER_PHOTOS_S3_BUCKET` to an existing S3 bucket name (e.g. the same bucket you use for transcripts on AWS).
+2. Ensure AWS credentials are configured (e.g. `aws configure` or env vars).
+3. Optionally set `SPEAKER_PHOTOS_BASE_URL` to the CloudFront URL (or any base URL) so that speaker list/detail responses include `photo_url`; otherwise `photo_url` is null even when `photo_key` is set.
+
+Without these, you can still create and edit speakers; only the photo upload button will fail with a clear "not configured" message.
+
 ## Code Quality Standards
 
 ### Code Formatting

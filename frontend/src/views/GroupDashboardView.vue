@@ -53,6 +53,24 @@
           No speakers in this group yet. Add transcripts and assign speakers in the admin.
         </Message>
         <DataTable v-else id="speakers" :value="speakers" data-key="id" class="dashboard-table">
+          <Column header="Photo" style="width: 56px;">
+            <template #body="{ data }">
+              <Avatar
+                v-if="data.photo_url"
+                :image="data.photo_url"
+                shape="circle"
+                size="normal"
+                class="speaker-thumb"
+              />
+              <Avatar
+                v-else
+                :label="initials(data)"
+                shape="circle"
+                size="normal"
+                class="speaker-thumb"
+              />
+            </template>
+          </Column>
           <Column field="display_name" header="Name" sortable>
             <template #body="{ data }">
               <router-link :to="speakerLink(data)">
@@ -75,6 +93,7 @@
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
+import Avatar from 'primevue/avatar'
 import Breadcrumb from 'primevue/breadcrumb'
 import Card from 'primevue/card'
 import Column from 'primevue/column'
@@ -102,6 +121,12 @@ const breadcrumbItems = computed(() => {
 function displayName(s) {
   if (s.first_name && s.surname) return `${s.first_name} ${s.surname}`
   return s.display_name || s.id
+}
+
+function initials(s) {
+  const a = (s.first_name || '').trim().slice(0, 1)
+  const b = (s.surname || '').trim().slice(0, 1)
+  return (a + b).toUpperCase() || '?'
 }
 
 function speakerLink(s) {
@@ -161,5 +186,6 @@ watch(groupIdOrSlug, load)
 .dashboard-table a { text-decoration: none; }
 .dashboard-table a:hover { text-decoration: underline; }
 .cell-truncate { display: inline-block; max-width: 20rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.speaker-thumb { flex-shrink: 0; }
 .mb-3 { margin-bottom: 1rem; }
 </style>

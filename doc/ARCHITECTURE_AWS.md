@@ -115,8 +115,9 @@ flowchart TB
 | `jobs/<job-id>/videos/` | Downloaded video files (directly under this prefix, e.g. `<filename>.mp4`) | Download job or full-pipeline job | Transcribe job (if two-job flow); optional manual use |
 | `jobs/<job-id>/subtitles/` | Downloaded subtitle files (e.g. `.srt`) | Download job or full-pipeline job | Optional manual use |
 | `jobs/<job-id>/transcripts/` | Transcription JSON (and optionally audio) | Transcribe job or full-pipeline job | Web app (register transcript by S3 URI) |
+| `speaker-photos/<group_id>/<speaker_id>.<ext>` | Speaker profile photos (e.g. `.jpg`) | Web app (admin upload via presigned PUT) | CloudFront (stable public URLs); web app (presigned PUT) |
 
-The web app stack does **not** create a new bucket; it uses `existing_s3_bucket_name` to grant the ECS task role read access to this bucket.
+The web app stack does **not** create a new bucket; it uses `existing_s3_bucket_name` to grant the ECS task role read access to this bucket. Speaker photos are served at **stable URLs** via a **CloudFront** distribution (created by the Batch stack); the web app needs `cloudfront_speaker_photos_url` and optionally `speaker_photos_s3_bucket` set so that `SPEAKER_PHOTOS_BASE_URL` and `SPEAKER_PHOTOS_S3_BUCKET` are passed to the ECS task.
 
 ---
 

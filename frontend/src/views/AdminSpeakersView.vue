@@ -37,6 +37,7 @@
         <template #title>Speakers</template>
         <template #content>
           <Message v-if="err" severity="error">{{ err }}</Message>
+          <Message v-else-if="uploadStatus" :severity="uploadStatus === 'Uploaded.' ? 'success' : 'info'">{{ uploadStatus }}</Message>
           <DataTable
             v-else-if="speakers.length"
             :value="speakers"
@@ -44,6 +45,36 @@
             responsive-layout="scroll"
             class="p-datatable-sm"
           >
+            <Column header="Photo" style="width: 80px;">
+              <template #body="{ data }">
+                <div class="flex align-items-center gap-2">
+                  <Avatar
+                    v-if="data.photo_url"
+                    :image="data.photo_url"
+                    shape="circle"
+                    size="normal"
+                    class="speaker-photo-thumb"
+                  />
+                  <Avatar
+                    v-else
+                    :label="initials(data)"
+                    shape="circle"
+                    size="normal"
+                    class="speaker-photo-thumb"
+                  />
+                  <span v-if="editingId !== data.id" class="flex flex-column gap-1">
+                    <Button label="Upload" text size="small" @click="triggerUpload(data.id)" />
+                    <Button
+                      v-if="data.photo_key"
+                      label="Remove"
+                      text size="small"
+                      severity="secondary"
+                      @click="removePhoto(data)"
+                    />
+                  </span>
+                </div>
+              </template>
+            </Column>
             <Column header="Name">
               <template #body="{ data }">
                 <template v-if="editingId !== data.id">
@@ -94,6 +125,13 @@
         </template>
       </Card>
 
+    <input
+      ref="fileInputRef"
+      type="file"
+      accept="image/jpeg,image/png,image/webp"
+      class="hidden"
+      @change="onFileSelected"
+    />
     <ConfirmPopup />
   </div>
 </template>
@@ -101,6 +139,7 @@
 <script setup>
 import { ref, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
+import Avatar from 'primevue/avatar'
 import Button from 'primevue/button'
 import Card from 'primevue/card'
 import Column from 'primevue/column'
@@ -135,8 +174,84 @@ const editSurname = ref('')
 const editSlug = ref('')
 const editShortDescription = ref('')
 
+const fileInputRef = ref(null)
+const uploadTargetId = ref(null)
+const uploadStatus = ref('')
+
+const ALLOWED_EXT = ['jpg', 'jpeg', 'png', 'webp']
+
 function displayName(p) {
   return (p.first_name && p.surname) ? `${p.first_name} ${p.surname}` : (p.display_name || p.id)
+}
+
+function initials(p) {
+  const a = (p.first_name || '').trim().slice(0, 1)
+  const b = (p.surname || '').trim().slice(0, 1)
+  return (a + b).toUpperCase() || '?'
+}
+
+function triggerUpload(speakerId) {
+  uploadTargetId.value = speakerId
+  uploadStatus.value = ''
+  fileInputRef.value?.click()
+}
+
+function onFileSelected(event) {
+  const file = event.target.files?.[0]
+  const id = uploadTargetId.value
+  if (!file || !id) return
+  event.target.value = ''
+  uploadTargetId.value = null
+  const ext = (file.name.split('.').pop() || 'jpg').toLowerCase()
+  const safeExt = ALLOWED_EXT.includes(ext) ? ext : 'jpg'
+  uploadStatus.value = 'Uploading...'
+  apiFetch('/api/admin/speakers/' + id + '/photo-upload-url?ext=' + encodeURIComponent(safeExt))
+    .then((r) => {
+      if (r.status === 401) {
+        redirectToLogin()
+        return null
+      }
+      return r.ok ? r.json() : Promise.reject(new Error(r.statusText))
+    })
+    .then((data) => {
+      if (!data?.put_url || !data?.key) throw new Error('Invalid upload URL response')
+      return fetch(data.put_url, {
+        method: 'PUT',
+        body: file,
+        headers: { 'Content-Type': file.type || 'image/jpeg' },
+      }).then((res) => {
+        if (!res.ok) throw new Error('Upload failed')
+        return data.key
+      })
+    })
+    .then((key) => {
+      return apiFetch('/api/admin/speakers/' + id, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ photo_key: key }),
+      })
+    })
+    .then((r) => {
+      if (r.status === 401) { redirectToLogin(); return }
+      if (!r.ok) throw new Error(r.statusText)
+      uploadStatus.value = 'Uploaded.'
+      loadSpeakers()
+    })
+    .catch((e) => { uploadStatus.value = e.message || 'Failed' })
+}
+
+function removePhoto(data) {
+  apiFetch('/api/admin/speakers/' + data.id, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ photo_key: null }),
+  })
+    .then((r) => {
+      if (r.status === 401) { redirectToLogin(); return }
+      if (!r.ok) throw new Error(r.statusText)
+      loadSpeakers()
+    })
+    .catch((e) => { addStatus.value = e.message })
 }
 
 function redirectToLogin() {
@@ -296,4 +411,6 @@ watch(selectedGroupId, () => { loadSpeakers() })
 .mb-3 { margin-bottom: 1rem; }
 .mb-4 { margin-bottom: 1.5rem; }
 .ml-1 { margin-left: 0.25rem; }
+.hidden { position: absolute; opacity: 0; width: 0; height: 0; pointer-events: none; }
+.speaker-photo-thumb { flex-shrink: 0; }
 </style>

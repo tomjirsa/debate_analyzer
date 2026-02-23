@@ -52,3 +52,34 @@ def generate_presigned_get_url(
         Params={"Bucket": bucket, "Key": key},
         ExpiresIn=expires_in,
     )
+
+
+def generate_presigned_put_url(
+    bucket: str,
+    key: str,
+    expires_in: int = 3600,
+    content_type: str | None = None,
+) -> str:
+    """
+    Generate a presigned PUT URL for uploading an S3 object.
+
+    Args:
+        bucket: S3 bucket name.
+        key: S3 object key.
+        expires_in: URL validity in seconds (default 1 hour).
+        content_type: Optional Content-Type for the upload.
+
+    Returns:
+        Presigned URL string.
+    """
+    import boto3
+
+    client = boto3.client("s3")
+    params: dict[str, str] = {"Bucket": bucket, "Key": key}
+    if content_type:
+        params["ContentType"] = content_type
+    return client.generate_presigned_url(
+        "put_object",
+        Params=params,
+        ExpiresIn=expires_in,
+    )

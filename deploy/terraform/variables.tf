@@ -88,3 +88,9 @@ variable "use_spot" {
   type        = bool
   default     = false
 }
+
+variable "cors_allowed_origins" {
+  description = "CORS allowed origins for the S3 bucket (e.g. [\"https://your-webapp.example.com\"] for presigned PUT uploads). Empty list = no CORS."
+  type        = list(string)
+  default     = []
+}

@@ -50,3 +50,15 @@ variable "ecr_image_tag" {
   type        = string
   default     = "latest"
 }
+
+variable "cloudfront_speaker_photos_url" {
+  description = "Base URL for speaker profile photos (e.g. https://d123.cloudfront.net from Batch stack output). If null, photo_url will be null in API responses."
+  type        = string
+  default     = null
+}
+
+variable "speaker_photos_s3_bucket" {
+  description = "S3 bucket for speaker photo uploads. Defaults to existing_s3_bucket_name when null."
+  type        = string
+  default     = null
+}
