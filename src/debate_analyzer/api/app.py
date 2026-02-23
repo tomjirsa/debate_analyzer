@@ -13,6 +13,7 @@ from debate_analyzer.api.auth import get_admin_credentials
 from debate_analyzer.api.loader import (
     load_speaker_stats_parquet,
     load_transcript_payload,
+    load_transcript_stats_json,
 )
 from debate_analyzer.api.s3_utils import generate_presigned_get_url, parse_s3_uri
 from debate_analyzer.db import TranscriptRepository, init_db
@@ -97,6 +98,32 @@ def list_transcripts_in_group(
         )
     transcripts = repo.list_transcripts(limit=limit, group_id=group.id)
     return [t.to_dict() for t in transcripts]
+
+
+@app.get("/api/groups/{group_id_or_slug}/transcripts/{transcript_id}")
+def get_transcript_in_group(
+    group_id_or_slug: str,
+    transcript_id: str,
+    repo: Annotated[TranscriptRepository, Depends(get_repo_from_db)],
+) -> dict:
+    """Get transcript and per-speaker stats by id within a group (public)."""
+    group = repo.get_group_by_id(
+        group_id_or_slug
+    ) or repo.get_group_by_slug(group_id_or_slug)
+    if not group:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Group not found"
+        )
+    transcript = repo.get_transcript_by_id(transcript_id, group_id=group.id)
+    if not transcript:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Transcript not found"
+        )
+    speaker_stats = repo.get_speaker_stats_for_transcript(transcript_id)
+    return {
+        "transcript": transcript.to_dict(),
+        "speaker_stats": speaker_stats,
+    }
 
 
 @app.get("/api/groups/{group_id_or_slug}/speakers/{id_or_slug}")
@@ -370,6 +397,11 @@ def admin_register_transcript(
         stats_rows = load_speaker_stats_parquet(parquet_uri)
         if stats_rows:
             repo.save_transcript_speaker_stats(transcript.id, stats_rows)
+        stats = load_transcript_stats_json(body.source_uri)
+        if stats:
+            updated = repo.update_transcript_stats(transcript.id, **stats)
+            if updated:
+                transcript = updated
     return transcript.to_dict()
 
 

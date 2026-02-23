@@ -29,11 +29,14 @@
           No transcripts in this group yet. Add them in the admin.
         </Message>
         <ul v-else id="transcripts" class="transcript-list">
-          <li v-for="t in transcripts" :key="t.id">
-            <a :href="transcriptLink(t)" target="_blank" rel="noopener noreferrer">
+          <li v-for="t in transcripts" :key="t.id" class="transcript-item">
+            <router-link :to="transcriptLink(t)">
               {{ t.title || t.source_uri || t.id }}
-            </a>
+            </router-link>
             <span v-if="t.created_at" class="transcript-date">{{ formatDate(t.created_at) }}</span>
+            <div v-if="hasStats(t)" class="transcript-stats">
+              {{ formatDuration(t.duration) }} · {{ formatNum(t.stats_total_words) }} words · {{ formatNum(t.stats_segment_count) }} segments · {{ formatNum(t.speakers_count) }} speakers
+            </div>
           </li>
         </ul>
       </template>
@@ -94,7 +97,8 @@ function speakerLink(s) {
 }
 
 function transcriptLink(t) {
-  return `/admin/annotate?transcript_id=${encodeURIComponent(t.id)}`
+  const g = groupIdOrSlug.value
+  return `/group/${encodeURIComponent(g)}/transcripts/${encodeURIComponent(t.id)}`
 }
 
 function formatDate(iso) {
@@ -105,6 +109,24 @@ function formatDate(iso) {
   } catch (_) {
     return iso
   }
+}
+
+function hasStats(t) {
+  return t.duration != null || t.stats_total_words != null || t.stats_segment_count != null || t.speakers_count != null
+}
+
+function formatDuration(seconds) {
+  if (seconds == null || typeof seconds !== 'number') return '—'
+  const m = Math.floor(seconds / 60)
+  const s = Math.floor(seconds % 60)
+  return `${m}:${String(s).padStart(2, '0')}`
+}
+
+function formatNum(n) {
+  if (n == null || n === '') return '—'
+  const num = Number(n)
+  if (Number.isNaN(num)) return '—'
+  return num.toLocaleString()
 }
 
 async function load() {
@@ -143,6 +165,8 @@ watch(groupIdOrSlug, load)
 .speaker-list li, .transcript-list li { margin: 0.5rem 0; }
 .speaker-list a, .transcript-list a { text-decoration: none; }
 .speaker-list a:hover, .transcript-list a:hover { text-decoration: underline; }
+.transcript-item { display: flex; flex-direction: column; gap: 0.25rem; }
 .transcript-date { margin-left: 0.5rem; font-size: 0.9rem; color: var(--p-text-muted-color, #6b7280); }
+.transcript-stats { font-size: 0.85rem; color: var(--p-text-muted-color, #6b7280); }
 .mb-3 { margin-bottom: 1rem; }
 </style>

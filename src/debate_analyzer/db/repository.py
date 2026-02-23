@@ -219,6 +219,32 @@ class TranscriptRepository:
         self.session.refresh(transcript)
         return transcript
 
+    def update_transcript_stats(
+        self,
+        transcript_id: str,
+        total_seconds: float | None = None,
+        total_words: int | None = None,
+        segment_count: int | None = None,
+        speaker_count: int | None = None,
+    ) -> Transcript | None:
+        """Update transcript stats (duration, speakers_count, stats_total_words, stats_segment_count).
+        Returns updated transcript or None if not found.
+        """
+        transcript = self.get_transcript_by_id(transcript_id)
+        if not transcript:
+            return None
+        if total_seconds is not None:
+            transcript.duration = total_seconds
+        if speaker_count is not None:
+            transcript.speakers_count = speaker_count
+        if total_words is not None:
+            transcript.stats_total_words = total_words
+        if segment_count is not None:
+            transcript.stats_segment_count = segment_count
+        self.session.commit()
+        self.session.refresh(transcript)
+        return transcript
+
     def delete_transcript(self, transcript_id: str) -> bool:
         """Delete transcript (cascades to segments and mappings).
         Returns True if deleted, False if not found.
@@ -543,6 +569,17 @@ class TranscriptRepository:
                     ),
                 )
             )
+        # Fallback: derive transcript-level stats from rows when batch JSON is missing
+        if rows:
+            transcript = self.get_transcript_by_id(transcript_id)
+            if transcript:
+                total_sec = sum(float(r["total_seconds"]) for r in rows)
+                transcript.duration = total_sec if total_sec > 0 else transcript.duration
+                transcript.speakers_count = len(rows)
+                transcript.stats_total_words = sum(int(r["word_count"]) for r in rows)
+                transcript.stats_segment_count = sum(
+                    int(r["segment_count"]) for r in rows
+                )
         self.session.commit()
 
     def get_speaker_stats_for_transcript(

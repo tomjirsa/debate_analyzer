@@ -16,7 +16,7 @@
             <Select
               id="transcriptGroup"
               v-model="selectedGroupId"
-              :options="groups"
+              :options="groupOptions"
               option-label="name"
               option-value="id"
               placeholder="Select group"
@@ -107,6 +107,8 @@ const { clearAuth, apiFetch } = useAdminAuth()
 const confirm = useConfirm()
 
 const groups = ref([])
+/** Select options: "All groups" (id: null) plus each group. */
+const groupOptions = ref([{ id: null, name: 'All groups' }])
 const selectedGroupId = ref(null)
 const transcripts = ref([])
 const listErr = ref('')
@@ -140,8 +142,10 @@ function loadGroups() {
     .then((r) => (r.ok ? r.json() : []))
     .then((data) => {
       groups.value = Array.isArray(data) ? data : []
-      if (groups.value.length && !selectedGroupId.value) {
-        selectedGroupId.value = groups.value[0].id
+      groupOptions.value = [{ id: null, name: 'All groups' }, ...groups.value]
+      // Keep current selection if still valid; otherwise stay on "All groups" (null)
+      if (selectedGroupId.value != null && !groups.value.some((g) => g.id === selectedGroupId.value)) {
+        selectedGroupId.value = null
       }
     })
     .catch(() => {})

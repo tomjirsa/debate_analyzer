@@ -59,6 +59,60 @@ def _load_from_file(path: Path) -> dict[str, Any]:
         return json.load(f)
 
 
+def load_transcript_stats_json(source_uri: str) -> dict[str, Any] | None:
+    """
+    Load transcript-level stats from JSON (batch job output).
+
+    Given a transcript source_uri (e.g. ending in _transcription.json), derives
+    the stats URI by replacing with _transcript_stats.json and loads from S3 or
+    local file. Returns None if file is missing or unreadable.
+
+    Returns:
+        Dict with total_seconds, total_words, segment_count, speaker_count, or None.
+    """
+    source_uri = source_uri.strip()
+    if "_transcription.json" not in source_uri:
+        return None
+    stats_uri = source_uri.replace("_transcription.json", "_transcript_stats.json")
+    try:
+        if stats_uri.startswith("s3://"):
+            return _load_transcript_stats_from_s3(stats_uri)
+        if stats_uri.startswith("file://"):
+            path = Path(stats_uri[7:])
+        else:
+            path = Path(stats_uri)
+        return _load_transcript_stats_from_file(path)
+    except Exception:
+        return None
+
+
+def _load_transcript_stats_from_s3(uri: str) -> dict[str, Any] | None:
+    """Fetch transcript stats JSON from S3."""
+    if not uri.startswith("s3://") or len(uri) < 8:
+        return None
+    rest = uri[5:]
+    parts = rest.split("/", 1)
+    bucket = parts[0]
+    key = parts[1] if len(parts) > 1 else ""
+    if not key:
+        return None
+    client = boto3.client("s3")
+    try:
+        response = client.get_object(Bucket=bucket, Key=key)
+    except Exception:
+        return None
+    body = response["Body"].read().decode("utf-8")
+    return json.loads(body)
+
+
+def _load_transcript_stats_from_file(path: Path) -> dict[str, Any] | None:
+    """Read transcript stats JSON from local file."""
+    if not path.exists():
+        return None
+    with open(path, encoding="utf-8") as f:
+        return json.load(f)
+
+
 def load_speaker_stats_parquet(parquet_uri: str) -> list[dict[str, Any]]:
     """
     Load speaker stats from a parquet file (S3 or local).

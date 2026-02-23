@@ -111,6 +111,8 @@ class Transcript(Base):
     duration = Column(Float, nullable=True)
     video_path = Column(String(1024), nullable=True)
     speakers_count = Column(Integer, nullable=True)
+    stats_total_words = Column(Integer, nullable=True)
+    stats_segment_count = Column(Integer, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     metadata_ = Column("metadata", JSON, nullable=True)
 
@@ -138,6 +140,8 @@ class Transcript(Base):
             "duration": self.duration,
             "video_path": self.video_path,
             "speakers_count": self.speakers_count,
+            "stats_total_words": self.stats_total_words,
+            "stats_segment_count": self.stats_segment_count,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "metadata": self.metadata_,
         }

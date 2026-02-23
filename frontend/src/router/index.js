@@ -3,6 +3,7 @@ import { ADMIN_AUTH_KEY } from '../composables/useAdminAuth'
 import HomeView from '../views/HomeView.vue'
 import GroupDashboardView from '../views/GroupDashboardView.vue'
 import SpeakerView from '../views/SpeakerView.vue'
+import TranscriptView from '../views/TranscriptView.vue'
 import AdminView from '../views/AdminView.vue'
 import AdminGroupsView from '../views/AdminGroupsView.vue'
 import AdminTranscriptsView from '../views/AdminTranscriptsView.vue'
@@ -15,6 +16,7 @@ const router = createRouter({
     { path: '/', name: 'home', component: HomeView },
     { path: '/group/:idOrSlug', name: 'group-dashboard', component: GroupDashboardView },
     { path: '/group/:groupId/speakers/:idOrSlug', name: 'group-speaker', component: SpeakerView },
+    { path: '/group/:groupId/transcripts/:transcriptId', name: 'group-transcript', component: TranscriptView },
     { path: '/speakers/:idOrSlug', name: 'speaker', component: SpeakerView },
     { path: '/admin', name: 'admin', component: AdminView },
     { path: '/admin/groups', name: 'admin-groups', component: AdminGroupsView },

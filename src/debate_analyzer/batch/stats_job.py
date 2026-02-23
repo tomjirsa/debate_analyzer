@@ -232,6 +232,50 @@ def _rows_to_parquet_table(rows: list[dict[str, Any]]) -> pa.Table:
     )
 
 
+def _compute_transcript_stats(
+    rows: list[dict[str, Any]],
+    duration_from_json: float | None = None,
+) -> dict[str, Any]:
+    """
+    Compute transcript-level aggregates from per-speaker stat rows.
+
+    Returns:
+        Dict with total_seconds, total_words, segment_count, speaker_count.
+    """
+    if not rows:
+        return {
+            "total_seconds": None,
+            "total_words": 0,
+            "segment_count": 0,
+            "speaker_count": 0,
+        }
+    total_seconds = sum(r["total_seconds"] for r in rows)
+    if duration_from_json is not None and duration_from_json > 0:
+        total_seconds = duration_from_json
+    return {
+        "total_seconds": total_seconds,
+        "total_words": sum(r["word_count"] for r in rows),
+        "segment_count": sum(r["segment_count"] for r in rows),
+        "speaker_count": len(rows),
+    }
+
+
+def _write_transcript_stats_to_s3(
+    stats: dict[str, Any],
+    bucket: str,
+    key: str,
+    s3_client: Any,
+) -> None:
+    """Write transcript stats JSON to S3."""
+    body = json.dumps(stats)
+    s3_client.put_object(
+        Bucket=bucket,
+        Key=key,
+        Body=body.encode("utf-8"),
+        ContentType="application/json",
+    )
+
+
 def _write_parquet_to_s3(
     rows: list[dict[str, Any]],
     bucket: str,
@@ -297,6 +341,9 @@ def _run_s3(prefix: str) -> int:
                 continue
             parquet_key = prefix_key + stem + "_speaker_stats.parquet"
             _write_parquet_to_s3(rows, bucket, parquet_key, client)
+            stats = _compute_transcript_stats(rows, duration_from_json=duration)
+            stats_key = prefix_key + stem + "_transcript_stats.json"
+            _write_transcript_stats_to_s3(stats, bucket, stats_key, client)
             count += 1
             print(f"Wrote {parquet_key}")
     return count
@@ -336,6 +383,9 @@ def _run_local(dir_path: Path) -> int:
             continue
         out_path = dir_path / f"{stem}_speaker_stats.parquet"
         _write_parquet_to_file(rows, out_path)
+        stats = _compute_transcript_stats(rows, duration_from_json=duration)
+        stats_path = dir_path / f"{stem}_transcript_stats.json"
+        stats_path.write_text(json.dumps(stats), encoding="utf-8")
         count += 1
         print(f"Wrote {out_path}")
     return count
