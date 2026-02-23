@@ -585,33 +585,56 @@ class TranscriptRepository:
     def get_speaker_stats_for_transcript(
         self, transcript_id: str
     ) -> list[dict[str, Any]]:
-        """Return per-speaker stats for a transcript (for admin transcript view)."""
-        rows = (
-            self.session.query(TranscriptSpeakerStats)
+        """
+        Return per-speaker stats for a transcript with display names from mappings.
+
+        Each row includes speaker_display_name: mapped speaker name if set, else
+        speaker_id_in_transcript (e.g. SPEAKER_00).
+        """
+        q = (
+            self.session.query(TranscriptSpeakerStats, SpeakerProfile)
+            .outerjoin(
+                SpeakerMapping,
+                (TranscriptSpeakerStats.transcript_id == SpeakerMapping.transcript_id)
+                & (
+                    TranscriptSpeakerStats.speaker_id_in_transcript
+                    == SpeakerMapping.speaker_id_in_transcript
+                ),
+            )
+            .outerjoin(
+                SpeakerProfile,
+                SpeakerMapping.speaker_profile_id == SpeakerProfile.id,
+            )
             .filter(TranscriptSpeakerStats.transcript_id == transcript_id)
-            .all()
         )
-        return [
-            {
-                "speaker_id_in_transcript": r.speaker_id_in_transcript,
-                "total_seconds": r.total_seconds,
-                "segment_count": r.segment_count,
-                "word_count": r.word_count,
-                "wpm": r.wpm,
-                "avg_segment_duration_sec": r.avg_segment_duration_sec,
-                "shortest_talk_sec": r.shortest_talk_sec,
-                "longest_talk_sec": r.longest_talk_sec,
-                "median_segment_duration_sec": r.median_segment_duration_sec,
-                "turn_count": r.turn_count,
-                "avg_turn_length_sec": r.avg_turn_length_sec,
-                "avg_turn_length_segments": r.avg_turn_length_segments,
-                "is_first_speaker": r.is_first_speaker,
-                "is_last_speaker": r.is_last_speaker,
-                "share_speaking_time": r.share_speaking_time,
-                "share_words": r.share_words,
-            }
-            for r in rows
-        ]
+        result = []
+        for stats_row, profile in q.all():
+            if profile is not None:
+                display_name = f"{profile.first_name} {profile.surname}".strip()
+            else:
+                display_name = stats_row.speaker_id_in_transcript
+            result.append(
+                {
+                    "speaker_id_in_transcript": stats_row.speaker_id_in_transcript,
+                    "speaker_display_name": display_name,
+                    "total_seconds": stats_row.total_seconds,
+                    "segment_count": stats_row.segment_count,
+                    "word_count": stats_row.word_count,
+                    "wpm": stats_row.wpm,
+                    "avg_segment_duration_sec": stats_row.avg_segment_duration_sec,
+                    "shortest_talk_sec": stats_row.shortest_talk_sec,
+                    "longest_talk_sec": stats_row.longest_talk_sec,
+                    "median_segment_duration_sec": stats_row.median_segment_duration_sec,
+                    "turn_count": stats_row.turn_count,
+                    "avg_turn_length_sec": stats_row.avg_turn_length_sec,
+                    "avg_turn_length_segments": stats_row.avg_turn_length_segments,
+                    "is_first_speaker": stats_row.is_first_speaker,
+                    "is_last_speaker": stats_row.is_last_speaker,
+                    "share_speaking_time": stats_row.share_speaking_time,
+                    "share_words": stats_row.share_words,
+                }
+            )
+        return result
 
     def get_stat_definitions(self) -> list[dict[str, Any]]:
         """

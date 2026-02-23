@@ -62,10 +62,10 @@
               :value-formatter="chartValueFormatter"
             />
           </div>
-          <ul class="speaker-list">
+            <ul class="speaker-list">
             <li v-for="row in speakerStats" :key="row.speaker_id_in_transcript" class="speaker-row">
               <div class="speaker-main">
-                <span class="speaker-id">{{ row.speaker_id_in_transcript }}</span>
+                <span class="speaker-id">{{ row.speaker_display_name || row.speaker_id_in_transcript }}</span>
                 <span class="speaker-stats">{{ formatTime(row.total_seconds) }}, {{ formatNum(row.word_count) }} words</span>
               </div>
               <div v-if="hasShareStats(row)" class="relative-share">
@@ -165,7 +165,9 @@ function truncateLabel(str, maxLen = 20) {
 }
 
 const chartLabels = computed(() =>
-  (speakerStats.value || []).map((row) => truncateLabel(row.speaker_id_in_transcript))
+  (speakerStats.value || []).map((row) =>
+    truncateLabel(row.speaker_display_name || row.speaker_id_in_transcript)
+  )
 )
 
 const chartValues = computed(() => {
