@@ -81,6 +81,24 @@ def list_speakers_in_group(
     return [p.to_dict() for p in repo.list_speaker_profiles(group_id=group.id)]
 
 
+@app.get("/api/groups/{group_id_or_slug}/transcripts")
+def list_transcripts_in_group(
+    group_id_or_slug: str,
+    repo: Annotated[TranscriptRepository, Depends(get_repo_from_db)],
+    limit: int = 50,
+) -> list[dict]:
+    """List transcripts in a group (public). Returns minimal fields for dashboard."""
+    group = repo.get_group_by_id(
+        group_id_or_slug
+    ) or repo.get_group_by_slug(group_id_or_slug)
+    if not group:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Group not found"
+        )
+    transcripts = repo.list_transcripts(limit=limit, group_id=group.id)
+    return [t.to_dict() for t in transcripts]
+
+
 @app.get("/api/groups/{group_id_or_slug}/speakers/{id_or_slug}")
 def get_speaker_in_group(
     group_id_or_slug: str,

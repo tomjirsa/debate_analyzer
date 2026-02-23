@@ -42,6 +42,7 @@
           <Column header="Actions">
             <template #body="{ data }">
               <template v-if="editingId !== data.id">
+                <router-link :to="'/group/' + encodeURIComponent(data.slug || data.id)" class="dashboard-link">Dashboard</router-link>
                 <Button label="Edit" text size="small" @click="startEdit(data)" />
                 <Button label="Delete" severity="danger" text size="small" class="ml-1" @click="(e) => confirmDelete(e, data)" />
               </template>
@@ -229,4 +230,6 @@ onMounted(loadGroups)
 .mb-3 { margin-bottom: 1rem; }
 .mb-4 { margin-bottom: 1.5rem; }
 .ml-1 { margin-left: 0.25rem; }
+.dashboard-link { margin-right: 0.5rem; text-decoration: none; }
+.dashboard-link:hover { text-decoration: underline; }
 </style>

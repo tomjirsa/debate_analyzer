@@ -5,10 +5,32 @@
         <router-link to="/" class="sidebar-title">Debate Analyzer</router-link>
       </div>
       <nav class="sidebar-nav">
-        <router-link to="/" class="sidebar-item" active-class="sidebar-item-active">
-          <i class="pi pi-home"></i>
-          <span class="sidebar-item-label">Dashboard</span>
-        </router-link>
+        <div class="sidebar-group">
+          <div class="sidebar-item sidebar-dashboard-row">
+            <button
+              type="button"
+              class="sidebar-chevron-btn"
+              :aria-expanded="dashboardOpen"
+              aria-controls="dashboard-groups"
+              @click.stop="dashboardOpen = !dashboardOpen"
+            >
+              <i class="pi pi-chevron-down sidebar-chevron" :class="{ 'sidebar-chevron-open': dashboardOpen }"></i>
+            </button>
+            <router-link to="/" class="sidebar-item-label sidebar-dashboard-link" active-class="sidebar-item-active">Dashboards</router-link>
+          </div>
+          <div id="dashboard-groups" class="sidebar-sub" :hidden="!dashboardOpen">
+            <router-link
+              v-for="g in groups"
+              :key="g.id"
+              :to="'/group/' + encodeURIComponent(g.slug || g.id)"
+              class="sidebar-item sidebar-sub-item"
+              active-class="sidebar-item-active"
+            >
+              <span class="sidebar-item-label">{{ g.name }}</span>
+            </router-link>
+            <p v-if="groupsLoaded && !groups.length" class="sidebar-empty">No groups</p>
+          </div>
+        </div>
         <div class="sidebar-group">
           <span class="sidebar-group-label">Admin</span>
           <template v-if="isLoggedIn">
@@ -47,6 +69,9 @@ import { useAdminAuth } from '../composables/useAdminAuth'
 const { isLoggedIn } = useAdminAuth()
 const THEME_KEY = 'debate-analyzer-theme'
 const isDark = ref(false)
+const dashboardOpen = ref(true)
+const groups = ref([])
+const groupsLoaded = ref(false)
 
 function toggleTheme() {
   isDark.value = !isDark.value
@@ -56,6 +81,13 @@ function toggleTheme() {
 
 onMounted(() => {
   isDark.value = localStorage.getItem(THEME_KEY) === 'dark'
+  fetch('/api/groups')
+    .then((r) => (r.ok ? r.json() : []))
+    .then((data) => {
+      groups.value = Array.isArray(data) ? data : []
+      groupsLoaded.value = true
+    })
+    .catch(() => { groupsLoaded.value = true })
 })
 </script>
 
@@ -140,6 +172,66 @@ onMounted(() => {
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
+  color: var(--p-text-muted-color, #6b7280);
+}
+
+.sidebar-dashboard-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 1rem;
+}
+.sidebar-chevron-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: inherit;
+  flex-shrink: 0;
+}
+.sidebar-chevron-btn:hover {
+  color: var(--p-primary-color, #2563eb);
+}
+.sidebar-dashboard-link {
+  flex: 1;
+  text-decoration: none;
+  color: var(--p-text-color, inherit);
+  font-size: 0.9rem;
+}
+.sidebar-dashboard-link:hover {
+  color: var(--p-primary-color, #2563eb);
+}
+.sidebar-dashboard-row:hover {
+  background: var(--p-surface-200, #e5e7eb);
+}
+
+.sidebar-chevron {
+  transition: transform 0.2s ease;
+}
+.sidebar-chevron-open {
+  transform: rotate(-180deg);
+}
+
+.sidebar-sub {
+  padding-left: 0.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.sidebar-sub[hidden] {
+  display: none;
+}
+.sidebar-sub-item {
+  padding-left: 2rem;
+  font-size: 0.85rem;
+}
+.sidebar-empty {
+  padding: 0.25rem 1rem 0.25rem 2rem;
+  margin: 0;
+  font-size: 0.85rem;
   color: var(--p-text-muted-color, #6b7280);
 }
 
