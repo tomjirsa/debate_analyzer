@@ -67,28 +67,13 @@
               <span class="transcript-title">{{ row.transcript_title || 'Untitled' }}</span>
               <span class="transcript-stats">{{ formatTime(row.total_seconds) }}, {{ formatNum(row.segment_count) }} segments</span>
             </div>
-            <div v-if="hasShareStats(row)" class="relative-share">
-              <h4 class="relative-share-title">Relative share</h4>
-              <div class="relative-share-gauges">
-                <ShareGauge
-                  v-if="row.share_speaking_time != null && row.share_speaking_time !== ''"
-                  :value="row.share_speaking_time"
-                  label="Share of speaking time"
-                />
-                <ShareGauge
-                  v-if="row.share_words != null && row.share_words !== ''"
-                  :value="row.share_words"
-                  label="Share of words"
-                />
-              </div>
-            </div>
             <template v-if="statDefinitions.length">
               <div class="transcript-groups">
                 <div v-for="group in statDefinitions" :key="group.key" class="transcript-group">
                   <span class="group-mini-label">{{ group.label }}:</span>
                   <span class="group-values">
                     <template v-for="defn in group.stats" :key="defn.stat_key">
-                      <span v-if="!isShareStat(defn.stat_key) && row[defn.stat_key] != null && row[defn.stat_key] !== ''" class="mini-stat">
+                      <span v-if="row[defn.stat_key] != null && row[defn.stat_key] !== ''" class="mini-stat">
                         {{ statLabel(defn.stat_key, defn.label, row[defn.stat_key]) }} {{ formatStatValue(defn.stat_key, row[defn.stat_key]) }}
                       </span>
                     </template>
@@ -107,7 +92,6 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import StatBarChart from '../components/StatBarChart.vue'
-import ShareGauge from '../components/ShareGauge.vue'
 import { formatDuration, formatDurationStatLabel } from '../utils/format.js'
 
 const route = useRoute()
@@ -131,17 +115,6 @@ function formatNum(n) {
 
 function formatTime(sec) {
   return formatDuration(sec)
-}
-
-function hasShareStats(row) {
-  return (
-    (row.share_speaking_time != null && row.share_speaking_time !== '') ||
-    (row.share_words != null && row.share_words !== '')
-  )
-}
-
-function isShareStat(statKey) {
-  return statKey === 'share_speaking_time' || statKey === 'share_words'
 }
 
 function isDurationStat(statKey) {
@@ -292,23 +265,6 @@ onMounted(async () => {
 .transcript-main { display: flex; justify-content: space-between; gap: 1rem; }
 .transcript-title { font-weight: 500; }
 .transcript-stats { color: #666; font-size: 0.9rem; }
-.relative-share {
-  margin: 0.5rem 0;
-  padding: 0.5rem 0;
-  border-top: 1px solid #eee;
-}
-.relative-share-title {
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: #444;
-  margin: 0 0 0.5rem 0;
-}
-.relative-share-gauges {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 1.5rem;
-  align-items: flex-start;
-}
 .transcript-groups { font-size: 0.85rem; color: #555; padding-left: 0.5rem; }
 .transcript-group { margin-top: 0.2rem; }
 .group-mini-label { font-weight: 500; margin-right: 0.5rem; }
