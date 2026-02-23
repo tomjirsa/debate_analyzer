@@ -25,10 +25,21 @@ def repo(session):
     return TranscriptRepository(session)
 
 
-def test_create_speaker_profile(repo):
+@pytest.fixture
+def default_group(repo):
+    """Create a default content group for tests that need group_id."""
+    return repo.create_group("Default", "default", description="Test default group")
+
+
+def test_create_speaker_profile(repo, default_group):
     """Creating a speaker profile persists and returns it."""
     profile = repo.create_speaker_profile(
-        "Alice", "Smith", slug="alice", bio="Test bio", short_description="Short"
+        "Alice",
+        "Smith",
+        default_group.id,
+        slug="alice",
+        bio="Test bio",
+        short_description="Short",
     )
     assert profile.id
     assert profile.first_name == "Alice"
@@ -38,7 +49,7 @@ def test_create_speaker_profile(repo):
     assert profile.short_description == "Short"
 
 
-def test_create_transcript_from_payload(repo):
+def test_create_transcript_from_payload(repo, default_group):
     """Creating a transcript from payload creates transcript, segments, and mappings."""
     payload = {
         "duration": 100.0,
@@ -61,7 +72,9 @@ def test_create_transcript_from_payload(repo):
             },
         ],
     }
-    t = repo.create_transcript_from_payload("s3://bucket/key.json", payload)
+    t = repo.create_transcript_from_payload(
+        "s3://bucket/key.json", payload, group_id=default_group.id
+    )
     assert t.id
     assert t.source_uri == "s3://bucket/key.json"
     assert t.duration == 100.0
@@ -71,25 +84,31 @@ def test_create_transcript_from_payload(repo):
     assert speaker_ids == {"SPEAKER_00", "SPEAKER_01"}
 
 
-def test_idempotent_register(repo):
+def test_idempotent_register(repo, default_group):
     """Registering the same source_uri twice returns the same transcript."""
     payload = {
         "duration": 1.0,
         "transcription": [{"start": 0, "end": 1, "text": "x", "speaker": "SPEAKER_00"}],
     }
-    t1 = repo.create_transcript_from_payload("s3://b/k.json", payload)
-    t2 = repo.create_transcript_from_payload("s3://b/k.json", payload)
+    t1 = repo.create_transcript_from_payload(
+        "s3://b/k.json", payload, group_id=default_group.id
+    )
+    t2 = repo.create_transcript_from_payload(
+        "s3://b/k.json", payload, group_id=default_group.id
+    )
     assert t1.id == t2.id
 
 
-def test_save_mapping(repo):
+def test_save_mapping(repo, default_group):
     """Saving a mapping updates the speaker_profile_id."""
     payload = {
         "duration": 1.0,
         "transcription": [{"start": 0, "end": 1, "text": "x", "speaker": "SPEAKER_00"}],
     }
-    t = repo.create_transcript_from_payload("s3://b/k.json", payload)
-    profile = repo.create_speaker_profile("Bob", "Jones")
+    t = repo.create_transcript_from_payload(
+        "s3://b/k.json", payload, group_id=default_group.id
+    )
+    profile = repo.create_speaker_profile("Bob", "Jones", default_group.id)
     mapping = repo.save_mapping(t.id, "SPEAKER_00", profile.id)
     assert mapping.speaker_profile_id == profile.id
     mappings = repo.get_mappings_for_transcript(t.id)
@@ -97,7 +116,7 @@ def test_save_mapping(repo):
     assert mappings[0].speaker_profile_id == profile.id
 
 
-def test_get_speaker_stats(repo):
+def test_get_speaker_stats(repo, default_group):
     """Speaker stats aggregate segments for mapped profile."""
     payload = {
         "duration": 10.0,
@@ -106,8 +125,10 @@ def test_get_speaker_stats(repo):
             {"start": 3, "end": 6, "text": "four five", "speaker": "SPEAKER_00"},
         ],
     }
-    t = repo.create_transcript_from_payload("s3://b/k.json", payload)
-    profile = repo.create_speaker_profile("Alice", "Smith")
+    t = repo.create_transcript_from_payload(
+        "s3://b/k.json", payload, group_id=default_group.id
+    )
+    profile = repo.create_speaker_profile("Alice", "Smith", default_group.id)
     repo.save_mapping(t.id, "SPEAKER_00", profile.id)
     stats = repo.get_speaker_stats(profile.id)
     assert stats["total_seconds"] == 6.0
@@ -118,7 +139,7 @@ def test_get_speaker_stats(repo):
     assert stats["avg_segment_duration_sec"] == 3.0
 
 
-def test_get_speaker_stats_includes_extended_from_transcript_stats(repo):
+def test_get_speaker_stats_includes_extended_from_transcript_stats(repo, default_group):
     """When transcript_speaker_stats has extended fields, get_speaker_stats aggregates them."""
     payload = {
         "duration": 100.0,
@@ -127,8 +148,10 @@ def test_get_speaker_stats_includes_extended_from_transcript_stats(repo):
             {"start": 10, "end": 20, "text": "three four five", "speaker": "SPEAKER_00"},
         ],
     }
-    t = repo.create_transcript_from_payload("s3://b/k.json", payload)
-    profile = repo.create_speaker_profile("Alice", "Smith")
+    t = repo.create_transcript_from_payload(
+        "s3://b/k.json", payload, group_id=default_group.id
+    )
+    profile = repo.create_speaker_profile("Alice", "Smith", default_group.id)
     repo.save_mapping(t.id, "SPEAKER_00", profile.id)
     repo.save_transcript_speaker_stats(
         t.id,
@@ -163,9 +186,11 @@ def test_get_speaker_stats_includes_extended_from_transcript_stats(repo):
     assert stats["is_last_speaker"] is False
 
 
-def test_update_speaker_profile(repo):
+def test_update_speaker_profile(repo, default_group):
     """Updating a speaker profile changes fields."""
-    profile = repo.create_speaker_profile("Alice", "Smith", slug="alice")
+    profile = repo.create_speaker_profile(
+        "Alice", "Smith", default_group.id, slug="alice"
+    )
     assert profile.first_name == "Alice"
     updated = repo.update_speaker_profile(
         profile.id, first_name="Alicia", short_description="Updated"
@@ -181,16 +206,16 @@ def test_update_speaker_profile(repo):
     assert refreshed.first_name == "Alicia"
 
 
-def test_delete_speaker_profile(repo):
+def test_delete_speaker_profile(repo, default_group):
     """Deleting a speaker profile removes it and returns True."""
-    profile = repo.create_speaker_profile("Bob", "Jones")
+    profile = repo.create_speaker_profile("Bob", "Jones", default_group.id)
     assert repo.get_speaker_profile_by_id(profile.id) is not None
     assert repo.delete_speaker_profile(profile.id) is True
     assert repo.get_speaker_profile_by_id(profile.id) is None
     assert repo.delete_speaker_profile(profile.id) is False
 
 
-def test_save_and_get_speaker_stats_for_transcript(repo):
+def test_save_and_get_speaker_stats_for_transcript(repo, default_group):
     """Save and get transcript speaker stats returns same data (incl. extended)."""
     payload = {
         "duration": 10.0,
@@ -199,7 +224,9 @@ def test_save_and_get_speaker_stats_for_transcript(repo):
             {"start": 5, "end": 10, "text": "four five six", "speaker": "SPEAKER_01"},
         ],
     }
-    t = repo.create_transcript_from_payload("s3://b/k.json", payload)
+    t = repo.create_transcript_from_payload(
+        "s3://b/k.json", payload, group_id=default_group.id
+    )
     rows = [
         {
             "speaker_id_in_transcript": "SPEAKER_00",
@@ -238,13 +265,15 @@ def test_save_and_get_speaker_stats_for_transcript(repo):
     assert by_speaker["SPEAKER_01"]["is_last_speaker"] is True
 
 
-def test_save_transcript_speaker_stats_idempotent(repo):
+def test_save_transcript_speaker_stats_idempotent(repo, default_group):
     """Re-saving stats for the same transcript replaces existing rows."""
     payload = {
         "duration": 1.0,
         "transcription": [{"start": 0, "end": 1, "text": "x", "speaker": "SPEAKER_00"}],
     }
-    t = repo.create_transcript_from_payload("s3://b/k.json", payload)
+    t = repo.create_transcript_from_payload(
+        "s3://b/k.json", payload, group_id=default_group.id
+    )
     repo.save_transcript_speaker_stats(
         t.id,
         [
@@ -273,7 +302,7 @@ def test_save_transcript_speaker_stats_idempotent(repo):
     assert got[0]["word_count"] == 2
 
 
-def test_get_speaker_stats_by_transcript(repo):
+def test_get_speaker_stats_by_transcript(repo, default_group):
     """Per-transcript breakdown joins stats with mapping and transcript."""
     payload1 = {
         "duration": 10.0,
@@ -288,12 +317,12 @@ def test_get_speaker_stats_by_transcript(repo):
         ],
     }
     t1 = repo.create_transcript_from_payload(
-        "s3://b/t1.json", payload1, title="Transcript A"
+        "s3://b/t1.json", payload1, title="Transcript A", group_id=default_group.id
     )
     t2 = repo.create_transcript_from_payload(
-        "s3://b/t2.json", payload2, title="Transcript B"
+        "s3://b/t2.json", payload2, title="Transcript B", group_id=default_group.id
     )
-    profile = repo.create_speaker_profile("Alice", "Smith")
+    profile = repo.create_speaker_profile("Alice", "Smith", default_group.id)
     repo.save_mapping(t1.id, "SPEAKER_00", profile.id)
     repo.save_mapping(t2.id, "SPEAKER_00", profile.id)
     repo.save_transcript_speaker_stats(

@@ -25,20 +25,58 @@ def _uuid():
     return str(uuid.uuid4())
 
 
-class SpeakerProfile(Base):
-    """Canonical speaker (person) that can appear in multiple transcripts."""
+class Group(Base):
+    """Isolated namespace: transcripts and speakers belong to exactly one group."""
 
-    __tablename__ = "speaker_profile"
+    __tablename__ = "content_group"
 
     id = Column(String(36), primary_key=True, default=_uuid)
+    name = Column(String(255), nullable=False)
+    slug = Column(String(255), unique=True, nullable=False, index=True)
+    description = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    transcripts = relationship(
+        "Transcript", back_populates="group", cascade="all, delete-orphan"
+    )
+    speaker_profiles = relationship(
+        "SpeakerProfile", back_populates="group", cascade="all, delete-orphan"
+    )
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize to dict for API responses."""
+        return {
+            "id": self.id,
+            "name": self.name,
+            "slug": self.slug,
+            "description": self.description,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
+class SpeakerProfile(Base):
+    """Canonical speaker (person) that can appear in multiple transcripts within one group."""
+
+    __tablename__ = "speaker_profile"
+    __table_args__ = (
+        UniqueConstraint("group_id", "slug", name="uq_speaker_profile_group_slug"),
+    )
+
+    id = Column(String(36), primary_key=True, default=_uuid)
+    group_id = Column(
+        String(36), ForeignKey("content_group.id", ondelete="CASCADE"), nullable=False
+    )
     first_name = Column(String(255), nullable=False)
     surname = Column(String(255), nullable=False)
-    slug = Column(String(255), unique=True, nullable=True, index=True)
+    slug = Column(String(255), nullable=True, index=True)
     bio = Column(Text, nullable=True)
     short_description = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
+    group = relationship("Group", back_populates="speaker_profiles")
     mappings = relationship("SpeakerMapping", back_populates="speaker_profile")
 
     def to_dict(self) -> dict[str, Any]:
@@ -46,6 +84,7 @@ class SpeakerProfile(Base):
         display_name = f"{self.first_name} {self.surname}".strip()
         return {
             "id": self.id,
+            "group_id": self.group_id,
             "first_name": self.first_name,
             "surname": self.surname,
             "display_name": display_name,
@@ -63,6 +102,9 @@ class Transcript(Base):
     __tablename__ = "transcript"
 
     id = Column(String(36), primary_key=True, default=_uuid)
+    group_id = Column(
+        String(36), ForeignKey("content_group.id", ondelete="CASCADE"), nullable=False
+    )
     source_type = Column(String(64), nullable=False, default="s3")
     source_uri = Column(String(1024), nullable=False, unique=True, index=True)
     title = Column(String(512), nullable=True)
@@ -72,6 +114,7 @@ class Transcript(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     metadata_ = Column("metadata", JSON, nullable=True)
 
+    group = relationship("Group", back_populates="transcripts")
     segments = relationship(
         "Segment", back_populates="transcript", cascade="all, delete-orphan"
     )
@@ -88,6 +131,7 @@ class Transcript(Base):
         """Serialize to dict for API responses."""
         return {
             "id": self.id,
+            "group_id": self.group_id,
             "source_type": self.source_type,
             "source_uri": self.source_uri,
             "title": self.title,

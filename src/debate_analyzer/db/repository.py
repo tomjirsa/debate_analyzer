@@ -8,6 +8,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 
 from debate_analyzer.db.models import (
+    Group,
     Segment,
     SpeakerMapping,
     SpeakerProfile,
@@ -24,18 +25,84 @@ class TranscriptRepository:
         """Initialize with a SQLAlchemy session."""
         self.session = session
 
+    # ---------- Group CRUD ----------
+
+    def create_group(
+        self,
+        name: str,
+        slug: str,
+        description: str | None = None,
+    ) -> Group:
+        """Create a new content group."""
+        group = Group(name=name, slug=slug, description=description)
+        self.session.add(group)
+        self.session.commit()
+        self.session.refresh(group)
+        return group
+
+    def get_group_by_id(self, group_id: str) -> Group | None:
+        """Return group by id or None."""
+        return self.session.query(Group).filter(Group.id == group_id).first()
+
+    def get_group_by_slug(self, slug: str) -> Group | None:
+        """Return group by slug or None."""
+        return self.session.query(Group).filter(Group.slug == slug).first()
+
+    def list_groups(self) -> list[Group]:
+        """List all groups ordered by name."""
+        return self.session.query(Group).order_by(Group.name).all()
+
+    def update_group(
+        self,
+        group_id: str,
+        name: str | None = None,
+        slug: str | None = None,
+        description: str | None = None,
+    ) -> Group | None:
+        """Update group. Returns updated group or None if not found."""
+        group = self.get_group_by_id(group_id)
+        if not group:
+            return None
+        if name is not None:
+            group.name = name
+        if slug is not None:
+            group.slug = slug
+        if description is not None:
+            group.description = description
+        self.session.commit()
+        self.session.refresh(group)
+        return group
+
+    def delete_group(self, group_id: str) -> bool:
+        """Delete group. Returns True if deleted. Fails if group has transcripts or speakers."""
+        group = self.get_group_by_id(group_id)
+        if not group:
+            return False
+        if group.transcripts or group.speaker_profiles:
+            return False
+        self.session.delete(group)
+        self.session.commit()
+        return True
+
     def create_transcript_from_payload(
         self,
         source_uri: str,
         payload: dict[str, Any],
         source_type: str = "s3",
         title: str | None = None,
+        group_id: str | None = None,
     ) -> Transcript:
         """
         Create a Transcript and Segment rows from transcript JSON payload.
         Creates empty SpeakerMapping rows for each distinct speaker_id_in_transcript.
         Idempotent by source_uri: if transcript exists, returns it without duplicating.
+        group_id is required unless a default group (slug "default") exists.
         """
+        if group_id is None:
+            default = self.get_group_by_slug("default")
+            if not default:
+                raise ValueError("group_id is required and no default group exists")
+            group_id = default.id
         existing = (
             self.session.query(Transcript)
             .filter(Transcript.source_uri == source_uri)
@@ -58,6 +125,7 @@ class TranscriptRepository:
             meta["processing_time"] = processing_time
 
         transcript = Transcript(
+            group_id=group_id,
             source_type=source_type,
             source_uri=source_uri,
             title=title or source_uri.split("/")[-1].replace("_transcription.json", ""),
@@ -102,13 +170,14 @@ class TranscriptRepository:
         self.session.refresh(transcript)
         return transcript
 
-    def get_transcript_by_id(self, transcript_id: str) -> Transcript | None:
-        """Return transcript by id or None."""
-        return (
-            self.session.query(Transcript)
-            .filter(Transcript.id == transcript_id)
-            .first()
-        )
+    def get_transcript_by_id(
+        self, transcript_id: str, group_id: str | None = None
+    ) -> Transcript | None:
+        """Return transcript by id or None. If group_id given, transcript must belong to that group."""
+        q = self.session.query(Transcript).filter(Transcript.id == transcript_id)
+        if group_id is not None:
+            q = q.filter(Transcript.group_id == group_id)
+        return q.first()
 
     def get_transcript_by_source_uri(self, source_uri: str) -> Transcript | None:
         """Return transcript by source_uri or None."""
@@ -118,15 +187,17 @@ class TranscriptRepository:
             .first()
         )
 
-    def list_transcripts(self, limit: int = 100, offset: int = 0) -> list[Transcript]:
-        """List transcripts ordered by created_at desc."""
-        return (
-            self.session.query(Transcript)
-            .order_by(Transcript.created_at.desc())
-            .limit(limit)
-            .offset(offset)
-            .all()
-        )
+    def list_transcripts(
+        self,
+        limit: int = 100,
+        offset: int = 0,
+        group_id: str | None = None,
+    ) -> list[Transcript]:
+        """List transcripts ordered by created_at desc. Optionally filter by group_id."""
+        q = self.session.query(Transcript).order_by(Transcript.created_at.desc())
+        if group_id is not None:
+            q = q.filter(Transcript.group_id == group_id)
+        return q.limit(limit).offset(offset).all()
 
     def update_transcript(
         self,
@@ -159,19 +230,25 @@ class TranscriptRepository:
         self.session.commit()
         return True
 
-    def get_speaker_profile_by_id(self, profile_id: str) -> SpeakerProfile | None:
-        """Return speaker profile by id or None."""
-        return (
-            self.session.query(SpeakerProfile)
-            .filter(SpeakerProfile.id == profile_id)
-            .first()
-        )
+    def get_speaker_profile_by_id(
+        self, profile_id: str, group_id: str | None = None
+    ) -> SpeakerProfile | None:
+        """Return speaker profile by id or None. If group_id given, profile must belong to that group."""
+        q = self.session.query(SpeakerProfile).filter(SpeakerProfile.id == profile_id)
+        if group_id is not None:
+            q = q.filter(SpeakerProfile.group_id == group_id)
+        return q.first()
 
-    def get_speaker_profile_by_slug(self, slug: str) -> SpeakerProfile | None:
-        """Return speaker profile by slug or None."""
+    def get_speaker_profile_by_slug(
+        self, slug: str, group_id: str
+    ) -> SpeakerProfile | None:
+        """Return speaker profile by slug within a group, or None."""
         return (
             self.session.query(SpeakerProfile)
-            .filter(SpeakerProfile.slug == slug)
+            .filter(
+                SpeakerProfile.slug == slug,
+                SpeakerProfile.group_id == group_id,
+            )
             .first()
         )
 
@@ -179,12 +256,14 @@ class TranscriptRepository:
         self,
         first_name: str,
         surname: str,
+        group_id: str,
         slug: str | None = None,
         bio: str | None = None,
         short_description: str | None = None,
     ) -> SpeakerProfile:
-        """Create a new speaker profile."""
+        """Create a new speaker profile in the given group."""
         profile = SpeakerProfile(
+            group_id=group_id,
             first_name=first_name,
             surname=surname,
             slug=slug,
@@ -232,14 +311,17 @@ class TranscriptRepository:
         self.session.commit()
         return True
 
-    def list_speaker_profiles(self, limit: int = 200) -> list[SpeakerProfile]:
-        """List all speaker profiles ordered by surname, then first_name."""
-        return (
-            self.session.query(SpeakerProfile)
-            .order_by(SpeakerProfile.surname, SpeakerProfile.first_name)
-            .limit(limit)
-            .all()
+    def list_speaker_profiles(
+        self, limit: int = 200, group_id: str | None = None
+    ) -> list[SpeakerProfile]:
+        """List speaker profiles ordered by surname, then first_name. Optionally filter by group_id."""
+        q = self.session.query(SpeakerProfile)
+        if group_id is not None:
+            q = q.filter(SpeakerProfile.group_id == group_id)
+        q = q.order_by(SpeakerProfile.surname, SpeakerProfile.first_name).limit(
+            limit
         )
+        return q.all()
 
     def get_mappings_for_transcript(self, transcript_id: str) -> list[SpeakerMapping]:
         """Return all speaker mappings for a transcript."""
@@ -255,7 +337,9 @@ class TranscriptRepository:
         speaker_id_in_transcript: str,
         speaker_profile_id: str | None,
     ) -> SpeakerMapping | None:
-        """Set or clear speaker_profile_id for this transcript/speaker_id pair."""
+        """Set or clear speaker_profile_id for this transcript/speaker_id pair.
+        When setting a profile, transcript and profile must belong to the same group.
+        """
         col = SpeakerMapping.speaker_id_in_transcript
         mapping = (
             self.session.query(SpeakerMapping)
@@ -267,6 +351,11 @@ class TranscriptRepository:
         )
         if not mapping:
             return None
+        if speaker_profile_id is not None:
+            transcript = self.get_transcript_by_id(transcript_id)
+            profile = self.get_speaker_profile_by_id(speaker_profile_id)
+            if not transcript or not profile or transcript.group_id != profile.group_id:
+                return None
         mapping.speaker_profile_id = speaker_profile_id
         self.session.commit()
         self.session.refresh(mapping)

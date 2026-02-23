@@ -8,6 +8,15 @@
         <template #title>Add speaker</template>
         <template #content>
           <div class="flex flex-column gap-2" style="max-width: 400px;">
+            <label>Group</label>
+            <Select
+              v-model="selectedGroupId"
+              :options="groups"
+              option-label="name"
+              option-value="id"
+              placeholder="Select group"
+              class="w-full"
+            />
             <label>First name</label>
             <InputText v-model="newFirstName" placeholder="First name" />
             <label>Surname</label>
@@ -90,7 +99,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import Button from 'primevue/button'
 import Card from 'primevue/card'
@@ -99,6 +108,7 @@ import ConfirmPopup from 'primevue/confirmpopup'
 import DataTable from 'primevue/datatable'
 import InputText from 'primevue/inputtext'
 import Message from 'primevue/message'
+import Select from 'primevue/select'
 import Textarea from 'primevue/textarea'
 import { useConfirm } from 'primevue/useconfirm'
 import { useAdminAuth } from '../composables/useAdminAuth'
@@ -107,6 +117,8 @@ const router = useRouter()
 const { clearAuth, apiFetch } = useAdminAuth()
 const confirm = useConfirm()
 
+const groups = ref([])
+const selectedGroupId = ref(null)
 const err = ref('')
 const speakers = ref([])
 
@@ -132,9 +144,24 @@ function redirectToLogin() {
   router.push('/admin?expired=1')
 }
 
+function loadGroups() {
+  return apiFetch('/api/admin/groups')
+    .then((r) => (r.ok ? r.json() : []))
+    .then((data) => {
+      groups.value = Array.isArray(data) ? data : []
+      if (groups.value.length && !selectedGroupId.value) {
+        selectedGroupId.value = groups.value[0].id
+      }
+    })
+    .catch(() => {})
+}
+
 function loadSpeakers() {
   err.value = ''
-  apiFetch('/api/admin/speakers')
+  const url = selectedGroupId.value
+    ? '/api/admin/speakers?group_id=' + encodeURIComponent(selectedGroupId.value)
+    : '/api/admin/speakers'
+  apiFetch(url)
     .then((r) => {
       if (r.status === 401) {
         redirectToLogin()
@@ -159,6 +186,10 @@ function addSpeaker() {
     addStatus.value = 'First name and surname required'
     return
   }
+  if (!selectedGroupId.value) {
+    addStatus.value = 'Select a group'
+    return
+  }
   addStatus.value = 'Adding...'
   apiFetch('/api/admin/speakers', {
     method: 'POST',
@@ -166,6 +197,7 @@ function addSpeaker() {
     body: JSON.stringify({
       first_name: first,
       surname: last,
+      group_id: selectedGroupId.value,
       slug: newSlug.value.trim() || null,
       short_description: newShortDescription.value.trim() || null,
       bio: newBio.value.trim() || null,
@@ -254,7 +286,10 @@ function confirmDelete(event, s) {
   })
 }
 
-onMounted(loadSpeakers)
+onMounted(() => {
+  loadGroups().then(loadSpeakers)
+})
+watch(selectedGroupId, () => { loadSpeakers() })
 </script>
 
 <style scoped>

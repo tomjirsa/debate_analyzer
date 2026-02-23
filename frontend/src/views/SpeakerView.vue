@@ -152,16 +152,30 @@ const chartMetricOptions = [
   { label: 'Share of words', value: 'share_words' },
 ]
 
-const breadcrumbItems = computed(() => [
-  {
+const groupId = computed(() => route.params.groupId || null)
+const groupName = ref('')
+
+const breadcrumbItems = computed(() => {
+  const items = []
+  items.push({
     label: 'Dashboard',
     command: ({ originalEvent }) => {
       originalEvent?.preventDefault()
       router.push('/')
     },
-  },
-  { label: displayName.value || 'Speaker' },
-])
+  })
+  if (groupId.value) {
+    items.push({
+      label: groupName.value || 'Group',
+      command: ({ originalEvent }) => {
+        originalEvent?.preventDefault()
+        router.push('/group/' + encodeURIComponent(groupId.value))
+      },
+    })
+  }
+  items.push({ label: displayName.value || 'Speaker' })
+  return items
+})
 
 const displayName = computed(() => {
   if (!profile.value) return ''
@@ -254,14 +268,25 @@ function chartValueFormatter(value) {
 
 onMounted(async () => {
   const id = route.params.idOrSlug
+  const gid = route.params.groupId
   if (!id) {
     error.value = 'No speaker ID.'
     return
   }
   try {
+    const speakerUrl = gid
+      ? '/api/groups/' + encodeURIComponent(gid) + '/speakers/' + encodeURIComponent(id)
+      : '/api/speakers/' + encodeURIComponent(id)
+    if (gid) {
+      const gr = await fetch('/api/groups/' + encodeURIComponent(gid))
+      if (gr.ok) {
+        const g = await gr.json()
+        groupName.value = g.name || ''
+      }
+    }
     const [defR, speakerR] = await Promise.all([
       fetch('/api/stat-definitions').then((r) => (r.ok ? r.json() : [])),
-      fetch('/api/speakers/' + encodeURIComponent(id)),
+      fetch(speakerUrl),
     ])
     statDefinitions.value = Array.isArray(defR) ? defR : []
     if (speakerR.status === 404) throw new Error('Speaker not found')

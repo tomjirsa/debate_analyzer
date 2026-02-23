@@ -35,23 +35,105 @@ def get_repo_from_db(db: Annotated[Session, Depends(get_db)]) -> TranscriptRepos
 # ---------- Public API (no auth) ----------
 
 
+@app.get("/api/groups")
+def list_groups(
+    repo: Annotated[TranscriptRepository, Depends(get_repo_from_db)],
+) -> list[dict]:
+    """List all content groups (public, for dashboard switcher)."""
+    return [g.to_dict() for g in repo.list_groups()]
+
+
+@app.get("/api/groups/{group_id_or_slug}")
+def get_group(
+    group_id_or_slug: str,
+    repo: Annotated[TranscriptRepository, Depends(get_repo_from_db)],
+) -> dict:
+    """Get a single group by id or slug (public)."""
+    group = repo.get_group_by_id(
+        group_id_or_slug
+    ) or repo.get_group_by_slug(group_id_or_slug)
+    if not group:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Group not found"
+        )
+    return group.to_dict()
+
+
+def _default_group_id(repo: TranscriptRepository) -> str | None:
+    """Return default group id if it exists."""
+    g = repo.get_group_by_slug("default")
+    return g.id if g else None
+
+
+@app.get("/api/groups/{group_id_or_slug}/speakers")
+def list_speakers_in_group(
+    group_id_or_slug: str,
+    repo: Annotated[TranscriptRepository, Depends(get_repo_from_db)],
+) -> list[dict]:
+    """List speaker profiles in a group (public)."""
+    group = repo.get_group_by_id(
+        group_id_or_slug
+    ) or repo.get_group_by_slug(group_id_or_slug)
+    if not group:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Group not found"
+        )
+    return [p.to_dict() for p in repo.list_speaker_profiles(group_id=group.id)]
+
+
+@app.get("/api/groups/{group_id_or_slug}/speakers/{id_or_slug}")
+def get_speaker_in_group(
+    group_id_or_slug: str,
+    id_or_slug: str,
+    repo: Annotated[TranscriptRepository, Depends(get_repo_from_db)],
+) -> dict:
+    """Get speaker profile and stats by id or slug within a group (public)."""
+    group = repo.get_group_by_id(
+        group_id_or_slug
+    ) or repo.get_group_by_slug(group_id_or_slug)
+    if not group:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Group not found"
+        )
+    profile = repo.get_speaker_profile_by_id(
+        id_or_slug, group_id=group.id
+    ) or repo.get_speaker_profile_by_slug(id_or_slug, group_id=group.id)
+    if not profile:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Speaker not found"
+        )
+    stats = repo.get_speaker_stats(profile.id)
+    stats_by_transcript = repo.get_speaker_stats_by_transcript(profile.id)
+    return {
+        "profile": profile.to_dict(),
+        "stats": stats,
+        "stats_by_transcript": stats_by_transcript,
+    }
+
+
 @app.get("/api/speakers")
 def list_speakers(
     repo: Annotated[TranscriptRepository, Depends(get_repo_from_db)],
+    group_id: str | None = None,
 ) -> list[dict]:
-    """List all speaker profiles (public)."""
-    return [p.to_dict() for p in repo.list_speaker_profiles()]
+    """List speaker profiles (public). Optional group_id to filter by group."""
+    return [p.to_dict() for p in repo.list_speaker_profiles(group_id=group_id)]
 
 
 @app.get("/api/speakers/{id_or_slug}")
 def get_speaker(
     id_or_slug: str,
     repo: Annotated[TranscriptRepository, Depends(get_repo_from_db)],
+    group_id: str | None = None,
 ) -> dict:
-    """Get speaker profile and stats by id or slug (public)."""
-    profile = repo.get_speaker_profile_by_id(
-        id_or_slug
-    ) or repo.get_speaker_profile_by_slug(id_or_slug)
+    """Get speaker profile and stats by id or slug (public). For slug lookup, group_id or default group is used."""
+    profile = repo.get_speaker_profile_by_id(id_or_slug, group_id=group_id)
+    if not profile and not group_id:
+        default_id = _default_group_id(repo)
+        if default_id:
+            profile = repo.get_speaker_profile_by_slug(id_or_slug, group_id=default_id)
+    if not profile and group_id:
+        profile = repo.get_speaker_profile_by_slug(id_or_slug, group_id=group_id)
     if not profile:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Speaker not found"
@@ -76,15 +158,130 @@ def get_stat_definitions(
 # ---------- Admin API (basic auth) ----------
 
 
+# ----- Admin: Groups -----
+
+
+class CreateGroupRequest(BaseModel):
+    """Request body for create group."""
+
+    name: str
+    slug: str
+    description: str | None = None
+
+
+class UpdateGroupRequest(BaseModel):
+    """Request body for update group (all fields optional)."""
+
+    name: str | None = None
+    slug: str | None = None
+    description: str | None = None
+
+
+@app.get("/api/admin/groups")
+def admin_list_groups(
+    _: Annotated[object, Depends(get_admin_credentials)],
+    repo: Annotated[TranscriptRepository, Depends(get_repo_from_db)],
+) -> list[dict]:
+    """List all groups (admin)."""
+    return [g.to_dict() for g in repo.list_groups()]
+
+
+@app.post("/api/admin/groups")
+def admin_create_group(
+    body: CreateGroupRequest,
+    _: Annotated[object, Depends(get_admin_credentials)],
+    repo: Annotated[TranscriptRepository, Depends(get_repo_from_db)],
+) -> dict:
+    """Create a content group (admin)."""
+    group = repo.create_group(
+        name=body.name,
+        slug=body.slug,
+        description=body.description,
+    )
+    return group.to_dict()
+
+
+@app.get("/api/admin/groups/{group_id_or_slug}")
+def admin_get_group(
+    group_id_or_slug: str,
+    _: Annotated[object, Depends(get_admin_credentials)],
+    repo: Annotated[TranscriptRepository, Depends(get_repo_from_db)],
+) -> dict:
+    """Get group by id or slug (admin)."""
+    group = repo.get_group_by_id(
+        group_id_or_slug
+    ) or repo.get_group_by_slug(group_id_or_slug)
+    if not group:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Group not found"
+        )
+    return group.to_dict()
+
+
+@app.put("/api/admin/groups/{group_id_or_slug}")
+def admin_update_group(
+    group_id_or_slug: str,
+    body: UpdateGroupRequest,
+    _: Annotated[object, Depends(get_admin_credentials)],
+    repo: Annotated[TranscriptRepository, Depends(get_repo_from_db)],
+) -> dict:
+    """Update group (admin)."""
+    group = repo.get_group_by_id(
+        group_id_or_slug
+    ) or repo.get_group_by_slug(group_id_or_slug)
+    if not group:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Group not found"
+        )
+    updated = repo.update_group(
+        group.id,
+        name=body.name,
+        slug=body.slug,
+        description=body.description,
+    )
+    return updated.to_dict()
+
+
+@app.delete("/api/admin/groups/{group_id_or_slug}")
+def admin_delete_group(
+    group_id_or_slug: str,
+    _: Annotated[object, Depends(get_admin_credentials)],
+    repo: Annotated[TranscriptRepository, Depends(get_repo_from_db)],
+) -> Response:
+    """Delete group (admin). Fails if group has transcripts or speakers."""
+    group = repo.get_group_by_id(
+        group_id_or_slug
+    ) or repo.get_group_by_slug(group_id_or_slug)
+    if not group:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Group not found"
+        )
+    if not repo.delete_group(group.id):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot delete group with transcripts or speakers",
+        )
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+# ----- Admin: Transcripts -----
+
+
 @app.get("/api/admin/transcripts")
 def admin_list_transcripts(
     _: Annotated[object, Depends(get_admin_credentials)],
     repo: Annotated[TranscriptRepository, Depends(get_repo_from_db)],
     limit: int = 100,
     offset: int = 0,
+    group_id: str | None = None,
 ) -> list[dict]:
-    """List transcripts (admin)."""
-    return [t.to_dict() for t in repo.list_transcripts(limit=limit, offset=offset)]
+    """List transcripts (admin). Optional group_id to filter."""
+    return [
+        t.to_dict()
+        for t in repo.list_transcripts(
+            limit=limit, offset=offset, group_id=group_id
+        )
+    ]
 
 
 @app.get("/api/admin/transcripts/{transcript_id}")
@@ -123,6 +320,7 @@ class RegisterTranscriptRequest(BaseModel):
 
     source_uri: str
     title: str | None = None
+    group_id: str | None = None
 
 
 @app.post("/api/admin/transcripts/register")
@@ -145,6 +343,7 @@ def admin_register_transcript(
         payload,
         source_type=source_type,
         title=body.title,
+        group_id=body.group_id,
     )
     if "_transcription.json" in body.source_uri:
         parquet_uri = body.source_uri.replace(
@@ -202,6 +401,7 @@ class CreateSpeakerRequest(BaseModel):
 
     first_name: str
     surname: str
+    group_id: str
     slug: str | None = None
     bio: str | None = None
     short_description: str | None = None
@@ -223,10 +423,11 @@ def admin_create_speaker(
     _: Annotated[object, Depends(get_admin_credentials)],
     repo: Annotated[TranscriptRepository, Depends(get_repo_from_db)],
 ) -> dict:
-    """Create a speaker profile (admin)."""
+    """Create a speaker profile in the given group (admin)."""
     profile = repo.create_speaker_profile(
         first_name=body.first_name,
         surname=body.surname,
+        group_id=body.group_id,
         slug=body.slug,
         bio=body.bio,
         short_description=body.short_description,
@@ -341,9 +542,13 @@ def admin_transcript_video_url(
 def admin_list_speakers(
     _: Annotated[object, Depends(get_admin_credentials)],
     repo: Annotated[TranscriptRepository, Depends(get_repo_from_db)],
+    group_id: str | None = None,
 ) -> list[dict]:
-    """List all speaker profiles (admin). Same as public list but behind auth."""
-    return [p.to_dict() for p in repo.list_speaker_profiles()]
+    """List speaker profiles (admin). Optional group_id to filter."""
+    return [
+        p.to_dict()
+        for p in repo.list_speaker_profiles(group_id=group_id)
+    ]
 
 
 # ---------- Static / UI (Vue SPA) ----------

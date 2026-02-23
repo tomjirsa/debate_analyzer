@@ -12,6 +12,16 @@
           <div class="flex flex-column gap-2" style="max-width: 480px;">
             <label for="sourceUri">Source URI or path</label>
             <InputText id="sourceUri" v-model="sourceUri" placeholder="s3://... or path" />
+            <label for="transcriptGroup">Group</label>
+            <Select
+              id="transcriptGroup"
+              v-model="selectedGroupId"
+              :options="groups"
+              option-label="name"
+              option-value="id"
+              placeholder="Select group"
+              class="w-full"
+            />
             <label for="title">Title (optional)</label>
             <InputText id="title" v-model="title" placeholder="Optional display title" />
             <Button label="Register" :loading="registering" :disabled="registering" @click="register" />
@@ -79,7 +89,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import Button from 'primevue/button'
 import Card from 'primevue/card'
@@ -88,6 +98,7 @@ import ConfirmPopup from 'primevue/confirmpopup'
 import DataTable from 'primevue/datatable'
 import InputText from 'primevue/inputtext'
 import Message from 'primevue/message'
+import Select from 'primevue/select'
 import { useConfirm } from 'primevue/useconfirm'
 import { useAdminAuth } from '../composables/useAdminAuth'
 
@@ -95,6 +106,8 @@ const router = useRouter()
 const { clearAuth, apiFetch } = useAdminAuth()
 const confirm = useConfirm()
 
+const groups = ref([])
+const selectedGroupId = ref(null)
 const transcripts = ref([])
 const listErr = ref('')
 const sourceUri = ref('')
@@ -122,9 +135,24 @@ function redirectToLogin() {
   router.push('/admin?expired=1')
 }
 
+function loadGroups() {
+  return apiFetch('/api/admin/groups')
+    .then((r) => (r.ok ? r.json() : []))
+    .then((data) => {
+      groups.value = Array.isArray(data) ? data : []
+      if (groups.value.length && !selectedGroupId.value) {
+        selectedGroupId.value = groups.value[0].id
+      }
+    })
+    .catch(() => {})
+}
+
 function loadTranscripts() {
   listErr.value = ''
-  apiFetch('/api/admin/transcripts')
+  const url = selectedGroupId.value
+    ? '/api/admin/transcripts?group_id=' + encodeURIComponent(selectedGroupId.value)
+    : '/api/admin/transcripts'
+  apiFetch(url)
     .then((r) => {
       if (r.status === 401) {
         redirectToLogin()
@@ -150,7 +178,11 @@ function register() {
   apiFetch('/api/admin/transcripts/register', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ source_uri: sourceUri.value.trim(), title: title.value.trim() || null }),
+    body: JSON.stringify({
+      source_uri: sourceUri.value.trim(),
+      title: title.value.trim() || null,
+      group_id: selectedGroupId.value || null,
+    }),
   })
     .then((r) => {
       if (r.status === 401) {
@@ -230,7 +262,10 @@ function confirmDelete(event, t) {
   })
 }
 
-onMounted(loadTranscripts)
+onMounted(() => {
+  loadGroups().then(loadTranscripts)
+})
+watch(selectedGroupId, () => { loadTranscripts() })
 </script>
 
 <style scoped>

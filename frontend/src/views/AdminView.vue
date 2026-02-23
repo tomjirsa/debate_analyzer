@@ -40,6 +40,10 @@
           <Panel header="Admin" class="dashboard-panel">
             <ul class="dashboard-links">
               <li>
+                <router-link to="/admin/groups">Groups</router-link>
+                — Create and manage content groups (transcripts and speakers are scoped by group).
+              </li>
+              <li>
                 <router-link to="/admin/transcripts">Transcript Registration Management</router-link>
                 — Register, update, or delete transcripts.
               </li>

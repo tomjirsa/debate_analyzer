@@ -13,6 +13,7 @@
           <span class="sidebar-group-label">Admin</span>
           <template v-if="isLoggedIn">
             <router-link to="/admin" class="sidebar-item" active-class="sidebar-item-active">Admin</router-link>
+            <router-link to="/admin/groups" class="sidebar-item" active-class="sidebar-item-active">Groups</router-link>
             <router-link to="/admin/transcripts" class="sidebar-item" active-class="sidebar-item-active">Transcripts</router-link>
             <router-link to="/admin/speakers" class="sidebar-item" active-class="sidebar-item-active">Speakers</router-link>
           </template>

@@ -239,24 +239,29 @@ function formatStatValue(statKey, value) {
 function load() {
   if (!transcriptId.value) return
   err.value = ''
-  Promise.all([
-    apiFetch('/api/admin/transcripts/' + transcriptId.value).then((r) => {
+  apiFetch('/api/admin/transcripts/' + transcriptId.value)
+    .then((r) => {
       if (r.status === 401) return Promise.reject(new Error('Unauthorized'))
       return r.ok ? r.json() : Promise.reject(new Error(r.statusText))
-    }),
-    apiFetch('/api/admin/speakers').then((r) => {
-      if (r.status === 401) return Promise.reject(new Error('Unauthorized'))
-      return r.ok ? r.json() : Promise.reject(new Error(r.statusText))
-    }),
-    fetch('/api/stat-definitions').then((r) => (r.ok ? r.json() : [])),
-  ])
-    .then(([data, speakerList, defs]) => {
+    })
+    .then((data) => {
       transcript.value = data.transcript
       mappings.value = data.mappings || []
       speakerStats.value = data.speaker_stats || []
+      segments.value = data.segments || []
+      const groupId = transcript.value?.group_id
+      const speakersUrl = groupId
+        ? '/api/admin/speakers?group_id=' + encodeURIComponent(groupId)
+        : '/api/admin/speakers'
+      return Promise.all([
+        Promise.resolve(data),
+        apiFetch(speakersUrl).then((r) => (r.ok ? r.json() : [])),
+        fetch('/api/stat-definitions').then((r) => (r.ok ? r.json() : [])),
+      ])
+    })
+    .then(([data, speakerList, defs]) => {
       statDefinitions.value = Array.isArray(defs) ? defs : []
       speakers.value = speakerList || []
-      segments.value = data.segments || []
       if (transcript.value.video_path && transcript.value.video_path.trim().startsWith('s3://')) {
         s3UriInput.value = transcript.value.video_path
       }
@@ -396,12 +401,18 @@ function createAndAssign() {
   const first = newFirstName.value.trim()
   const last = newSurname.value.trim()
   if (!first || !last) return
+  const groupId = transcript.value?.group_id
+  if (!groupId) {
+    saveStatus.value = 'Transcript has no group. Cannot add speaker.'
+    return
+  }
   apiFetch('/api/admin/speakers', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       first_name: first,
       surname: last,
+      group_id: groupId,
       slug: newSlug.value.trim() || null,
       short_description: newShortDescription.value.trim() || null,
     }),
