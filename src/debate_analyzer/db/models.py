@@ -8,6 +8,7 @@ from sqlalchemy import (
     JSON,
     Boolean,
     Column,
+    Date,
     DateTime,
     Float,
     ForeignKey,
@@ -110,6 +111,8 @@ class Transcript(Base):
     source_type = Column(String(64), nullable=False, default="s3")
     source_uri = Column(String(1024), nullable=False, unique=True, index=True)
     title = Column(String(512), nullable=True)
+    description = Column(Text, nullable=True)
+    debate_date = Column(Date, nullable=True)
     duration = Column(Float, nullable=True)
     video_path = Column(String(1024), nullable=True)
     speakers_count = Column(Integer, nullable=True)
@@ -139,6 +142,8 @@ class Transcript(Base):
             "source_type": self.source_type,
             "source_uri": self.source_uri,
             "title": self.title,
+            "description": self.description,
+            "debate_date": self.debate_date.isoformat() if self.debate_date else None,
             "duration": self.duration,
             "video_path": self.video_path,
             "speakers_count": self.speakers_count,

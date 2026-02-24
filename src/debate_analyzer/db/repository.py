@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import date
 from typing import Any
 
 from sqlalchemy import func
@@ -92,6 +93,8 @@ class TranscriptRepository:
         source_type: str = "s3",
         title: str | None = None,
         group_id: str | None = None,
+        description: str | None = None,
+        debate_date: date | None = None,
     ) -> Transcript:
         """
         Create a Transcript and Segment rows from transcript JSON payload.
@@ -130,6 +133,8 @@ class TranscriptRepository:
             source_type=source_type,
             source_uri=source_uri,
             title=title or source_uri.split("/")[-1].replace("_transcription.json", ""),
+            description=description,
+            debate_date=debate_date,
             duration=duration,
             video_path=str(video_path) if video_path else None,
             speakers_count=speakers_count,
@@ -205,8 +210,10 @@ class TranscriptRepository:
         transcript_id: str,
         title: str | None = None,
         video_path: str | None = None,
+        description: str | None = None,
+        debate_date: date | None = None,
     ) -> Transcript | None:
-        """Update transcript title and/or video_path.
+        """Update transcript title, video_path, description, and/or debate_date.
         Returns updated transcript or None if not found.
         """
         transcript = self.get_transcript_by_id(transcript_id)
@@ -216,6 +223,10 @@ class TranscriptRepository:
             transcript.title = title
         if video_path is not None:
             transcript.video_path = video_path
+        if description is not None:
+            transcript.description = description
+        if debate_date is not None:
+            transcript.debate_date = debate_date
         self.session.commit()
         self.session.refresh(transcript)
         return transcript

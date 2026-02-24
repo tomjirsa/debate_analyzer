@@ -26,8 +26,16 @@
               />
             </div>
             <div class="flex flex-column gap-1 w-full">
-              <label for="title">Title (optional)</label>
-              <InputText id="title" v-model="title" placeholder="Optional display title" class="w-full" />
+              <label for="title">Title</label>
+              <InputText id="title" v-model="title" placeholder="Display title" class="w-full" />
+            </div>
+            <div class="flex flex-column gap-1 w-full">
+              <label for="description">Description (optional)</label>
+              <Textarea id="description" v-model="description" placeholder="Description" rows="3" class="w-full" />
+            </div>
+            <div class="flex flex-column gap-1 w-full">
+              <label for="debateDate">Debate date (optional)</label>
+              <input id="debateDate" v-model="debateDate" type="date" class="p-inputtext p-component w-full" />
             </div>
             <Button label="Register" :loading="registering" :disabled="registering" @click="register" />
             <Message v-if="registerErr" severity="error">{{ registerErr }}</Message>
@@ -74,12 +82,16 @@
                   <Button label="Delete" severity="danger" text size="small" class="ml-1" @click="(e) => confirmDelete(e, data)" />
                 </template>
                 <template v-else>
-                  <div class="flex flex-wrap align-items-center gap-2">
-                    <InputText v-model="editTitle" placeholder="Title" class="flex-1" style="min-width: 120px;" />
-                    <InputText v-model="editVideoPath" placeholder="Video path (optional)" class="flex-1" style="min-width: 180px;" />
-                    <Button label="Save" size="small" @click="saveEdit(data.id)" />
-                    <Button label="Cancel" text size="small" @click="cancelEdit" />
-                    <Message v-if="editStatus" :severity="editStatus === 'Saved.' ? 'success' : 'error'">{{ editStatus }}</Message>
+                  <div class="flex flex-column gap-2">
+                    <div class="flex flex-wrap align-items-center gap-2">
+                      <InputText v-model="editTitle" placeholder="Title" class="flex-1" style="min-width: 120px;" />
+                      <InputText v-model="editVideoPath" placeholder="Video path (optional)" class="flex-1" style="min-width: 180px;" />
+                      <input v-model="editDebateDate" type="date" class="p-inputtext p-component" style="min-width: 140px;" />
+                      <Button label="Save" size="small" @click="saveEdit(data.id)" />
+                      <Button label="Cancel" text size="small" @click="cancelEdit" />
+                      <Message v-if="editStatus" :severity="editStatus === 'Saved.' ? 'success' : 'error'">{{ editStatus }}</Message>
+                    </div>
+                    <Textarea v-model="editDescription" placeholder="Description (optional)" rows="2" class="w-full" />
                   </div>
                 </template>
               </template>
@@ -104,6 +116,7 @@ import DataTable from 'primevue/datatable'
 import InputText from 'primevue/inputtext'
 import Message from 'primevue/message'
 import Select from 'primevue/select'
+import Textarea from 'primevue/textarea'
 import { useConfirm } from 'primevue/useconfirm'
 import { useAdminAuth } from '../composables/useAdminAuth'
 
@@ -119,12 +132,16 @@ const transcripts = ref([])
 const listErr = ref('')
 const sourceUri = ref('')
 const title = ref('')
+const description = ref('')
+const debateDate = ref('')
 const registerErr = ref('')
 const registering = ref(false)
 
 const editingId = ref(null)
 const editTitle = ref('')
 const editVideoPath = ref('')
+const editDescription = ref('')
+const editDebateDate = ref('')
 const editStatus = ref('')
 
 function formatDate(iso) {
@@ -183,14 +200,20 @@ function register() {
     registerErr.value = 'Enter source URI or path.'
     return
   }
+  if (!title.value.trim()) {
+    registerErr.value = 'Title is required.'
+    return
+  }
   registering.value = true
   apiFetch('/api/admin/transcripts/register', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       source_uri: sourceUri.value.trim(),
-      title: title.value.trim() || null,
+      title: title.value.trim(),
       group_id: selectedGroupId.value || null,
+      description: description.value.trim() || null,
+      debate_date: debateDate.value || null,
     }),
   })
     .then((r) => {
@@ -204,6 +227,8 @@ function register() {
       if (data) {
         sourceUri.value = ''
         title.value = ''
+        description.value = ''
+        debateDate.value = ''
         loadTranscripts()
       }
     })
@@ -215,6 +240,8 @@ function startEdit(t) {
   editingId.value = t.id
   editTitle.value = t.title || ''
   editVideoPath.value = t.video_path || ''
+  editDescription.value = t.description || ''
+  editDebateDate.value = t.debate_date ? String(t.debate_date).slice(0, 10) : ''
   editStatus.value = ''
 }
 
@@ -231,6 +258,8 @@ function saveEdit(id) {
     body: JSON.stringify({
       title: editTitle.value.trim() || null,
       video_path: editVideoPath.value.trim() || null,
+      description: editDescription.value.trim() || null,
+      debate_date: editDebateDate.value || null,
     }),
   })
     .then((r) => {

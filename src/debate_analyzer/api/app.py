@@ -1,6 +1,7 @@
 """FastAPI application: public and admin API, static files."""
 
 import os
+from datetime import date
 from pathlib import Path
 from typing import Annotated
 
@@ -408,8 +409,10 @@ class RegisterTranscriptRequest(BaseModel):
     """Request body for register transcript."""
 
     source_uri: str
-    title: str | None = None
+    title: str
     group_id: str | None = None
+    description: str | None = None
+    debate_date: date | None = None
 
 
 @app.post("/api/admin/transcripts/register")
@@ -419,6 +422,11 @@ def admin_register_transcript(
     repo: Annotated[TranscriptRepository, Depends(get_repo_from_db)],
 ) -> dict:
     """Register transcript from S3 or file; creates transcript, segments, mappings."""
+    if not body.title or not body.title.strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Title is required.",
+        )
     try:
         payload = load_transcript_payload(body.source_uri)
     except FileNotFoundError as e:
@@ -431,8 +439,10 @@ def admin_register_transcript(
         body.source_uri,
         payload,
         source_type=source_type,
-        title=body.title,
+        title=body.title.strip(),
         group_id=body.group_id,
+        description=body.description,
+        debate_date=body.debate_date,
     )
     if "_transcription.json" in body.source_uri:
         parquet_uri = body.source_uri.replace(
@@ -454,6 +464,8 @@ class UpdateTranscriptRequest(BaseModel):
 
     title: str | None = None
     video_path: str | None = None
+    description: str | None = None
+    debate_date: date | None = None
 
 
 @app.put("/api/admin/transcripts/{transcript_id}")
@@ -463,11 +475,13 @@ def admin_update_transcript(
     _: Annotated[object, Depends(get_admin_credentials)],
     repo: Annotated[TranscriptRepository, Depends(get_repo_from_db)],
 ) -> dict:
-    """Update transcript title and/or video_path (admin)."""
+    """Update transcript title, video_path, description, and/or debate_date (admin)."""
     transcript = repo.update_transcript(
         transcript_id,
         title=body.title,
         video_path=body.video_path,
+        description=body.description,
+        debate_date=body.debate_date,
     )
     if not transcript:
         raise HTTPException(
