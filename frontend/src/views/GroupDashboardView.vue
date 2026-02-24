@@ -23,30 +23,6 @@
     </Card>
 
     <Card v-if="group && !loading && !error" class="mb-3">
-      <template #title>Transcripts</template>
-      <template #content>
-        <Message v-if="!transcripts.length" severity="info">
-          No transcripts in this group yet. Add them in the admin.
-        </Message>
-        <DataTable v-else id="transcripts" :value="transcripts" data-key="id" class="dashboard-table">
-          <Column field="title" header="Name" sortable>
-            <template #body="{ data }">
-              <router-link :to="transcriptLink(data)">
-                {{ data.title || data.source_uri || data.id }}
-              </router-link>
-            </template>
-          </Column>
-          <Column field="source_type" header="Source type" sortable />
-          <Column field="created_at" header="Created" sortable>
-            <template #body="{ data }">
-              {{ formatDate(data.created_at) }}
-            </template>
-          </Column>
-        </DataTable>
-      </template>
-    </Card>
-
-    <Card v-if="group && !loading && !error">
       <template #title>Speakers</template>
       <template #content>
         <Message v-if="!speakers.length" severity="info">
@@ -78,10 +54,37 @@
               </router-link>
             </template>
           </Column>
-          <Column field="slug" header="Slug" sortable />
-          <Column field="short_description" header="Short description" sortable>
+          <Column field="short_description" header="Info" sortable>
             <template #body="{ data }">
               <span class="cell-truncate" :title="data.short_description">{{ data.short_description || '—' }}</span>
+            </template>
+          </Column>
+        </DataTable>
+      </template>
+    </Card>
+
+    <Card v-if="group && !loading && !error">
+      <template #title>Transcripts</template>
+      <template #content>
+        <Message v-if="!transcripts.length" severity="info">
+          No transcripts in this group yet. Add them in the admin.
+        </Message>
+        <DataTable v-else id="transcripts" :value="transcripts" data-key="id" class="dashboard-table">
+          <Column field="title" header="Name" sortable>
+            <template #body="{ data }">
+              <router-link :to="transcriptLink(data)">
+                {{ data.title || data.source_uri || data.id }}
+              </router-link>
+            </template>
+          </Column>
+          <Column field="debate_date" header="Debate date" sortable>
+            <template #body="{ data }">
+              {{ data.debate_date ? formatDate(data.debate_date) : '—' }}
+            </template>
+          </Column>
+          <Column field="description" header="Description" sortable>
+            <template #body="{ data }">
+              <span class="cell-truncate" :title="data.description">{{ (data.description || '').slice(0, 60) }}{{ (data.description || '').length > 60 ? '…' : '' }}</span>
             </template>
           </Column>
         </DataTable>

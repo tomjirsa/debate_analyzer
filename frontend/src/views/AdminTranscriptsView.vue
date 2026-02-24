@@ -59,9 +59,9 @@
                 {{ data.title || '—' }}
               </template>
             </Column>
-            <Column field="source_uri" header="Source URI">
+            <Column field="debate_date" header="Debate date">
               <template #body="{ data }">
-                <span class="uri-cell">{{ data.source_uri }}</span>
+                {{ data.debate_date ? formatDate(data.debate_date) : '—' }}
               </template>
             </Column>
             <Column field="speakers_count" header="Speakers">
@@ -69,9 +69,9 @@
                 {{ data.speakers_count ?? '—' }}
               </template>
             </Column>
-            <Column field="created_at" header="Created">
+            <Column field="description" header="Description">
               <template #body="{ data }">
-                {{ formatDate(data.created_at) }}
+                <span class="cell-truncate" :title="data.description">{{ (data.description || '').slice(0, 60) }}{{ (data.description || '').length > 60 ? '…' : '' }}</span>
               </template>
             </Column>
             <Column header="Actions">
@@ -312,11 +312,5 @@ watch(selectedGroupId, () => { loadTranscripts() })
 .ml-1 { margin-left: 0.25rem; }
 .action-link { margin-right: 0.25rem; text-decoration: none; }
 .action-link:hover { text-decoration: underline; }
-.uri-cell {
-  max-width: 280px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  display: inline-block;
-}
+.cell-truncate { display: inline-block; max-width: 20rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 </style>
