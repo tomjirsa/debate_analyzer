@@ -36,7 +36,8 @@ def get_vllm_backend(
         ) from e
 
     model_id = model_id or os.environ.get("LLM_MODEL_ID", "Qwen/Qwen2-7B-Instruct")
-    llm = LLM(model=model_id, max_model_len=max_model_len)
+    # enforce_eager=True avoids torch.compile/Triton JIT, so no C compiler or Python.h needed in the container
+    llm = LLM(model=model_id, max_model_len=max_model_len, enforce_eager=True)
 
     class VLLMBackend:
         def generate(self, prompt: str, max_tokens: int = 2048) -> str:
