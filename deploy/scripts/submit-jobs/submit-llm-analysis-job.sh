@@ -26,7 +26,7 @@ fi
 
 echo "Resolving Terraform outputs..."
 cd "$TERRAFORM_DIR"
-QUEUE=$(terraform output -raw batch_job_queue_name)
+QUEUE=$(terraform output -raw batch_job_queue_llm_name)
 DEFN=$(terraform output -raw batch_job_definition_llm_analysis_name)
 REGION=$(terraform output -raw aws_region)
 

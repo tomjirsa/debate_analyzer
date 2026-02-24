@@ -4,7 +4,7 @@ This document describes how to run **LLM analysis** on transcripts: main topics,
 
 ## Overview
 
-- **Model:** Qwen2-7B-Instruct (default; 32k context). Fits on g4dn.xlarge (16 GB GPU).
+- **Model:** Qwen2-7B-Instruct (default; 32k context). Requires 32 GB GPU (e.g. g4dn.2xlarge); LLM jobs use a dedicated queue.
 - **Input:** Transcript JSON (from S3 or local), in the same format as the transcribe job output (`transcription` list with `speaker`, `text`, `start`, `end`).
 - **Output:** JSON with `main_topics`, `topic_summaries`, `speaker_contributions`, written to S3 as `<stem>_llm_analysis.json` alongside the transcript, or imported into the DB via the admin API.
 - **Chunking:** Long transcripts (over ~24k tokens) are split into chunks for topic extraction; topics are merged and then summarized. All phases respect a 32k context limit.
@@ -36,7 +36,7 @@ The LLM job uses a **separate image** (Option B) so the main app image stays sma
 
 ## 2. Run the LLM analysis job
 
-After transcripts exist in S3 (e.g. after the transcribe job):
+After transcripts exist in S3 (e.g. after the transcribe job). The submit script uses the **LLM queue** (32 GB GPU instances) so the 32k context fits; do not submit LLM jobs to the main GPU queue (16 GB).
 
 **Single transcript:**
 ```bash

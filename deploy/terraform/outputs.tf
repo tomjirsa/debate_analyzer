@@ -83,6 +83,11 @@ output "batch_job_definition_llm_analysis_name" {
   value       = aws_batch_job_definition.llm_analysis.name
 }
 
+output "batch_job_queue_llm_name" {
+  description = "Name of the LLM job queue (32 GB GPU; use when submitting LLM analysis jobs)."
+  value       = aws_batch_job_queue.llm.name
+}
+
 output "output_s3_prefix_example" {
   description = "Example OUTPUT_S3_PREFIX for container env (use with VIDEO_URL when submitting job)."
   value       = "s3://${aws_s3_bucket.output.id}/jobs"

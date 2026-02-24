@@ -19,7 +19,7 @@ def get_vllm_backend(
     Args:
         model_id: Hugging Face model id (e.g. Qwen/Qwen2-7B-Instruct).
             Default from env LLM_MODEL_ID.
-        max_model_len: Max context length. Default 32k for g4dn 16GB.
+        max_model_len: Max context length. Default 32k; requires 32 GB GPU (e.g. g4dn.2xlarge).
 
     Returns:
         Object implementing generate(prompt, max_tokens) -> str.

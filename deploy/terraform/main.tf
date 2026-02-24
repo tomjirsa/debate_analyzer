@@ -35,6 +35,9 @@ locals {
     min_vcpus      = var.batch_cpu_min_vcpus
     max_vcpus      = var.batch_cpu_max_vcpus
   })), 0, 8)
+  ce_llm_name_suffix = substr(md5(jsonencode({
+    instance_types = join(",", var.batch_llm_compute_instance_types)
+  })), 0, 8)
   # Effective cookies secret ARN: from Terraform-created secret (file path) or user-provided ARN
   yt_cookies_secret_arn = var.yt_cookies_file_path != null ? aws_secretsmanager_secret.yt_cookies[0].arn : var.yt_cookies_secret_arn
 }
@@ -432,6 +435,43 @@ resource "aws_batch_job_queue" "cpu" {
   compute_environment_order {
     order               = 1
     compute_environment = aws_batch_compute_environment.cpu.arn
+  }
+}
+
+# LLM queue: 32 GB GPU instances only (g4dn.2xlarge) so 32k context fits
+resource "aws_batch_compute_environment" "gpu_llm" {
+  compute_environment_name = "${local.name}-gpu-llm-${local.ce_llm_name_suffix}"
+  type                     = "MANAGED"
+  state                    = "ENABLED"
+
+  lifecycle {
+    create_before_destroy = true
+  }
+
+  compute_resources {
+    type                = "EC2"
+    allocation_strategy = "BEST_FIT"
+    min_vcpus           = var.batch_min_vcpus
+    max_vcpus           = var.batch_max_vcpus
+    instance_type       = var.batch_llm_compute_instance_types
+    subnets             = local.subnet_ids
+    security_group_ids   = [aws_security_group.batch.id]
+    instance_role       = aws_iam_instance_profile.batch_instance.arn
+
+    ec2_configuration {
+      image_type = "ECS_AL2023_NVIDIA"
+    }
+  }
+}
+
+resource "aws_batch_job_queue" "llm" {
+  name     = "${local.name}-queue-llm"
+  state    = "ENABLED"
+  priority = 1
+
+  compute_environment_order {
+    order               = 1
+    compute_environment = aws_batch_compute_environment.gpu_llm.arn
   }
 }
 
