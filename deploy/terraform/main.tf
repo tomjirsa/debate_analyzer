@@ -21,6 +21,8 @@ locals {
   name       = var.name_prefix
   # ECR image URI for job definition (CI pushes to this repo)
   ecr_image = "${local.account_id}.dkr.ecr.${local.region}.amazonaws.com/${aws_ecr_repository.this.name}:${var.ecr_image_tag}"
+  # LLM image (dedicated image for transcript analysis; build with Dockerfile.llm)
+  ecr_image_llm = "${local.account_id}.dkr.ecr.${local.region}.amazonaws.com/${aws_ecr_repository.llm.name}:${var.ecr_image_tag_llm}"
   # Stable suffix for CE name so create_before_destroy can create new CE (new name) before destroying old one
   ce_name_suffix = substr(md5(jsonencode({
     instance_types = join(",", var.batch_compute_instance_types)
@@ -266,8 +268,14 @@ resource "aws_iam_instance_profile" "batch_instance" {
 
 # --- ECR repository ---
 resource "aws_ecr_repository" "this" {
-  name                 = local.name
-  force_delete         = false
+  name         = local.name
+  force_delete = false
+}
+
+# --- ECR repository for LLM image (Option B: dedicated image) ---
+resource "aws_ecr_repository" "llm" {
+  name         = "${local.name}-llm"
+  force_delete = false
 }
 
 # --- VPC / subnets (use default if not provided) ---
@@ -310,6 +318,46 @@ resource "aws_security_group" "batch" {
 resource "aws_cloudwatch_log_group" "batch" {
   name              = "/aws/batch/${local.name}"
   retention_in_days  = 14
+}
+
+# --- EFS: shared cache for LLM model (Hugging Face cache so model is not re-downloaded per job) ---
+resource "aws_efs_file_system" "llm_cache" {
+  creation_token = "${local.name}-llm-cache"
+  encrypted      = true
+
+  tags = {
+    Name = "${local.name}-llm-cache"
+  }
+}
+
+resource "aws_security_group" "efs_llm_cache" {
+  name_prefix = "${local.name}-efs-llm-"
+  vpc_id      = local.selected_vpc_id
+  description = "EFS mount targets for LLM model cache (NFS from Batch)"
+
+  ingress {
+    from_port       = 2049
+    to_port         = 2049
+    protocol        = "tcp"
+    security_groups = [aws_security_group.batch.id]
+    description     = "NFS from Batch compute"
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+    description = "Allow all outbound"
+  }
+}
+
+resource "aws_efs_mount_target" "llm_cache" {
+  for_each = toset(local.subnet_ids)
+
+  file_system_id  = aws_efs_file_system.llm_cache.id
+  subnet_id       = each.value
+  security_groups = [aws_security_group.efs_llm_cache.id]
 }
 
 # --- Batch: compute environment ---
@@ -497,6 +545,52 @@ resource "aws_batch_job_definition" "stats" {
     executionRoleArn = aws_iam_role.batch_execution.arn
     secrets          = []
     environment      = []
+    logConfiguration = {
+      logDriver = "awslogs"
+      options = {
+        "awslogs-group"         = aws_cloudwatch_log_group.batch.name
+        "awslogs-region"        = local.region
+        "awslogs-stream-prefix" = "batch"
+      }
+    }
+  })
+}
+
+# Job 4: LLM analysis (GPU; dedicated LLM image; EFS cache at /cache for HF_HOME so model is not re-downloaded per job)
+resource "aws_batch_job_definition" "llm_analysis" {
+  name                  = "${local.name}-job-llm-analysis"
+  type                  = "container"
+  platform_capabilities = ["EC2"]
+
+  container_properties = jsonencode({
+    image = local.ecr_image_llm
+    command = ["/entrypoint_llm_analysis.sh"]
+    resourceRequirements = [
+      { type = "VCPU", value = "3" },
+      { type = "MEMORY", value = "15360" },
+      { type = "GPU", value = "1" }
+    ]
+    jobRoleArn       = aws_iam_role.batch_job.arn
+    executionRoleArn = aws_iam_role.batch_execution.arn
+    secrets          = []
+    environment = [
+      { name = "HF_HOME", value = "/cache" }
+    ]
+    volumes = [
+      {
+        name = "llm-cache"
+        efsVolumeConfiguration = {
+          fileSystemId = aws_efs_file_system.llm_cache.id
+        }
+      }
+    ]
+    mountPoints = [
+      {
+        containerPath = "/cache"
+        sourceVolume  = "llm-cache"
+        readOnly      = false
+      }
+    ]
     logConfiguration = {
       logDriver = "awslogs"
       options = {

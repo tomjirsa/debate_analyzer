@@ -269,3 +269,36 @@ class TranscriptSpeakerStats(Base):
     share_words = Column(Float, nullable=True)
 
     transcript = relationship("Transcript", back_populates="speaker_stats")
+
+
+class TranscriptLLMAnalysis(Base):
+    """One LLM analysis run for a transcript (topics, summaries, speaker contributions)."""
+
+    __tablename__ = "transcript_llm_analysis"
+
+    id = Column(String(36), primary_key=True, default=_uuid)
+    transcript_id = Column(
+        String(36),
+        ForeignKey("transcript.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    model_name = Column(String(255), nullable=False)
+    source = Column(String(64), nullable=False, default="batch")  # batch, api, etc.
+    created_at = Column(DateTime, default=datetime.utcnow)
+    result = Column(
+        JSON, nullable=False
+    )  # main_topics, topic_summaries, speaker_contributions
+
+    transcript = relationship("Transcript", backref="llm_analyses")
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize to dict for API responses."""
+        return {
+            "id": self.id,
+            "transcript_id": self.transcript_id,
+            "model_name": self.model_name,
+            "source": self.source,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "result": self.result,
+        }

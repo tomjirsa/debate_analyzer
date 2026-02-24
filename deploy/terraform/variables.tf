@@ -35,6 +35,12 @@ variable "ecr_image_tag" {
   default     = "latest"
 }
 
+variable "ecr_image_tag_llm" {
+  description = "Docker image tag for the dedicated LLM image (debate-analyzer-llm)."
+  type        = string
+  default     = "latest"
+}
+
 variable "batch_compute_instance_types" {
   description = "EC2 instance types for the Batch compute environment (GPU)."
   type        = list(string)

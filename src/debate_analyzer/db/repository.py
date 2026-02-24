@@ -14,6 +14,7 @@ from debate_analyzer.db.models import (
     SpeakerProfile,
     SpeakerStatGroup,
     Transcript,
+    TranscriptLLMAnalysis,
     TranscriptSpeakerStats,
 )
 
@@ -255,6 +256,52 @@ class TranscriptRepository:
         self.session.delete(transcript)
         self.session.commit()
         return True
+
+    def create_llm_analysis(
+        self,
+        transcript_id: str,
+        model_name: str,
+        result: dict[str, object],
+        source: str = "batch",
+    ) -> TranscriptLLMAnalysis | None:
+        """Create an LLM analysis record for a transcript.
+        Returns the created record or None if transcript not found.
+        """
+        if not self.get_transcript_by_id(transcript_id):
+            return None
+        analysis = TranscriptLLMAnalysis(
+            transcript_id=transcript_id,
+            model_name=model_name,
+            source=source,
+            result=result,
+        )
+        self.session.add(analysis)
+        self.session.commit()
+        self.session.refresh(analysis)
+        return analysis
+
+    def get_latest_llm_analysis(
+        self, transcript_id: str
+    ) -> TranscriptLLMAnalysis | None:
+        """Return the most recent LLM analysis for a transcript, or None."""
+        return (
+            self.session.query(TranscriptLLMAnalysis)
+            .filter(TranscriptLLMAnalysis.transcript_id == transcript_id)
+            .order_by(TranscriptLLMAnalysis.created_at.desc())
+            .first()
+        )
+
+    def list_llm_analyses_for_transcript(
+        self, transcript_id: str, limit: int = 20
+    ) -> list[TranscriptLLMAnalysis]:
+        """List LLM analyses for a transcript, newest first."""
+        return (
+            self.session.query(TranscriptLLMAnalysis)
+            .filter(TranscriptLLMAnalysis.transcript_id == transcript_id)
+            .order_by(TranscriptLLMAnalysis.created_at.desc())
+            .limit(limit)
+            .all()
+        )
 
     def get_speaker_profile_by_id(
         self, profile_id: str, group_id: str | None = None

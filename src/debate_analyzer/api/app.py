@@ -490,6 +490,80 @@ def admin_delete_transcript(
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
+@app.get("/api/admin/transcripts/{transcript_id}/analysis")
+def admin_get_transcript_analysis(
+    transcript_id: str,
+    _: Annotated[object, Depends(get_admin_credentials)],
+    repo: Annotated[TranscriptRepository, Depends(get_repo_from_db)],
+) -> dict:
+    """Get the latest LLM analysis for a transcript (admin). Returns 404 if none."""
+    analysis = repo.get_latest_llm_analysis(transcript_id)
+    if not analysis:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No LLM analysis found for this transcript",
+        )
+    return analysis.to_dict()
+
+
+class ImportAnalysisRequest(BaseModel):
+    """Request body for import LLM analysis: either source_uri or inline result."""
+
+    source_uri: str | None = None
+    result: dict | None = None
+    model_name: str = "Qwen/Qwen2-7B-Instruct"
+    source: str = "api"
+
+
+@app.post("/api/admin/transcripts/{transcript_id}/analysis/import")
+def admin_import_transcript_analysis(
+    transcript_id: str,
+    body: ImportAnalysisRequest,
+    _: Annotated[object, Depends(get_admin_credentials)],
+    repo: Annotated[TranscriptRepository, Depends(get_repo_from_db)],
+) -> dict:
+    """Import LLM analysis from S3/file (source_uri) or inline JSON (result) (admin)."""
+    if not repo.get_transcript_by_id(transcript_id):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Transcript not found"
+        )
+    if body.source_uri:
+        try:
+            payload = load_transcript_payload(body.source_uri)
+        except FileNotFoundError as e:
+            raise HTTPException(status_code=404, detail=str(e)) from e
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+        result = (
+            payload.get("result", payload)
+            if isinstance(payload.get("result"), dict)
+            else payload
+        )
+        if not isinstance(result, dict) or "main_topics" not in result:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid analysis JSON: expected object with main_topics (and topic_summaries, speaker_contributions)",
+            )
+    elif body.result is not None:
+        result = body.result
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail="Provide either source_uri or result",
+        )
+    analysis = repo.create_llm_analysis(
+        transcript_id=transcript_id,
+        model_name=body.model_name,
+        result=result,
+        source=body.source,
+    )
+    if not analysis:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Transcript not found"
+        )
+    return analysis.to_dict()
+
+
 class CreateSpeakerRequest(BaseModel):
     """Request body for create speaker."""
 

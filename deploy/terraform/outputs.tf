@@ -73,6 +73,16 @@ output "batch_job_definition_stats_name" {
   value       = aws_batch_job_definition.stats.name
 }
 
+output "ecr_repository_llm_url" {
+  description = "ECR repository URL for the LLM image (build with Dockerfile.llm, push here)."
+  value       = aws_ecr_repository.llm.repository_url
+}
+
+output "batch_job_definition_llm_analysis_name" {
+  description = "Name of the LLM analysis job definition (Job 4; run after transcribe)."
+  value       = aws_batch_job_definition.llm_analysis.name
+}
+
 output "output_s3_prefix_example" {
   description = "Example OUTPUT_S3_PREFIX for container env (use with VIDEO_URL when submitting job)."
   value       = "s3://${aws_s3_bucket.output.id}/jobs"
