@@ -24,13 +24,13 @@ output "s3_bucket_arn" {
 }
 
 output "cloudfront_domain_name" {
-  description = "CloudFront distribution domain (e.g. d123.cloudfront.net) for stable URLs."
-  value       = aws_cloudfront_distribution.s3.domain_name
+  description = "CloudFront distribution domain (e.g. d123.cloudfront.net) for stable URLs. Null when enable_cloudfront is false."
+  value       = var.enable_cloudfront ? aws_cloudfront_distribution.s3[0].domain_name : null
 }
 
 output "cloudfront_speaker_photos_url" {
-  description = "Base URL for speaker profile photos (set as SPEAKER_PHOTOS_BASE_URL in web app)."
-  value       = "https://${aws_cloudfront_distribution.s3.domain_name}"
+  description = "Base URL for speaker profile photos (set as SPEAKER_PHOTOS_BASE_URL in web app). Null when enable_cloudfront is false."
+  value       = var.enable_cloudfront ? "https://${aws_cloudfront_distribution.s3[0].domain_name}" : null
 }
 
 output "batch_job_queue_name" {

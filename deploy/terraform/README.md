@@ -24,6 +24,7 @@ For a **step-by-step AWS setup** and full variable descriptions, see [doc/AWS_SE
    terraform plan
    terraform apply
    ```
+   If your IAM user lacks CloudFront permissions (e.g. `cloudfront:CreateOriginAccessControl`), add `-var="enable_cloudfront=false"` so Terraform skips CloudFront; speaker photos will use S3 URLs instead of the CDN.
 
 3. **Note the outputs** (queue names, job definition names, bucket name). After the Docker image is pushed to ECR (e.g. by GitHub Actions), submit jobs:
    - **Full pipeline (one job):** From repo root, `./deploy/scripts/submit-jobs/submit-job.sh "https://www.youtube.com/watch?v=VIDEO_ID"`, or use `batch_job_queue_name` and `batch_job_definition_name` with the example in `terraform output submit_job_example`.
@@ -50,6 +51,7 @@ For a **step-by-step AWS setup** and full variable descriptions, see [doc/AWS_SE
 | `vpc_id` | VPC ID (null = default VPC) | `null` |
 | `subnet_ids` | Subnet IDs (null = default VPC subnets) | `null` |
 | `use_spot` | Use Spot instances | `false` |
+| `enable_cloudfront` | Create CloudFront distribution for S3 (speaker photos). Set to `false` if the IAM user lacks `cloudfront:*` (e.g. `DatabaseAnalyzer`). | `true` |
 
 ## Outputs
 

@@ -90,8 +90,10 @@ resource "aws_s3_bucket_cors_configuration" "output" {
   }
 }
 
-# --- CloudFront: Origin Access Control (OAC) for S3 ---
+# --- CloudFront: Origin Access Control (OAC) for S3 (optional; set enable_cloudfront = false if IAM lacks cloudfront:*) ---
 resource "aws_cloudfront_origin_access_control" "s3" {
+  count = var.enable_cloudfront ? 1 : 0
+
   name                              = "${local.name}-s3-oac"
   description                       = "OAC for S3 bucket ${aws_s3_bucket.output.id}"
   origin_access_control_origin_type = "s3"
@@ -101,13 +103,15 @@ resource "aws_cloudfront_origin_access_control" "s3" {
 
 # --- CloudFront: distribution for stable URLs (speaker photos, optional video) ---
 resource "aws_cloudfront_distribution" "s3" {
+  count = var.enable_cloudfront ? 1 : 0
+
   comment = "Debate Analyzer S3 (speaker photos, jobs)"
   enabled = true
 
   origin {
     domain_name              = aws_s3_bucket.output.bucket_regional_domain_name
     origin_id                = "S3-${aws_s3_bucket.output.id}"
-    origin_access_control_id = aws_cloudfront_origin_access_control.s3.id
+    origin_access_control_id = aws_cloudfront_origin_access_control.s3[0].id
   }
 
   default_cache_behavior {
@@ -140,6 +144,8 @@ resource "aws_cloudfront_distribution" "s3" {
 
 # --- S3 bucket policy: allow CloudFront to read (OAC) ---
 resource "aws_s3_bucket_policy" "output" {
+  count = var.enable_cloudfront ? 1 : 0
+
   bucket = aws_s3_bucket.output.id
 
   policy = jsonencode({
@@ -153,7 +159,7 @@ resource "aws_s3_bucket_policy" "output" {
         Resource  = "${aws_s3_bucket.output.arn}/*"
         Condition = {
           StringEquals = {
-            "AWS:SourceArn" = aws_cloudfront_distribution.s3.arn
+            "AWS:SourceArn" = aws_cloudfront_distribution.s3[0].arn
           }
         }
       }
@@ -321,13 +327,10 @@ resource "aws_cloudwatch_log_group" "batch" {
 }
 
 # --- EFS: shared cache for LLM model (Hugging Face cache so model is not re-downloaded per job) ---
+# No tags: avoids elasticfilesystem:TagResource when IAM has CreateFileSystem but not TagResource
 resource "aws_efs_file_system" "llm_cache" {
   creation_token = "${local.name}-llm-cache"
   encrypted      = true
-
-  tags = {
-    Name = "${local.name}-llm-cache"
-  }
 }
 
 resource "aws_security_group" "efs_llm_cache" {

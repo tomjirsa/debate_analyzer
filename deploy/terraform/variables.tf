@@ -100,3 +100,9 @@ variable "cors_allowed_origins" {
   type        = list(string)
   default     = []
 }
+
+variable "enable_cloudfront" {
+  description = "Create CloudFront distribution and OAC for S3 (speaker photos). Set to false if the deploy IAM user lacks cloudfront:* permissions."
+  type        = bool
+  default     = true
+}
