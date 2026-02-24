@@ -10,7 +10,6 @@ ENV PYTHONUNBUFFERED=1
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3.10 \
     python3.10-venv \
-    python3.10-dev \
     python3-pip \
     curl \
     unzip \
@@ -25,7 +24,7 @@ RUN curl -sS "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o /tmp/
 
 WORKDIR /app
 
-# Install deps: vLLM (GPU), boto3, pyarrow (loader may use parquet for other jobs; we only need JSON - but loader doesn't need parquet for transcript JSON). Loader only needs json + boto3.
+# Install deps: vLLM (GPU, eager mode so no C compiler needed), boto3 for S3.
 RUN pip install --no-cache-dir "vllm>=0.4.0" "boto3>=1.28"
 
 # Copy only the code needed for LLM analysis (analysis module, batch llm job, api loader)
