@@ -1,0 +1,9 @@
+---
+description: Do not edit deploy notes file
+globs: deploy/deployNotes.txt
+alwaysApply: false
+---
+
+# Do not edit deployNotes.txt
+
+Do not modify or edit this file. It is for manual deployment notes only.
