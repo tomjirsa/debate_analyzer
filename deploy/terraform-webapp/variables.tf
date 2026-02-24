@@ -74,3 +74,9 @@ variable "rds_allowed_cidr_blocks" {
   type        = list(string)
   default     = []
 }
+
+variable "s3_cors_extra_origins" {
+  description = "Additional CORS origins for the S3 bucket (presigned PUT speaker photos). The web app ALB origin (http/https) is always included. Add e.g. [\"https://your-domain.com\"] if you use a custom domain."
+  type        = list(string)
+  default     = []
+}

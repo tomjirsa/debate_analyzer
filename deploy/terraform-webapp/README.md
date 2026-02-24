@@ -9,7 +9,7 @@ For a **step-by-step AWS setup** and full variable descriptions, see [doc/AWS_SE
 - Terraform >= 1.0
 - AWS CLI configured
 - **Existing Batch stack** applied first (you need the S3 bucket name for the web app to read transcripts)
-- **IAM user/role** used to run Terraform (e.g. `DatabaseAnalyzer`) must have permissions for RDS, ECS, Secrets Manager, EC2 (VPC/security groups), ECR, IAM (roles for ECS), ELB, and CloudWatch Logs. If you see `AccessDenied` for `rds:CreateDBSubnetGroup` or `ecs:CreateCluster`, attach the policy in `iam-policy-terraform-webapp.json` to that user:
+- **IAM user/role** used to run Terraform (e.g. `DatabaseAnalyzer`) must have permissions for RDS, ECS, Secrets Manager, EC2 (VPC/security groups), ECR, IAM (roles for ECS), ELB, CloudWatch Logs, and S3 (GetBucketCORS/PutBucketCORS on the transcripts bucket for speaker photo upload CORS). If you see `AccessDenied` for `rds:CreateDBSubnetGroup` or `ecs:CreateCluster`, attach the policy in `iam-policy-terraform-webapp.json` to that user:
 
   ```bash
   # Create a policy in AWS from the JSON file (one-time)
@@ -49,6 +49,7 @@ For a **step-by-step AWS setup** and full variable descriptions, see [doc/AWS_SE
 - **`vpc_id`** (optional) – VPC for ECS and RDS; if null, default VPC is used
 - **`subnet_ids`** (optional) – Subnets for ECS tasks; if null, all subnets in the VPC
 - **`existing_s3_bucket_name`** – Name of the S3 bucket from the Batch stack (transcripts bucket)
+- **`s3_cors_extra_origins`** (optional) – Extra CORS origins for S3 (e.g. `["https://your-domain.com"]`). The ALB origin (http/https) is always allowed so speaker photo uploads work.
 - **`admin_username`** – HTTP Basic auth username for admin (sensitive)
 - **`admin_password`** – HTTP Basic auth password (sensitive)
 - **`db_password`** – Master password for RDS (sensitive)

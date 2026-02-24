@@ -191,6 +191,27 @@ resource "aws_iam_role_policy" "ecs_task_s3" {
   })
 }
 
+# --- S3 CORS for presigned PUT (speaker photo uploads from browser) ---
+# Allows the web app origin so browser requests to S3 succeed. Required when the
+# Batch stack was applied without cors_allowed_origins.
+locals {
+  alb_origin_http  = "http://${aws_lb.app.dns_name}"
+  alb_origin_https = "https://${aws_lb.app.dns_name}"
+  s3_cors_origins  = distinct(concat([local.alb_origin_http, local.alb_origin_https], var.s3_cors_extra_origins))
+}
+
+resource "aws_s3_bucket_cors_configuration" "speaker_photos" {
+  bucket = var.existing_s3_bucket_name
+
+  cors_rule {
+    allowed_headers = ["*"]
+    allowed_methods = ["GET", "PUT", "HEAD"]
+    allowed_origins = local.s3_cors_origins
+    expose_headers   = ["ETag"]
+    max_age_seconds = 3600
+  }
+}
+
 # --- Security group for ECS tasks ---
 resource "aws_security_group" "ecs_tasks" {
   name_prefix = "${local.name}-ecs-"
