@@ -36,14 +36,33 @@ SPEAKER_PHOTO_CONTENT_TYPES = {
 }
 
 
+# Expiry for presigned GET URLs when SPEAKER_PHOTOS_BASE_URL is not set (fallback)
+SPEAKER_PHOTO_PRESIGNED_GET_EXPIRES_IN = 3600
+
+
 def _speaker_to_dict(profile: SpeakerProfile) -> dict:
     """Serialize speaker profile to dict and add photo_url from config."""
     d = profile.to_dict()
     base = os.environ.get("SPEAKER_PHOTOS_BASE_URL", "").strip()
-    if profile.photo_key and base:
+    bucket = os.environ.get("SPEAKER_PHOTOS_S3_BUCKET", "").strip()
+    key_strip = (profile.photo_key or "").strip().lstrip("/")
+
+    if not key_strip:
+        d["photo_url"] = None
+        return d
+
+    if base:
         base_rstrip = base.rstrip("/")
-        key_strip = profile.photo_key.lstrip("/")
-        d["photo_url"] = f"{base_rstrip}/{key_strip}" if key_strip else None
+        d["photo_url"] = f"{base_rstrip}/{key_strip}"
+    elif bucket:
+        try:
+            d["photo_url"] = generate_presigned_get_url(
+                bucket=bucket,
+                key=key_strip,
+                expires_in=SPEAKER_PHOTO_PRESIGNED_GET_EXPIRES_IN,
+            )
+        except Exception:
+            d["photo_url"] = None
     else:
         d["photo_url"] = None
     return d
