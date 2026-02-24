@@ -118,7 +118,7 @@ def list_speakers_in_group(
     group_id_or_slug: str,
     repo: Annotated[TranscriptRepository, Depends(get_repo_from_db)],
 ) -> list[dict]:
-    """List speaker profiles in a group (public)."""
+    """List speaker profiles in a group (public). Includes transcript_count per speaker."""
     group = repo.get_group_by_id(group_id_or_slug) or repo.get_group_by_slug(
         group_id_or_slug
     )
@@ -126,7 +126,13 @@ def list_speakers_in_group(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Group not found"
         )
-    return [_speaker_to_dict(p) for p in repo.list_speaker_profiles(group_id=group.id)]
+    profiles = repo.list_speaker_profiles(group_id=group.id)
+    profile_ids = [p.id for p in profiles]
+    counts = repo.get_transcript_counts_for_speakers(profile_ids)
+    return [
+        {**_speaker_to_dict(p), "transcript_count": counts.get(p.id, 0)}
+        for p in profiles
+    ]
 
 
 @app.get("/api/groups/{group_id_or_slug}/transcripts")

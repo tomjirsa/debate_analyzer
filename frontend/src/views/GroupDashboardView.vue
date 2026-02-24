@@ -28,38 +28,42 @@
         <Message v-if="!speakers.length" severity="info">
           No speakers in this group yet. Add transcripts and assign speakers in the admin.
         </Message>
-        <DataTable v-else id="speakers" :value="speakers" data-key="id" class="dashboard-table">
-          <Column header="Photo" style="width: 56px;">
-            <template #body="{ data }">
+        <div v-else class="speaker-cards">
+          <router-link
+            v-for="s in speakers"
+            :key="s.id"
+            :to="speakerLink(s)"
+            class="speaker-card"
+          >
+            <div class="speaker-card-header">
               <Avatar
-                v-if="data.photo_url"
-                :image="data.photo_url"
+                v-if="s.photo_url"
+                :image="s.photo_url"
                 shape="circle"
-                size="normal"
-                class="speaker-thumb"
+                size="xlarge"
+                class="speaker-card-avatar"
               />
               <Avatar
                 v-else
-                :label="initials(data)"
+                :label="initials(s)"
                 shape="circle"
-                size="normal"
-                class="speaker-thumb"
+                size="xlarge"
+                class="speaker-card-avatar"
               />
-            </template>
-          </Column>
-          <Column field="display_name" header="Name" sortable>
-            <template #body="{ data }">
-              <router-link :to="speakerLink(data)">
-                {{ displayName(data) }}
-              </router-link>
-            </template>
-          </Column>
-          <Column field="short_description" header="Info" sortable>
-            <template #body="{ data }">
-              <span class="cell-truncate" :title="data.short_description">{{ data.short_description || '—' }}</span>
-            </template>
-          </Column>
-        </DataTable>
+              <span class="speaker-card-name">{{ displayName(s) }}</span>
+            </div>
+            <div class="speaker-card-body">
+              <p v-if="s.short_description" class="speaker-card-desc">{{ s.short_description }}</p>
+              <p v-if="s.bio && !s.short_description" class="speaker-card-desc speaker-card-bio-excerpt">{{ bioExcerpt(s.bio) }}</p>
+              <div class="speaker-card-stats">
+                <span class="speaker-card-stat">
+                  <span class="speaker-card-stat-value">{{ s.transcript_count ?? 0 }}</span>
+                  <span class="speaker-card-stat-label">transcript{{ (s.transcript_count ?? 0) === 1 ? '' : 's' }}</span>
+                </span>
+              </div>
+            </div>
+          </router-link>
+        </div>
       </template>
     </Card>
 
@@ -132,6 +136,13 @@ function initials(s) {
   return (a + b).toUpperCase() || '?'
 }
 
+function bioExcerpt(bio, maxLen = 100) {
+  if (!bio || typeof bio !== 'string') return ''
+  const t = bio.trim()
+  if (t.length <= maxLen) return t
+  return t.slice(0, maxLen).trim() + '…'
+}
+
 function speakerLink(s) {
   const g = groupIdOrSlug.value
   const id = (s.slug || s.id)
@@ -189,6 +200,90 @@ watch(groupIdOrSlug, load)
 .dashboard-table a { text-decoration: none; }
 .dashboard-table a:hover { text-decoration: underline; }
 .cell-truncate { display: inline-block; max-width: 20rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.speaker-thumb { flex-shrink: 0; }
+
+/* Speaker cards: business-card style, Pico-inspired clean layout */
+.speaker-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 1.5rem;
+}
+.speaker-card {
+  display: flex;
+  flex-direction: column;
+  text-decoration: none;
+  color: inherit;
+  background: var(--p-surface-0, #fff);
+  border: 1px solid var(--p-surface-200, #e5e7eb);
+  border-radius: 12px;
+  overflow: hidden;
+  transition: box-shadow 0.2s ease, transform 0.2s ease, border-color 0.2s ease;
+}
+.speaker-card:hover {
+  border-color: var(--p-primary-color, #3b82f6);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08), 0 2px 6px rgba(0, 0, 0, 0.04);
+  transform: translateY(-2px);
+}
+.speaker-card-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 1.5rem 1.25rem 0.75rem;
+  background: linear-gradient(180deg, var(--p-surface-50, #f9fafb) 0%, var(--p-surface-0, #fff) 100%);
+  border-bottom: 1px solid var(--p-surface-100, #f3f4f6);
+}
+.speaker-card-avatar {
+  flex-shrink: 0;
+  margin-bottom: 0.75rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+.speaker-card-name {
+  font-weight: 600;
+  font-size: 1.1rem;
+  text-align: center;
+  line-height: 1.3;
+}
+.speaker-card-body {
+  padding: 1rem 1.25rem 1.25rem;
+  min-width: 0;
+}
+.speaker-card-desc {
+  margin: 0 0 0.75rem;
+  font-size: 0.875rem;
+  color: var(--p-text-color-secondary, #6b7280);
+  line-height: 1.45;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.speaker-card-bio-excerpt {
+  font-style: italic;
+}
+.speaker-card-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-top: 0.5rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--p-surface-100, #f3f4f6);
+}
+.speaker-card-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+.speaker-card-stat-value {
+  font-weight: 700;
+  font-size: 1.25rem;
+  color: var(--p-primary-color, #3b82f6);
+  line-height: 1.2;
+}
+.speaker-card-stat-label {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  color: var(--p-text-color-secondary, #6b7280);
+}
+
 .mb-3 { margin-bottom: 1rem; }
 </style>

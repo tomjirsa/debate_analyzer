@@ -558,6 +558,27 @@ class TranscriptRepository:
         result["share_words"] = sum(share_w) / len(share_w) if share_w else None
         return result
 
+    def get_transcript_counts_for_speakers(
+        self, profile_ids: list[str]
+    ) -> dict[str, int]:
+        """
+        Return transcript count per speaker profile id for the given profile ids.
+        Used to enrich list responses without N+1 queries.
+        """
+        if not profile_ids:
+            return {}
+        rows = (
+            self.session.query(
+                SpeakerMapping.speaker_profile_id,
+                func.count(func.distinct(SpeakerMapping.transcript_id)).label("cnt"),
+            )
+            .filter(SpeakerMapping.speaker_profile_id.in_(profile_ids))
+            .filter(SpeakerMapping.speaker_profile_id.isnot(None))
+            .group_by(SpeakerMapping.speaker_profile_id)
+            .all()
+        )
+        return {str(pid): int(cnt) for pid, cnt in rows}
+
     def save_transcript_speaker_stats(
         self,
         transcript_id: str,
