@@ -8,12 +8,18 @@
       <template #title>Create group</template>
       <template #content>
         <div class="flex flex-column gap-2" style="max-width: 400px;">
-          <label for="newGroupName">Name</label>
-          <InputText id="newGroupName" v-model="newName" placeholder="Group name" />
-          <label for="newGroupSlug">Slug (URL-friendly)</label>
-          <InputText id="newGroupSlug" v-model="newSlug" placeholder="my-group" />
-          <label for="newGroupDesc">Description (optional)</label>
-          <InputText id="newGroupDesc" v-model="newDescription" placeholder="Optional description" />
+          <div class="flex flex-column gap-1 w-full">
+            <label for="newGroupName">Name</label>
+            <InputText id="newGroupName" v-model="newName" placeholder="Group name" class="w-full" />
+          </div>
+          <div class="flex flex-column gap-1 w-full">
+            <label for="newGroupSlug">Slug (URL-friendly)</label>
+            <InputText id="newGroupSlug" v-model="newSlug" placeholder="my-group" class="w-full" />
+          </div>
+          <div class="flex flex-column gap-1 w-full">
+            <label for="newGroupDesc">Description (optional)</label>
+            <InputText id="newGroupDesc" v-model="newDescription" placeholder="Optional description" class="w-full" />
+          </div>
           <Button label="Create group" :loading="creating" :disabled="creating" @click="createGroup" />
           <Message v-if="createErr" severity="error">{{ createErr }}</Message>
           <Message v-else-if="createOk" severity="success">Group created.</Message>

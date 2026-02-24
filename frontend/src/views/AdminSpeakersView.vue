@@ -8,25 +8,37 @@
         <template #title>Add speaker</template>
         <template #content>
           <div class="flex flex-column gap-2" style="max-width: 400px;">
-            <label>Group</label>
-            <Select
-              v-model="selectedGroupId"
-              :options="groups"
-              option-label="name"
-              option-value="id"
-              placeholder="Select group"
-              class="w-full"
-            />
-            <label>First name</label>
-            <InputText v-model="newFirstName" placeholder="First name" />
-            <label>Surname</label>
-            <InputText v-model="newSurname" placeholder="Surname" />
-            <label>Slug (optional)</label>
-            <InputText v-model="newSlug" placeholder="url-slug" />
-            <label>Short description (optional)</label>
-            <Textarea v-model="newShortDescription" placeholder="Short description" rows="3" />
-            <label>Bio (optional)</label>
-            <Textarea v-model="newBio" placeholder="Bio" rows="3" />
+            <div class="flex flex-column gap-1 w-full">
+              <label>Group</label>
+              <Select
+                v-model="selectedGroupId"
+                :options="groups"
+                option-label="name"
+                option-value="id"
+                placeholder="Select group"
+                class="w-full"
+              />
+            </div>
+            <div class="flex flex-column gap-1 w-full">
+              <label>First name</label>
+              <InputText v-model="newFirstName" placeholder="First name" class="w-full" />
+            </div>
+            <div class="flex flex-column gap-1 w-full">
+              <label>Surname</label>
+              <InputText v-model="newSurname" placeholder="Surname" class="w-full" />
+            </div>
+            <div class="flex flex-column gap-1 w-full">
+              <label>Slug (optional)</label>
+              <InputText v-model="newSlug" placeholder="url-slug" class="w-full" />
+            </div>
+            <div class="flex gap-2 w-full align-items-start">
+              <label class="flex-shrink-0 pt-2" style="min-width: 11em;">Short description (optional)</label>
+              <Textarea v-model="newShortDescription" placeholder="Short description" rows="3" class="flex-1 w-full" />
+            </div>
+            <div class="flex gap-2 w-full align-items-start">
+              <label class="flex-shrink-0 pt-2" style="min-width: 11em;">Bio (optional)</label>
+              <Textarea v-model="newBio" placeholder="Bio" rows="3" class="flex-1 w-full" />
+            </div>
             <Button label="Add speaker" @click="addSpeaker" />
             <Message v-if="addStatus" :severity="addStatus === 'Added.' ? 'success' : 'error'">{{ addStatus }}</Message>
           </div>

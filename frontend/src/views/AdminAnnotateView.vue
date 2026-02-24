@@ -78,22 +78,22 @@
             />
           </div>
           <Panel v-if="showNewSpeaker" header="Create new profile" class="mt-2">
-            <div class="flex flex-wrap gap-2 align-items-end">
-              <div class="flex flex-column">
+            <div class="flex flex-column gap-2 w-full">
+              <div class="flex flex-column gap-1 w-full">
                 <label>First name</label>
-                <InputText v-model="newFirstName" placeholder="First name" />
+                <InputText v-model="newFirstName" placeholder="First name" class="w-full" />
               </div>
-              <div class="flex flex-column">
+              <div class="flex flex-column gap-1 w-full">
                 <label>Surname</label>
-                <InputText v-model="newSurname" placeholder="Surname" />
+                <InputText v-model="newSurname" placeholder="Surname" class="w-full" />
               </div>
-              <div class="flex flex-column">
+              <div class="flex flex-column gap-1 w-full">
                 <label>Slug (optional)</label>
-                <InputText v-model="newSlug" placeholder="Slug" />
+                <InputText v-model="newSlug" placeholder="Slug" class="w-full" />
               </div>
-              <div class="flex flex-column">
+              <div class="flex flex-column gap-1 w-full">
                 <label>Short description (optional)</label>
-                <InputText v-model="newShortDescription" placeholder="Short description" style="min-width: 200px;" />
+                <InputText v-model="newShortDescription" placeholder="Short description" class="w-full" />
               </div>
               <Button label="Create and assign" @click="createAndAssign" />
             </div>

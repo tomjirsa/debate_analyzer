@@ -8,22 +8,27 @@
     <Card class="mb-4">
         <template #title>Register transcript</template>
         <template #content>
-          <p>Enter S3 URI (e.g. <code>s3://bucket/jobs/xxx/transcripts/file.json</code>) or local path.</p>
           <div class="flex flex-column gap-2" style="max-width: 480px;">
-            <label for="sourceUri">Source URI or path</label>
-            <InputText id="sourceUri" v-model="sourceUri" placeholder="s3://... or path" />
-            <label for="transcriptGroup">Group</label>
-            <Select
-              id="transcriptGroup"
-              v-model="selectedGroupId"
-              :options="groupOptions"
-              option-label="name"
-              option-value="id"
-              placeholder="Select group"
-              class="w-full"
-            />
-            <label for="title">Title (optional)</label>
-            <InputText id="title" v-model="title" placeholder="Optional display title" />
+            <div class="flex flex-column gap-1 w-full">
+              <label for="sourceUri">Source URI or path</label>
+              <InputText id="sourceUri" v-model="sourceUri" placeholder="s3://... or path" class="w-full" />
+            </div>
+            <div class="flex flex-column gap-1 w-full">
+              <label for="transcriptGroup">Group</label>
+              <Select
+                id="transcriptGroup"
+                v-model="selectedGroupId"
+                :options="groupOptions"
+                option-label="name"
+                option-value="id"
+                placeholder="Select group"
+                class="w-full"
+              />
+            </div>
+            <div class="flex flex-column gap-1 w-full">
+              <label for="title">Title (optional)</label>
+              <InputText id="title" v-model="title" placeholder="Optional display title" class="w-full" />
+            </div>
             <Button label="Register" :loading="registering" :disabled="registering" @click="register" />
             <Message v-if="registerErr" severity="error">{{ registerErr }}</Message>
           </div>
