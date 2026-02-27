@@ -36,6 +36,8 @@ RUN chmod +x /entrypoint_llm_analysis.sh
 
 # Default model and context (override with LLM_MODEL_ID env in job)
 ENV LLM_MODEL_ID=Qwen/Qwen2-7B-Instruct
+# Reduce CUDA fragmentation (helps avoid OOM on 16 GB GPUs)
+ENV PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
 ENTRYPOINT []
 CMD ["/entrypoint_llm_analysis.sh"]

@@ -438,7 +438,7 @@ resource "aws_batch_job_queue" "cpu" {
   }
 }
 
-# LLM queue: 32 GB GPU instances only (g4dn.2xlarge) so 32k context fits
+# LLM queue: 16 GB GPU (g4dn.2xlarge T4); use LLM_MAX_MODEL_LEN=8192; for 32k use a 24 GB+ instance
 resource "aws_batch_compute_environment" "gpu_llm" {
   compute_environment_name = "${local.name}-gpu-llm-${local.ce_llm_name_suffix}"
   type                     = "MANAGED"
@@ -617,7 +617,9 @@ resource "aws_batch_job_definition" "llm_analysis" {
     executionRoleArn = aws_iam_role.batch_execution.arn
     secrets          = []
     environment = [
-      { name = "HF_HOME", value = "/cache" }
+      { name = "HF_HOME", value = "/cache" },
+      { name = "LLM_MAX_MODEL_LEN", value = "8192" },
+      { name = "LLM_GPU_MEMORY_UTILIZATION", value = "0.85" }
     ]
     volumes = [
       {
