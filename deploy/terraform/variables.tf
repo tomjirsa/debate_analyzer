@@ -48,9 +48,9 @@ variable "batch_compute_instance_types" {
 }
 
 variable "batch_cpu_instance_types" {
-  description = "EC2 instance types for the CPU compute environment (download job)."
+  description = "EC2 instance types for the CPU compute environment (download, stats, LLM job). Must include at least one type with >= 16 GB memory for the LLM job (e.g. c5.2xlarge)."
   type        = list(string)
-  default     = ["c5.xlarge"]
+  default     = ["c5.xlarge", "c5.2xlarge"]
 }
 
 variable "batch_cpu_min_vcpus" {

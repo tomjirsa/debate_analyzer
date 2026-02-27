@@ -45,7 +45,7 @@ For a **step-by-step AWS setup** and full variable descriptions, see [doc/AWS_SE
 | `batch_compute_instance_types` | GPU instance types (transcribe, full pipeline) | `["g4dn.xlarge", "g4dn.2xlarge"]` |
 | `batch_min_vcpus` | Min vCPUs for GPU CE (0 = scale to zero) | `0` |
 | `batch_max_vcpus` | Max vCPUs for GPU CE | `256` |
-| `batch_cpu_instance_types` | CPU instance types (download, stats, and LLM job) | `["c5.xlarge"]` |
+| `batch_cpu_instance_types` | CPU instance types (download, stats, LLM job). Need at least one with >= 16 GB for LLM job | `["c5.xlarge", "c5.2xlarge"]` |
 | `batch_cpu_min_vcpus` | Min vCPUs for CPU CE (0 = scale to zero) | `0` |
 | `batch_cpu_max_vcpus` | Max vCPUs for CPU CE | `64` |
 | `vpc_id` | VPC ID (null = default VPC) | `null` |
