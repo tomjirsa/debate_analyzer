@@ -48,7 +48,7 @@ variable "batch_compute_instance_types" {
 }
 
 variable "batch_llm_compute_instance_types" {
-  description = "EC2 instance types for the LLM analysis job (g4dn.2xlarge has 16 GB T4; use LLM_MAX_MODEL_LEN=8192; for 32k use a 24 GB+ instance)."
+  description = "EC2 instance types for the LLM analysis job (g4dn.2xlarge has 16 GB T4; safe default LLM_MAX_MODEL_LEN=4096; 8192 may OOM; for 32k use a 24 GB+ instance)."
   type        = list(string)
   default     = ["g4dn.2xlarge"]
 }

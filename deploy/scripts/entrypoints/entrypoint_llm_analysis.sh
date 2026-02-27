@@ -2,8 +2,8 @@
 # LLM analysis job: read transcript(s) from S3 or env, run analysis, write _llm_analysis.json.
 # Requires env: TRANSCRIPT_S3_URI (single file) or TRANSCRIPTS_S3_PREFIX (S3 prefix).
 # Optional: LLM_MODEL_ID (default Qwen/Qwen2-7B-Instruct), MOCK_LLM=1 for tests.
-# Optional (16 GB GPU): LLM_MAX_MODEL_LEN (default 8192), LLM_GPU_MEMORY_UTILIZATION (default 0.85).
-# Optional: PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True (set in image to reduce fragmentation).
+# Optional (16 GB GPU): LLM_MAX_MODEL_LEN (default 4096), LLM_GPU_MEMORY_UTILIZATION (default 0.80).
+# Optional: PYTORCH_ALLOC_CONF=expandable_segments:True (set in image to reduce fragmentation).
 
 set -euo pipefail
 
