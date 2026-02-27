@@ -19,11 +19,9 @@ RUN curl -sS "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o /tmp/
 
 WORKDIR /app
 
-# CPU-only: torch (no CUDA), transformers, boto3
-RUN pip install --no-cache-dir \
-    torch --index-url https://download.pytorch.org/whl/cpu \
-    "transformers>=4.45.0" \
-    "boto3>=1.28"
+# CPU-only torch from PyTorch index; then transformers and boto3 from PyPI (--index-url would hide PyPI)
+RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu \
+    && pip install --no-cache-dir "transformers>=4.45.0" "boto3>=1.28"
 
 # Copy only the code needed for LLM analysis (analysis module, batch llm job, api loader)
 COPY src/debate_analyzer /app/src/debate_analyzer
