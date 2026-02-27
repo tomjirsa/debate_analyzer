@@ -34,6 +34,7 @@ def get_vllm_backend(
     """
     try:
         from vllm import LLM
+        from vllm.config import AttentionConfig
     except ImportError as e:
         raise ImportError(
             "vLLM is not installed. Install with: pip install vllm. "
@@ -47,12 +48,14 @@ def get_vllm_backend(
     if gpu_memory_utilization is None:
         raw = os.environ.get("LLM_GPU_MEMORY_UTILIZATION", "0.80")
         gpu_memory_utilization = float(raw)
-    # enforce_eager=True avoids torch.compile/Triton JIT, so no C compiler or Python.h needed in the container
+    # FLASH_ATTN backend avoids FlashInfer JIT, which requires nvcc (not present in CUDA runtime-only images).
+    # enforce_eager=True avoids torch.compile/Triton JIT, so no C compiler or Python.h needed in the container.
     llm = LLM(
         model=model_id,
         max_model_len=max_model_len,
         gpu_memory_utilization=gpu_memory_utilization,
         enforce_eager=True,
+        attention_config=AttentionConfig(backend="FLASH_ATTN"),
     )
 
     class VLLMBackend:
