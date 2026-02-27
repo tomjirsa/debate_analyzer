@@ -61,7 +61,7 @@ def get_transformers_gpu_backend(
     tokenizer = AutoTokenizer.from_pretrained(model_id, trust_remote_code=True)
     model = AutoModelForCausalLM.from_pretrained(
         model_id,
-        torch_dtype=dtype,
+        dtype=dtype,
         device_map="cuda",
         trust_remote_code=True,
     )

@@ -32,21 +32,28 @@ The LLM job uses a **separate image** (Option B) so the main app image stays sma
    docker push "$ECR_LLM:latest"
    ```
 
-3. **Terraform** must be applied first so the `debate-analyzer-llm` ECR repository exists. The job definition references `ecr_image_tag_llm` (default `latest`).
+3. **Terraform** must be applied first so the `debate-analyzer-llm` ECR repository exists. The CPU job definition uses tag `latest`; the GPU job definition uses tag `latest-gpu`. For **GPU** jobs, build and push the GPU image: `docker build -f Dockerfile.llm.gpu -t debate-analyzer-llm:latest-gpu .` then push to the same ECR repo with tag `latest-gpu` (CI does this when Dockerfile.llm.gpu or LLM code changes).
 
 ## 2. Run the LLM analysis job
 
-After transcripts exist in S3 (e.g. after the transcribe job). The submit script uses the **LLM queue** (16 GB T4 instances by default; job uses Qwen2-1.5B and `LLM_MAX_MODEL_LEN=8192`). For 32k context use a 24 GB+ instance and set `LLM_MAX_MODEL_LEN=32768`.
+After transcripts exist in S3 (e.g. after the transcribe job). You can run on **CPU** (cheaper, slower) or **GPU** (faster; launches a GPU instance with 16 GB T4). Job uses Qwen2-1.5B and `LLM_MAX_MODEL_LEN=8192` by default. For 32k context use a 24 GB+ GPU and set `LLM_MAX_MODEL_LEN=32768`.
 
-**Single transcript:**
+**CPU (default; no GPU instance):**
 ```bash
 ./deploy/scripts/submit-jobs/submit-llm-analysis-job.sh \
   s3://<bucket>/jobs/<job-id>/transcripts/<stem>_transcription.json
 ```
 
-**All transcripts under a prefix:**
+**GPU (faster; requires LLM GPU image pushed as `latest-gpu`):**
 ```bash
-./deploy/scripts/submit-jobs/submit-llm-analysis-job.sh \
+./deploy/scripts/submit-jobs/submit-llm-analysis-job.sh --gpu \
+  s3://<bucket>/jobs/<job-id>/transcripts/<stem>_transcription.json
+```
+Or use `submit-llm-analysis-job-gpu.sh` with the same URI.
+
+**All transcripts under a prefix:** Use the same script with the prefix; add `--gpu` for GPU:
+```bash
+./deploy/scripts/submit-jobs/submit-llm-analysis-job.sh --gpu \
   s3://<bucket>/jobs/<job-id>/transcripts
 ```
 
@@ -60,7 +67,7 @@ The job reads each `*_transcription.json`, runs the three-phase analysis (topics
 | `TRANSCRIPTS_S3_PREFIX` | S3 prefix; all `*_transcription.json` under it are processed. |
 | `LLM_MODEL_ID` | Hugging Face model id (default: `Qwen/Qwen2-1.5B-Instruct`). |
 | `LLM_MAX_MODEL_LEN` | Max context length (default: `8192`). Qwen2-1.5B fits 16 GB T4 easily. For 32k use a 24 GB+ GPU and set to `32768`. |
-| `LLM_GPU_MEMORY_UTILIZATION` | Fraction of GPU memory for vLLM, 0.0–1.0 (default: `0.80`). |
+| `LLM_USE_GPU` | Set to `1` by the GPU job definition; selects Transformers GPU backend (CUDA). Omit or leave unset for CPU. |
 | `MOCK_LLM` | Set to `1` to use a mock backend (no GPU; for testing). |
 | `LLM_LOG_FULL` | Set to `1`, `true`, or `yes` to log full prompts and responses; otherwise they are truncated (see Logging below). Use only for dev/debug; full logs may include PII. |
 

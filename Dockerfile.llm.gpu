@@ -21,8 +21,8 @@ RUN curl -sS "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o /tmp/
 
 WORKDIR /app
 
-# Base image has torch with CUDA; add transformers, boto3, pyarrow (loader needs pyarrow for parquet)
-RUN pip install --no-cache-dir "transformers>=4.45.0" "boto3>=1.28" "pyarrow>=18.0.0"
+# Base image has torch with CUDA; add transformers, accelerate (required for device_map), boto3, pyarrow
+RUN pip install --no-cache-dir "transformers>=4.45.0" "accelerate>=0.20.0" "boto3>=1.28" "pyarrow>=18.0.0"
 
 # Copy only the code needed for LLM analysis (analysis module, batch llm job, api loader)
 COPY src/debate_analyzer /app/src/debate_analyzer
