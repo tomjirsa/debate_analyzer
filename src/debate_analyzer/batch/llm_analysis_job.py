@@ -15,10 +15,17 @@ from __future__ import annotations
 import json
 import os
 import sys
+import time
+from collections.abc import Callable
 from pathlib import Path
 
 from debate_analyzer.analysis.backend import MockLLMBackend
 from debate_analyzer.analysis.runner import run_analysis
+
+
+def _log(msg: str) -> None:
+    """Emit progress message to stderr with [LLM] prefix for CloudWatch visibility."""
+    print(f"[LLM] {msg}", file=sys.stderr)
 
 
 def _parse_s3_uri(uri: str) -> tuple[str, str]:
@@ -72,7 +79,11 @@ def _write_result_file(result: dict, path: Path) -> None:
     path.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
-def _run_one(source_uri: str, generate) -> bool:
+def _run_one(
+    source_uri: str,
+    generate,
+    log_progress: Callable[[str], None] | None = None,
+) -> bool:
     """Load transcript, run analysis, write result. Returns True on success."""
     from debate_analyzer.api.loader import load_transcript_payload
 
@@ -82,7 +93,7 @@ def _run_one(source_uri: str, generate) -> bool:
         print(f"Error loading {source_uri}: {e}", file=sys.stderr)
         return False
 
-    result = run_analysis(payload, generate)
+    result = run_analysis(payload, generate, log_progress=log_progress)
 
     if source_uri.startswith("s3://"):
         bucket, key = _parse_s3_uri(source_uri)
@@ -116,12 +127,24 @@ def run(prefix_or_uri: str) -> int:
     Returns:
         Number of _llm_analysis.json files written.
     """
-    generate = _get_backend()
+    job_start = time.perf_counter()
     s = prefix_or_uri.strip()
 
     # Single file: URI or path that points to a transcript JSON
     if "_transcription.json" in s:
-        ok = _run_one(s, generate)
+        _log(f"Processing single file: {s}")
+        _log("Loading model (this may take a few minutes)...")
+        t0 = time.perf_counter()
+        generate = _get_backend()
+        _log(f"Model ready in {time.perf_counter() - t0:.1f}s.")
+        _log(f"Processing transcript: {s}")
+        ok = _run_one(s, generate, log_progress=_log)
+        if ok:
+            _log("Completed transcript.")
+        else:
+            _log("Failed transcript.")
+        elapsed = time.perf_counter() - job_start
+        _log(f"Job finished: {1 if ok else 0} succeeded, {0 if ok else 1} failed (total {elapsed:.1f}s).")
         return 1 if ok else 0
 
     # S3 prefix: list *_transcription.json
@@ -133,21 +156,47 @@ def run(prefix_or_uri: str) -> int:
 
     import boto3
 
+    _log(f"Processing prefix: {s}")
     bucket, prefix_key = _parse_s3_uri(s)
     if not prefix_key.endswith("/"):
         prefix_key += "/"
     client = boto3.client("s3")
     paginator = client.get_paginator("list_objects_v2")
-    count = 0
+    uris: list[str] = []
     for page in paginator.paginate(Bucket=bucket, Prefix=prefix_key):
         for obj in page.get("Contents") or []:
             key = obj["Key"]
             if not key.endswith("_transcription.json"):
                 continue
-            uri = f"s3://{bucket}/{key}"
-            if _run_one(uri, generate):
-                count += 1
-    return count
+            uris.append(f"s3://{bucket}/{key}")
+    _log(f"Found {len(uris)} transcript(s) under prefix.")
+    if not uris:
+        _log("Job finished: 0 transcript(s) analyzed.")
+        return 0
+
+    _log("Loading model (this may take a few minutes)...")
+    t0 = time.perf_counter()
+    generate = _get_backend()
+    _log(f"Model ready in {time.perf_counter() - t0:.1f}s.")
+    n = len(uris)
+    succeeded = 0
+    failed = 0
+    for i, uri in enumerate(uris):
+        short_key = uri.split("/")[-1] if "/" in uri else uri
+        _log(f"Processing transcript {i + 1}/{n}: {short_key}")
+        ok = _run_one(uri, generate, log_progress=_log)
+        if ok:
+            succeeded += 1
+            _log(f"Completed transcript {i + 1}/{n}.")
+        else:
+            failed += 1
+            _log(f"Failed transcript {i + 1}/{n}.")
+    elapsed = time.perf_counter() - job_start
+    if failed:
+        _log(f"Job finished: {succeeded} succeeded, {failed} failed (total {elapsed:.1f}s).")
+    else:
+        _log(f"Job finished: {succeeded} transcript(s) analyzed (total {elapsed:.1f}s).")
+    return succeeded
 
 
 def main() -> None:

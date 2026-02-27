@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import os
+import sys
+import time
 
 from debate_analyzer.analysis.backend import LLMBackend
 
@@ -43,6 +45,11 @@ def get_transformers_cpu_backend(
         raw = os.environ.get("LLM_MAX_MODEL_LEN", "8192")
         max_model_len = int(raw)
 
+    print(
+        f"[LLM] Loading model {model_id} (first run may download from Hugging Face)...",
+        file=sys.stderr,
+    )
+    t0 = time.perf_counter()
     device = torch.device("cpu")
     tokenizer = AutoTokenizer.from_pretrained(model_id, trust_remote_code=True)
     model = AutoModelForCausalLM.from_pretrained(
@@ -52,6 +59,8 @@ def get_transformers_cpu_backend(
         trust_remote_code=True,
     )
     model = model.to(device)
+    elapsed = time.perf_counter() - t0
+    print(f"[LLM] Model loaded in {elapsed:.1f}s.", file=sys.stderr)
 
     class TransformersCPUBackend:
         def generate(self, prompt: str, max_tokens: int = 2048) -> str:

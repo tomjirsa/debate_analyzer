@@ -14,6 +14,7 @@ else
   exit 1
 fi
 
+echo "Starting Python job (logs prefixed with [LLM])."
 python -m debate_analyzer.batch.llm_analysis_job
 
 echo "Done."

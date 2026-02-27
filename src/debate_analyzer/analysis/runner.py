@@ -95,6 +95,7 @@ def run_analysis(
     max_context_tokens: int = DEFAULT_MAX_CHUNK_TOKENS,
     token_counter: Callable[[str], int] | None = None,
     max_tokens_per_reply: int = 2048,
+    log_progress: Callable[[str], None] | None = None,
 ) -> dict[str, Any]:
     """
     Run the three-phase LLM analysis on a transcript payload.
@@ -105,6 +106,7 @@ def run_analysis(
         max_context_tokens: Max tokens per chunk for Phase 1; also for excerpt in 2/3.
         token_counter: Optional token counter; if None, uses character-based estimate.
         max_tokens_per_reply: Max tokens to request from the model per call.
+        log_progress: Optional callback for progress messages (e.g. [LLM]-prefixed stderr).
 
     Returns:
         Dict with main_topics, topic_summaries, speaker_contributions for DB storage.
@@ -124,6 +126,8 @@ def run_analysis(
 
     # Phase 1: topics (chunked if needed)
     chunks = split_into_chunks(flat, max_tokens=max_context_tokens, token_counter=count)
+    if log_progress:
+        log_progress(f"Phase 1: Extracting topics ({len(chunks)} chunks).")
     all_topic_dicts: list[dict[str, Any]] = []
     for chunk in chunks:
         prompt = build_topics_chunk_prompt(chunk)
@@ -133,6 +137,8 @@ def run_analysis(
             all_topic_dicts.extend(parsed["main_topics"])
 
     main_topics = _merge_topic_ids(all_topic_dicts)
+    if log_progress:
+        log_progress(f"Phase 1 done: {len(main_topics)} topics.")
     if not main_topics:
         return LLMAnalysisResult(
             main_topics=[],
@@ -146,10 +152,12 @@ def run_analysis(
     topic_summaries: list[dict[str, Any]] = []
     speaker_contributions: list[dict[str, Any]] = []
 
-    for topic in main_topics:
+    for i, topic in enumerate(main_topics):
         topic_id = topic.get("id", "")
         title = topic.get("title") or ""
         desc = topic.get("description") or ""
+        if log_progress:
+            log_progress(f"Phase 2/3: Topic {i + 1}/{len(main_topics)}: {title}")
 
         # Phase 2: topic summary
         prompt2 = build_topic_summary_prompt(topic_id, title, desc, excerpt)
