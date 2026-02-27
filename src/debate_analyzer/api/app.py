@@ -531,7 +531,7 @@ class ImportAnalysisRequest(BaseModel):
 
     source_uri: str | None = None
     result: dict | None = None
-    model_name: str = "Qwen/Qwen2-7B-Instruct"
+    model_name: str = "Qwen/Qwen2-1.5B-Instruct"
     source: str = "api"
 
 

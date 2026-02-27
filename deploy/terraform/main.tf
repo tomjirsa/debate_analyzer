@@ -438,7 +438,7 @@ resource "aws_batch_job_queue" "cpu" {
   }
 }
 
-# LLM queue: 16 GB GPU (g4dn.2xlarge T4); safe default LLM_MAX_MODEL_LEN=4096; for 32k use a 24 GB+ instance
+# LLM queue: 16 GB GPU (g4dn.2xlarge T4); default model Qwen2-1.5B; LLM_MAX_MODEL_LEN=8192; for 32k use 24 GB+ instance
 resource "aws_batch_compute_environment" "gpu_llm" {
   compute_environment_name = "${local.name}-gpu-llm-${local.ce_llm_name_suffix}"
   type                     = "MANAGED"
@@ -618,7 +618,7 @@ resource "aws_batch_job_definition" "llm_analysis" {
     secrets          = []
     environment = [
       { name = "HF_HOME", value = "/cache" },
-      { name = "LLM_MAX_MODEL_LEN", value = "4096" },
+      { name = "LLM_MAX_MODEL_LEN", value = "8192" },
       { name = "LLM_GPU_MEMORY_UTILIZATION", value = "0.80" }
     ]
     volumes = [

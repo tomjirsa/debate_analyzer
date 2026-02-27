@@ -18,14 +18,13 @@ def get_vllm_backend(
     Requires vllm to be installed. Typically used in the dedicated LLM Docker image.
 
     Args:
-        model_id: Hugging Face model id (e.g. Qwen/Qwen2-7B-Instruct).
+        model_id: Hugging Face model id (e.g. Qwen/Qwen2-1.5B-Instruct).
             Default from env LLM_MODEL_ID.
-        max_model_len: Max context length. Default from env LLM_MAX_MODEL_LEN (4096).
-            On 16 GB T4 (g4dn.2xlarge) use 4096 or 2048; 8192 can OOM with Qwen2-7B.
-            For 8k/32k context use a 24 GB+ GPU (e.g. g5.xlarge).
+        max_model_len: Max context length. Default from env LLM_MAX_MODEL_LEN (8192).
+            Qwen2-1.5B fits 16 GB T4 (g4dn.2xlarge) easily; 8192 context is safe.
+            For 32k context use a 24 GB+ GPU (e.g. g5.xlarge).
         gpu_memory_utilization: Fraction of GPU memory to use (0.0–1.0). Default from
-            env LLM_GPU_MEMORY_UTILIZATION (0.80). Lower values leave headroom and
-            reduce OOM on 16 GB GPUs.
+            env LLM_GPU_MEMORY_UTILIZATION (0.80). Lower values leave headroom.
 
     Returns:
         Object implementing generate(prompt, max_tokens) -> str.
@@ -41,9 +40,9 @@ def get_vllm_backend(
             "Use the dedicated LLM Docker image for Batch jobs."
         ) from e
 
-    model_id = model_id or os.environ.get("LLM_MODEL_ID", "Qwen/Qwen2-7B-Instruct")
+    model_id = model_id or os.environ.get("LLM_MODEL_ID", "Qwen/Qwen2-1.5B-Instruct")
     if max_model_len is None:
-        raw = os.environ.get("LLM_MAX_MODEL_LEN", "4096")
+        raw = os.environ.get("LLM_MAX_MODEL_LEN", "8192")
         max_model_len = int(raw)
     if gpu_memory_utilization is None:
         raw = os.environ.get("LLM_GPU_MEMORY_UTILIZATION", "0.80")

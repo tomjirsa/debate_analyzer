@@ -43,7 +43,7 @@ For a **step-by-step AWS setup** and full variable descriptions, see [doc/AWS_SE
 | `yt_cookies_file_path` | Path to local cookies.txt (Netscape format); Terraform creates the secret from this file | `null` |
 | `ecr_image_tag` | Docker image tag for job definition | `latest` |
 | `batch_compute_instance_types` | GPU instance types (transcribe, full pipeline) | `["g4dn.xlarge", "g4dn.2xlarge"]` |
-| `batch_llm_compute_instance_types` | GPU instance types for LLM job (16 GB T4, e.g. g4dn.2xlarge; safe default LLM_MAX_MODEL_LEN=4096; 8192 may OOM; for 32k use 24 GB+ instance) | `["g4dn.2xlarge"]` |
+| `batch_llm_compute_instance_types` | GPU instance types for LLM job (16 GB T4, e.g. g4dn.2xlarge; default model Qwen2-1.5B, LLM_MAX_MODEL_LEN=8192; for 32k use 24 GB+ instance) | `["g4dn.2xlarge"]` |
 | `batch_min_vcpus` | Min vCPUs for GPU CE (0 = scale to zero) | `0` |
 | `batch_max_vcpus` | Max vCPUs for GPU CE | `256` |
 | `batch_cpu_instance_types` | CPU instance types (download and stats job) | `["c5.xlarge"]` |

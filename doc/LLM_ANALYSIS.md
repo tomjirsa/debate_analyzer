@@ -4,7 +4,7 @@ This document describes how to run **LLM analysis** on transcripts: main topics,
 
 ## Overview
 
-- **Model:** Qwen2-7B-Instruct (default). Default context 4k (fits 16 GB T4, e.g. g4dn.2xlarge); 8192 may OOM with Qwen2-7B on 16 GB. For 8k/32k use a 24 GB+ GPU or set `LLM_MAX_MODEL_LEN`. LLM jobs use a dedicated queue.
+- **Model:** Qwen2-1.5B-Instruct (default). Default context 8k; 1.5B fits 16 GB T4 (e.g. g4dn.2xlarge) comfortably. For 32k use a 24 GB+ GPU or set `LLM_MAX_MODEL_LEN`. LLM jobs use a dedicated queue.
 - **Input:** Transcript JSON (from S3 or local), in the same format as the transcribe job output (`transcription` list with `speaker`, `text`, `start`, `end`).
 - **Output:** JSON with `main_topics`, `topic_summaries`, `speaker_contributions`, written to S3 as `<stem>_llm_analysis.json` alongside the transcript, or imported into the DB via the admin API.
 - **Chunking:** Long transcripts (over the configured context) are split into chunks for topic extraction; topics are merged and then summarized. All phases respect the context limit set by `LLM_MAX_MODEL_LEN`.
@@ -36,7 +36,7 @@ The LLM job uses a **separate image** (Option B) so the main app image stays sma
 
 ## 2. Run the LLM analysis job
 
-After transcripts exist in S3 (e.g. after the transcribe job). The submit script uses the **LLM queue** (16 GB T4 instances by default; job uses `LLM_MAX_MODEL_LEN=4096` so it fits). For 32k context use a 24 GB+ instance and set `LLM_MAX_MODEL_LEN=32768`.
+After transcripts exist in S3 (e.g. after the transcribe job). The submit script uses the **LLM queue** (16 GB T4 instances by default; job uses Qwen2-1.5B and `LLM_MAX_MODEL_LEN=8192`). For 32k context use a 24 GB+ instance and set `LLM_MAX_MODEL_LEN=32768`.
 
 **Single transcript:**
 ```bash
@@ -58,9 +58,9 @@ The job reads each `*_transcription.json`, runs the three-phase analysis (topics
 |----------|-------------|
 | `TRANSCRIPT_S3_URI` | Single transcript JSON URI (s3:// or file). |
 | `TRANSCRIPTS_S3_PREFIX` | S3 prefix; all `*_transcription.json` under it are processed. |
-| `LLM_MODEL_ID` | Hugging Face model id (default: `Qwen/Qwen2-7B-Instruct`). |
-| `LLM_MAX_MODEL_LEN` | Max context length (default: `4096`). Use 4096 or 2048 for 16 GB T4 (g4dn.2xlarge); 8192 may OOM with Qwen2-7B. For 32k use a 24 GB+ GPU and set to `32768`. |
-| `LLM_GPU_MEMORY_UTILIZATION` | Fraction of GPU memory for vLLM, 0.0–1.0 (default: `0.80`). Lower values reduce OOM on 16 GB GPUs. |
+| `LLM_MODEL_ID` | Hugging Face model id (default: `Qwen/Qwen2-1.5B-Instruct`). |
+| `LLM_MAX_MODEL_LEN` | Max context length (default: `8192`). Qwen2-1.5B fits 16 GB T4 easily. For 32k use a 24 GB+ GPU and set to `32768`. |
+| `LLM_GPU_MEMORY_UTILIZATION` | Fraction of GPU memory for vLLM, 0.0–1.0 (default: `0.80`). |
 | `MOCK_LLM` | Set to `1` to use a mock backend (no GPU; for testing). |
 
 ## 4. Output schema
@@ -86,7 +86,7 @@ Each `_llm_analysis.json` file contains:
 To attach analysis to a transcript in the DB (for the admin UI or API):
 
 - **From S3:** `POST /api/admin/transcripts/{transcript_id}/analysis/import` with body:
-  `{ "source_uri": "s3://bucket/key/<stem>_llm_analysis.json", "model_name": "Qwen/Qwen2-7B-Instruct", "source": "batch" }`
+  `{ "source_uri": "s3://bucket/key/<stem>_llm_analysis.json", "model_name": "Qwen/Qwen2-1.5B-Instruct", "source": "batch" }`
 - **Inline:** Same endpoint with body:
   `{ "result": { "main_topics": [...], "topic_summaries": [...], "speaker_contributions": [...] }, "model_name": "...", "source": "api" }`
 
@@ -94,7 +94,7 @@ Get the latest analysis: `GET /api/admin/transcripts/{transcript_id}/analysis`.
 
 ## 6. Chunking (long transcripts)
 
-Transcripts longer than the configured context (see `LLM_MAX_MODEL_LEN`, default 4k tokens) are handled as follows:
+Transcripts longer than the configured context (see `LLM_MAX_MODEL_LEN`, default 8k tokens) are handled as follows:
 
 - **Phase 1 (topics):** The flattened transcript is split into overlapping chunks (within the context limit). The LLM extracts topics per chunk; topics are merged and deduplicated by title.
 - **Phase 2 (summaries):** For each topic, an excerpt of the transcript (truncated to the context limit) is used to generate the discussion summary.
