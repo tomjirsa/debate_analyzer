@@ -96,6 +96,7 @@ def run_analysis(
     token_counter: Callable[[str], int] | None = None,
     max_tokens_per_reply: int = 2048,
     log_progress: Callable[[str], None] | None = None,
+    log_llm_call: Callable[[str, str, str], None] | None = None,
 ) -> dict[str, Any]:
     """
     Run the three-phase LLM analysis on a transcript payload.
@@ -107,6 +108,9 @@ def run_analysis(
         token_counter: Optional token counter; if None, uses character-based estimate.
         max_tokens_per_reply: Max tokens to request from the model per call.
         log_progress: Optional callback for progress messages (e.g. [LLM]-prefixed stderr).
+        log_llm_call: Optional callback (label, prompt, response) for each LLM call; for
+            debugging/observability. May contain transcript content; truncation is typically
+            applied by the caller.
 
     Returns:
         Dict with main_topics, topic_summaries, speaker_contributions for DB storage.
@@ -129,9 +133,12 @@ def run_analysis(
     if log_progress:
         log_progress(f"Phase 1: Extracting topics ({len(chunks)} chunks).")
     all_topic_dicts: list[dict[str, Any]] = []
-    for chunk in chunks:
+    num_chunks = len(chunks)
+    for i, chunk in enumerate(chunks):
         prompt = build_topics_chunk_prompt(chunk)
         out = generate(prompt, max_tokens=max_tokens_per_reply)
+        if log_llm_call:
+            log_llm_call(f"Phase 1 chunk {i + 1}/{num_chunks}", prompt, out)
         parsed = _extract_json(out)
         if isinstance(parsed, dict) and "main_topics" in parsed:
             all_topic_dicts.extend(parsed["main_topics"])
@@ -162,6 +169,8 @@ def run_analysis(
         # Phase 2: topic summary
         prompt2 = build_topic_summary_prompt(topic_id, title, desc, excerpt)
         out2 = generate(prompt2, max_tokens=max_tokens_per_reply)
+        if log_llm_call:
+            log_llm_call(f"Phase 2 topic {topic_id}", prompt2, out2)
         parsed2 = _extract_json(out2)
         if isinstance(parsed2, dict) and "topic_id" in parsed2 and "summary" in parsed2:
             topic_summaries.append(
@@ -174,6 +183,8 @@ def run_analysis(
         # Phase 3: speaker contributions for this topic
         prompt3 = build_speaker_contributions_prompt(topic_id, title, excerpt)
         out3 = generate(prompt3, max_tokens=max_tokens_per_reply)
+        if log_llm_call:
+            log_llm_call(f"Phase 3 topic {topic_id}", prompt3, out3)
         parsed3 = _extract_json(out3)
         if isinstance(parsed3, dict) and "speaker_contributions" in parsed3:
             for sc in parsed3["speaker_contributions"]:

@@ -23,9 +23,24 @@ from debate_analyzer.analysis.backend import MockLLMBackend
 from debate_analyzer.analysis.runner import run_analysis
 
 
+# Truncation limits for LLM call logging when LLM_LOG_FULL is not set
+_LOG_REQUEST_MAX = 500
+_LOG_RESPONSE_MAX = 1000
+
+
 def _log(msg: str) -> None:
     """Emit progress message to stderr with [LLM] prefix for CloudWatch visibility."""
     print(f"[LLM] {msg}", file=sys.stderr)
+
+
+def _log_llm_call(label: str, prompt: str, response: str) -> None:
+    """Log one LLM request/response to stderr with [LLM] prefix. Truncates unless LLM_LOG_FULL is set."""
+    full = os.environ.get("LLM_LOG_FULL", "").strip().lower() in ("1", "true", "yes")
+    p = prompt if full else (prompt if len(prompt) <= _LOG_REQUEST_MAX else prompt[:_LOG_REQUEST_MAX] + "...")
+    r = response if full else (response if len(response) <= _LOG_RESPONSE_MAX else response[:_LOG_RESPONSE_MAX] + "...")
+    print(f"[LLM] Call: {label}", file=sys.stderr)
+    print(f"[LLM] Request: {p}", file=sys.stderr)
+    print(f"[LLM] Response: {r}", file=sys.stderr)
 
 
 def _parse_s3_uri(uri: str) -> tuple[str, str]:
@@ -83,6 +98,7 @@ def _run_one(
     source_uri: str,
     generate,
     log_progress: Callable[[str], None] | None = None,
+    log_llm_call: Callable[[str, str, str], None] | None = None,
 ) -> bool:
     """Load transcript, run analysis, write result. Returns True on success."""
     from debate_analyzer.api.loader import load_transcript_payload
@@ -93,7 +109,12 @@ def _run_one(
         print(f"Error loading {source_uri}: {e}", file=sys.stderr)
         return False
 
-    result = run_analysis(payload, generate, log_progress=log_progress)
+    result = run_analysis(
+        payload,
+        generate,
+        log_progress=log_progress,
+        log_llm_call=log_llm_call,
+    )
 
     if source_uri.startswith("s3://"):
         bucket, key = _parse_s3_uri(source_uri)
@@ -138,7 +159,7 @@ def run(prefix_or_uri: str) -> int:
         generate = _get_backend()
         _log(f"Model ready in {time.perf_counter() - t0:.1f}s.")
         _log(f"Processing transcript: {s}")
-        ok = _run_one(s, generate, log_progress=_log)
+        ok = _run_one(s, generate, log_progress=_log, log_llm_call=_log_llm_call)
         if ok:
             _log("Completed transcript.")
         else:
@@ -184,7 +205,7 @@ def run(prefix_or_uri: str) -> int:
     for i, uri in enumerate(uris):
         short_key = uri.split("/")[-1] if "/" in uri else uri
         _log(f"Processing transcript {i + 1}/{n}: {short_key}")
-        ok = _run_one(uri, generate, log_progress=_log)
+        ok = _run_one(uri, generate, log_progress=_log, log_llm_call=_log_llm_call)
         if ok:
             succeeded += 1
             _log(f"Completed transcript {i + 1}/{n}.")

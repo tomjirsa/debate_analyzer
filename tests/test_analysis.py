@@ -82,6 +82,31 @@ def test_run_analysis_mock_backend():
     assert backend.call_count >= 1
 
 
+def test_run_analysis_log_llm_call_invoked():
+    """When log_llm_call is provided, it is invoked for each Phase 1/2/3 call with expected labels."""
+    backend = MockLLMBackend()
+    payload = {
+        "transcription": [
+            {"speaker": "SPEAKER_00", "text": "Topic one."},
+            {"speaker": "SPEAKER_01", "text": "Topic two."},
+        ]
+    }
+    calls: list[tuple[str, str, str]] = []
+
+    def capture(label: str, prompt: str, response: str) -> None:
+        calls.append((label, prompt, response))
+
+    result = run_analysis(payload, backend.generate, log_llm_call=capture)
+    assert "main_topics" in result
+    assert len(calls) >= 1
+    labels = [c[0] for c in calls]
+    assert any("Phase 1" in lbl for lbl in labels)
+    assert any("Phase 2" in lbl for lbl in labels)
+    assert any("Phase 3" in lbl for lbl in labels)
+    for label, prompt, resp in calls:
+        assert isinstance(prompt, str) and isinstance(resp, str)
+
+
 def test_llm_analysis_result_from_dict():
     """LLMAnalysisResult.from_dict parses raw dict."""
     d = {

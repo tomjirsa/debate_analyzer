@@ -62,6 +62,11 @@ The job reads each `*_transcription.json`, runs the three-phase analysis (topics
 | `LLM_MAX_MODEL_LEN` | Max context length (default: `8192`). Qwen2-1.5B fits 16 GB T4 easily. For 32k use a 24 GB+ GPU and set to `32768`. |
 | `LLM_GPU_MEMORY_UTILIZATION` | Fraction of GPU memory for vLLM, 0.0–1.0 (default: `0.80`). |
 | `MOCK_LLM` | Set to `1` to use a mock backend (no GPU; for testing). |
+| `LLM_LOG_FULL` | Set to `1`, `true`, or `yes` to log full prompts and responses; otherwise they are truncated (see Logging below). Use only for dev/debug; full logs may include PII. |
+
+### Logging (batch job)
+
+The LLM batch job writes progress and, when running in batch, **each LLM request and response** to stderr with a `[LLM]` prefix so you can filter in CloudWatch. By default, prompts are truncated to 500 characters and responses to 1000 characters to limit noise and PII. Set **`LLM_LOG_FULL=1`** (or `true`/`yes`) to log full prompts and responses; use only in development or debugging, as they may contain transcript content.
 
 ## 4. Output schema
 
