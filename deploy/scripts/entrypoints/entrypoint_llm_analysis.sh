@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # LLM analysis job: read transcript(s) from S3 or env, run analysis, write _llm_analysis.json.
-# Runs on CPU (Transformers backend). Requires env: TRANSCRIPT_S3_URI (single file) or TRANSCRIPTS_S3_PREFIX (S3 prefix).
+# Uses CPU or GPU (Transformers backend) depending on env: set LLM_USE_GPU=1 when running on a GPU node.
+# Requires env: TRANSCRIPT_S3_URI (single file) or TRANSCRIPTS_S3_PREFIX (S3 prefix).
 # Optional: LLM_MODEL_ID (default Qwen/Qwen2-1.5B-Instruct), LLM_MAX_MODEL_LEN (default 8192), MOCK_LLM=1 for tests.
 
 set -euo pipefail

@@ -187,7 +187,9 @@ def run_analysis(
         # Phase 3: speaker contributions for this topic
         prompt3 = build_speaker_contributions_prompt(topic_id, title, excerpt)
         if log_progress:
-            log_progress(f"Phase 3: Generating speaker contributions for topic {topic_id}.")
+            log_progress(
+                f"Phase 3: Generating speaker contributions for topic {topic_id}."
+            )
         out3 = generate(prompt3, max_tokens=max_tokens_per_reply)
         if log_llm_call:
             log_llm_call(f"Phase 3 topic {topic_id}", prompt3, out3)

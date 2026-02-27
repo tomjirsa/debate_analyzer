@@ -41,6 +41,18 @@ variable "ecr_image_tag_llm" {
   default     = "latest"
 }
 
+variable "ecr_image_tag_llm_gpu" {
+  description = "Docker image tag for the dedicated LLM GPU image (same ECR repo; build with Dockerfile.llm.gpu)."
+  type        = string
+  default     = "latest-gpu"
+}
+
+variable "batch_llm_gpu_job_memory_mib" {
+  description = "Memory (MiB) for the LLM analysis GPU Batch job. Default 8192 (8 GiB); model runs on GPU so host memory is for process overhead (g4dn.xlarge has 16 GiB)."
+  type        = number
+  default     = 8192
+}
+
 variable "batch_compute_instance_types" {
   description = "EC2 instance types for the Batch compute environment (GPU)."
   type        = list(string)

@@ -23,6 +23,8 @@ locals {
   ecr_image = "${local.account_id}.dkr.ecr.${local.region}.amazonaws.com/${aws_ecr_repository.this.name}:${var.ecr_image_tag}"
   # LLM image (dedicated image for transcript analysis; build with Dockerfile.llm)
   ecr_image_llm = "${local.account_id}.dkr.ecr.${local.region}.amazonaws.com/${aws_ecr_repository.llm.name}:${var.ecr_image_tag_llm}"
+  # LLM GPU image (build with Dockerfile.llm.gpu; same ECR repo, tag latest-gpu)
+  ecr_image_llm_gpu = "${local.account_id}.dkr.ecr.${local.region}.amazonaws.com/${aws_ecr_repository.llm.name}:${var.ecr_image_tag_llm_gpu}"
   # Stable suffix for CE name so create_before_destroy can create new CE (new name) before destroying old one
   ce_name_suffix = substr(md5(jsonencode({
     instance_types = join(",", var.batch_compute_instance_types)
@@ -591,6 +593,54 @@ resource "aws_batch_job_definition" "llm_analysis" {
     environment = [
       { name = "HF_HOME", value = "/cache" },
       { name = "LLM_MAX_MODEL_LEN", value = "8192" }
+    ]
+    volumes = [
+      {
+        name = "llm-cache"
+        efsVolumeConfiguration = {
+          fileSystemId = aws_efs_file_system.llm_cache.id
+        }
+      }
+    ]
+    mountPoints = [
+      {
+        containerPath = "/cache"
+        sourceVolume  = "llm-cache"
+        readOnly      = false
+      }
+    ]
+    logConfiguration = {
+      logDriver = "awslogs"
+      options = {
+        "awslogs-group"         = aws_cloudwatch_log_group.batch.name
+        "awslogs-region"        = local.region
+        "awslogs-stream-prefix" = "batch"
+      }
+    }
+  })
+}
+
+# Job 4 GPU: LLM analysis on GPU queue (dedicated LLM GPU image; EFS cache at /cache; LLM_USE_GPU=1)
+resource "aws_batch_job_definition" "llm_analysis_gpu" {
+  name                  = "${local.name}-job-llm-analysis-gpu"
+  type                  = "container"
+  platform_capabilities = ["EC2"]
+
+  container_properties = jsonencode({
+    image   = local.ecr_image_llm_gpu
+    command = ["/entrypoint_llm_analysis.sh"]
+    resourceRequirements = [
+      { type = "VCPU", value = "4" },
+      { type = "MEMORY", value = tostring(var.batch_llm_gpu_job_memory_mib) },
+      { type = "GPU", value = "1" }
+    ]
+    jobRoleArn       = aws_iam_role.batch_job.arn
+    executionRoleArn = aws_iam_role.batch_execution.arn
+    secrets          = []
+    environment = [
+      { name = "HF_HOME", value = "/cache" },
+      { name = "LLM_MAX_MODEL_LEN", value = "8192" },
+      { name = "LLM_USE_GPU", value = "1" }
     ]
     volumes = [
       {

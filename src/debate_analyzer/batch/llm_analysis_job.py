@@ -7,7 +7,8 @@ Reads from environment:
 - TRANSCRIPTS_S3_PREFIX: S3 prefix listing *_transcription.json;
   processes each, writes _llm_analysis.json per file.
 
-Uses MOCK_LLM=1 for tests. Otherwise Transformers CPU backend (dedicated LLM image).
+Uses MOCK_LLM=1 for tests. Otherwise Transformers backend: set LLM_USE_GPU=1 for
+GPU (dedicated LLM GPU image on AWS Batch); else CPU backend (dedicated LLM image).
 """
 
 from __future__ import annotations
@@ -22,7 +23,6 @@ from pathlib import Path
 from debate_analyzer.analysis.backend import MockLLMBackend
 from debate_analyzer.analysis.runner import run_analysis
 
-
 # Truncation limits for LLM call logging when LLM_LOG_FULL is not set
 _LOG_REQUEST_MAX = 500
 _LOG_RESPONSE_MAX = 1000
@@ -34,10 +34,26 @@ def _log(msg: str) -> None:
 
 
 def _log_llm_call(label: str, prompt: str, response: str) -> None:
-    """Log one LLM request/response to stderr with [LLM] prefix. Truncates unless LLM_LOG_FULL is set."""
+    """Log LLM call to stderr ([LLM] prefix). Truncates unless LLM_LOG_FULL set."""
     full = os.environ.get("LLM_LOG_FULL", "").strip().lower() in ("1", "true", "yes")
-    p = prompt if full else (prompt if len(prompt) <= _LOG_REQUEST_MAX else prompt[:_LOG_REQUEST_MAX] + "...")
-    r = response if full else (response if len(response) <= _LOG_RESPONSE_MAX else response[:_LOG_RESPONSE_MAX] + "...")
+    p = (
+        prompt
+        if full
+        else (
+            prompt
+            if len(prompt) <= _LOG_REQUEST_MAX
+            else prompt[:_LOG_REQUEST_MAX] + "..."
+        )
+    )
+    r = (
+        response
+        if full
+        else (
+            response
+            if len(response) <= _LOG_RESPONSE_MAX
+            else response[:_LOG_RESPONSE_MAX] + "..."
+        )
+    )
     print(f"[LLM] Call: {label}", file=sys.stderr)
     print(f"[LLM] Request: {p}", file=sys.stderr)
     print(f"[LLM] Response: {r}", file=sys.stderr)
@@ -55,23 +71,39 @@ def _parse_s3_uri(uri: str) -> tuple[str, str]:
 
 
 def _get_backend():
-    """Return generate callable (mock or Transformers CPU backend)."""
+    """Return generate callable (mock, or Transformers GPU/CPU backend)."""
     if os.environ.get("MOCK_LLM", "").strip() in ("1", "true", "yes"):
         backend = MockLLMBackend()
         return backend.generate
-    try:
-        from debate_analyzer.analysis.backend_transformers_cpu import (
-            get_transformers_cpu_backend,
-        )
+    use_gpu = os.environ.get("LLM_USE_GPU", "").strip().lower() in ("1", "true", "yes")
+    if use_gpu:
+        try:
+            from debate_analyzer.analysis.backend_transformers_gpu import (
+                get_transformers_gpu_backend,
+            )
 
-        backend = get_transformers_cpu_backend()
-        return backend.generate
-    except ImportError as e:
-        print(
-            "Error: Transformers not available. Set MOCK_LLM=1 or use the LLM image.",
-            file=sys.stderr,
-        )
-        raise SystemExit(1) from e
+            backend = get_transformers_gpu_backend()
+            return backend.generate
+        except (ImportError, RuntimeError) as e:
+            print(
+                f"[LLM] GPU backend unavailable ({e}), falling back to CPU.",
+                file=sys.stderr,
+            )
+            use_gpu = False
+    if not use_gpu:
+        try:
+            from debate_analyzer.analysis.backend_transformers_cpu import (
+                get_transformers_cpu_backend,
+            )
+
+            backend = get_transformers_cpu_backend()
+            return backend.generate
+        except ImportError as e:
+            print(
+                "Error: Transformers not available. Set MOCK_LLM=1 or use LLM image.",
+                file=sys.stderr,
+            )
+            raise SystemExit(1) from e
 
 
 def _write_result_s3(result: dict, bucket: str, key: str) -> None:
@@ -165,7 +197,8 @@ def run(prefix_or_uri: str) -> int:
         else:
             _log("Failed transcript.")
         elapsed = time.perf_counter() - job_start
-        _log(f"Job finished: {1 if ok else 0} succeeded, {0 if ok else 1} failed (total {elapsed:.1f}s).")
+        n_ok, n_fail = (1 if ok else 0), (0 if ok else 1)
+        _log(f"Job finished: {n_ok} succeeded, {n_fail} failed (total {elapsed:.1f}s).")
         return 1 if ok else 0
 
     # S3 prefix: list *_transcription.json
@@ -214,9 +247,9 @@ def run(prefix_or_uri: str) -> int:
             _log(f"Failed transcript {i + 1}/{n}.")
     elapsed = time.perf_counter() - job_start
     if failed:
-        _log(f"Job finished: {succeeded} succeeded, {failed} failed (total {elapsed:.1f}s).")
+        _log(f"Job finished: {succeeded} ok, {failed} failed (total {elapsed:.1f}s).")
     else:
-        _log(f"Job finished: {succeeded} transcript(s) analyzed (total {elapsed:.1f}s).")
+        _log(f"Job finished: {succeeded} transcript(s) analyzed ({elapsed:.1f}s).")
     return succeeded
 
 

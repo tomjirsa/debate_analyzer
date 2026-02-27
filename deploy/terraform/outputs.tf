@@ -83,8 +83,13 @@ output "batch_job_definition_llm_analysis_name" {
   value       = aws_batch_job_definition.llm_analysis.name
 }
 
+output "batch_job_definition_llm_analysis_gpu_name" {
+  description = "Name of the LLM analysis GPU job definition (Job 4 GPU; use with GPU queue and submit-llm-analysis-job-gpu.sh)."
+  value       = aws_batch_job_definition.llm_analysis_gpu.name
+}
+
 output "batch_job_queue_llm_name" {
-  description = "Name of the LLM job queue (32 GB GPU; use when submitting LLM analysis jobs)."
+  description = "Name of the LLM job queue (CPU; use for submit-llm-analysis-job.sh)."
   value       = aws_batch_job_queue.llm.name
 }
 
