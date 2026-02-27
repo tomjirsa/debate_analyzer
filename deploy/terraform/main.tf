@@ -580,10 +580,10 @@ resource "aws_batch_job_definition" "llm_analysis" {
   container_properties = jsonencode({
     image = local.ecr_image_llm
     command = ["/entrypoint_llm_analysis.sh"]
-    # 4 vCPU, 14 GiB: fits c5.2xlarge (16 GiB) after ECS agent/system reservation (~1–1.5 GiB)
+    # 4 vCPU, memory from var.batch_llm_job_memory_mib (default 20 GiB); needs instance with >= that RAM (e.g. c5.4xlarge for 32 GiB)
     resourceRequirements = [
       { type = "VCPU", value = "4" },
-      { type = "MEMORY", value = "14336" }
+      { type = "MEMORY", value = tostring(var.batch_llm_job_memory_mib) }
     ]
     jobRoleArn       = aws_iam_role.batch_job.arn
     executionRoleArn = aws_iam_role.batch_execution.arn
