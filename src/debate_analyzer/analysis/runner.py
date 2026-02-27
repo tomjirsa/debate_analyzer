@@ -135,6 +135,8 @@ def run_analysis(
     all_topic_dicts: list[dict[str, Any]] = []
     num_chunks = len(chunks)
     for i, chunk in enumerate(chunks):
+        if log_progress:
+            log_progress(f"Phase 1: Processing chunk {i + 1}/{num_chunks}.")
         prompt = build_topics_chunk_prompt(chunk)
         out = generate(prompt, max_tokens=max_tokens_per_reply)
         if log_llm_call:
@@ -168,6 +170,8 @@ def run_analysis(
 
         # Phase 2: topic summary
         prompt2 = build_topic_summary_prompt(topic_id, title, desc, excerpt)
+        if log_progress:
+            log_progress(f"Phase 2: Generating summary for topic {topic_id}.")
         out2 = generate(prompt2, max_tokens=max_tokens_per_reply)
         if log_llm_call:
             log_llm_call(f"Phase 2 topic {topic_id}", prompt2, out2)
@@ -182,6 +186,8 @@ def run_analysis(
 
         # Phase 3: speaker contributions for this topic
         prompt3 = build_speaker_contributions_prompt(topic_id, title, excerpt)
+        if log_progress:
+            log_progress(f"Phase 3: Generating speaker contributions for topic {topic_id}.")
         out3 = generate(prompt3, max_tokens=max_tokens_per_reply)
         if log_llm_call:
             log_llm_call(f"Phase 3 topic {topic_id}", prompt3, out3)
