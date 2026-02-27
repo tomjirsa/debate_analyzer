@@ -35,9 +35,6 @@ locals {
     min_vcpus      = var.batch_cpu_min_vcpus
     max_vcpus      = var.batch_cpu_max_vcpus
   })), 0, 8)
-  ce_llm_name_suffix = substr(md5(jsonencode({
-    instance_types = join(",", var.batch_llm_compute_instance_types)
-  })), 0, 8)
   # Effective cookies secret ARN: from Terraform-created secret (file path) or user-provided ARN
   yt_cookies_secret_arn = var.yt_cookies_file_path != null ? aws_secretsmanager_secret.yt_cookies[0].arn : var.yt_cookies_secret_arn
 }
@@ -438,32 +435,7 @@ resource "aws_batch_job_queue" "cpu" {
   }
 }
 
-# LLM queue: 16 GB GPU (g4dn.2xlarge T4); default model Qwen2-1.5B; LLM_MAX_MODEL_LEN=8192; for 32k use 24 GB+ instance
-resource "aws_batch_compute_environment" "gpu_llm" {
-  compute_environment_name = "${local.name}-gpu-llm-${local.ce_llm_name_suffix}"
-  type                     = "MANAGED"
-  state                    = "ENABLED"
-
-  lifecycle {
-    create_before_destroy = true
-  }
-
-  compute_resources {
-    type                = "EC2"
-    allocation_strategy = "BEST_FIT"
-    min_vcpus           = var.batch_min_vcpus
-    max_vcpus           = var.batch_max_vcpus
-    instance_type       = var.batch_llm_compute_instance_types
-    subnets             = local.subnet_ids
-    security_group_ids   = [aws_security_group.batch.id]
-    instance_role       = aws_iam_instance_profile.batch_instance.arn
-
-    ec2_configuration {
-      image_type = "ECS_AL2023_NVIDIA"
-    }
-  }
-}
-
+# LLM queue: CPU (same compute environment as download/stats); Transformers backend
 resource "aws_batch_job_queue" "llm" {
   name     = "${local.name}-queue-llm"
   state    = "ENABLED"
@@ -471,7 +443,7 @@ resource "aws_batch_job_queue" "llm" {
 
   compute_environment_order {
     order               = 1
-    compute_environment = aws_batch_compute_environment.gpu_llm.arn
+    compute_environment = aws_batch_compute_environment.cpu.arn
   }
 }
 
@@ -599,7 +571,7 @@ resource "aws_batch_job_definition" "stats" {
   })
 }
 
-# Job 4: LLM analysis (GPU; dedicated LLM image; EFS cache at /cache for HF_HOME so model is not re-downloaded per job)
+# Job 4: LLM analysis (CPU; dedicated LLM image; EFS cache at /cache for HF_HOME so model is not re-downloaded per job)
 resource "aws_batch_job_definition" "llm_analysis" {
   name                  = "${local.name}-job-llm-analysis"
   type                  = "container"
@@ -609,17 +581,15 @@ resource "aws_batch_job_definition" "llm_analysis" {
     image = local.ecr_image_llm
     command = ["/entrypoint_llm_analysis.sh"]
     resourceRequirements = [
-      { type = "VCPU", value = "3" },
-      { type = "MEMORY", value = "15360" },
-      { type = "GPU", value = "1" }
+      { type = "VCPU", value = "4" },
+      { type = "MEMORY", value = "16384" }
     ]
     jobRoleArn       = aws_iam_role.batch_job.arn
     executionRoleArn = aws_iam_role.batch_execution.arn
     secrets          = []
     environment = [
       { name = "HF_HOME", value = "/cache" },
-      { name = "LLM_MAX_MODEL_LEN", value = "8192" },
-      { name = "LLM_GPU_MEMORY_UTILIZATION", value = "0.80" }
+      { name = "LLM_MAX_MODEL_LEN", value = "8192" }
     ]
     volumes = [
       {

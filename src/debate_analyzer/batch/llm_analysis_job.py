@@ -7,7 +7,7 @@ Reads from environment:
 - TRANSCRIPTS_S3_PREFIX: S3 prefix listing *_transcription.json;
   processes each, writes _llm_analysis.json per file.
 
-Uses MOCK_LLM=1 for tests (no GPU). Otherwise vLLM (dedicated LLM image).
+Uses MOCK_LLM=1 for tests. Otherwise Transformers CPU backend (dedicated LLM image).
 """
 
 from __future__ import annotations
@@ -33,18 +33,20 @@ def _parse_s3_uri(uri: str) -> tuple[str, str]:
 
 
 def _get_backend():
-    """Return generate callable (mock or vLLM)."""
+    """Return generate callable (mock or Transformers CPU backend)."""
     if os.environ.get("MOCK_LLM", "").strip() in ("1", "true", "yes"):
         backend = MockLLMBackend()
         return backend.generate
     try:
-        from debate_analyzer.analysis.backend_vllm import get_vllm_backend
+        from debate_analyzer.analysis.backend_transformers_cpu import (
+            get_transformers_cpu_backend,
+        )
 
-        backend = get_vllm_backend()
+        backend = get_transformers_cpu_backend()
         return backend.generate
     except ImportError as e:
         print(
-            "Error: vLLM not available. Set MOCK_LLM=1 or use the LLM image.",
+            "Error: Transformers not available. Set MOCK_LLM=1 or use the LLM image.",
             file=sys.stderr,
         )
         raise SystemExit(1) from e

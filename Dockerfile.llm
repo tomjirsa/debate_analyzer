@@ -1,22 +1,15 @@
-# Dedicated LLM image for transcript analysis (Qwen2-1.5B-Instruct, vLLM).
+# Dedicated LLM image for transcript analysis (CPU-only; Transformers).
 # Build: docker build -f Dockerfile.llm -t debate-analyzer-llm:latest .
 # Push to ECR (debate-analyzer-llm repo), then submit Batch job with TRANSCRIPT_S3_URI.
-ARG CUDA_VERSION=12.1.0-cudnn8-runtime-ubuntu22.04
-FROM nvidia/cuda:${CUDA_VERSION}
+FROM python:3.10-slim
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV PYTHONUNBUFFERED=1
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3.10 \
-    python3.10-dev \
-    python3.10-venv \
-    python3-pip \
     curl \
     unzip \
-    build-essential \
-    && rm -rf /var/lib/apt/lists/* \
-    && ln -sf /usr/bin/python3.10 /usr/bin/python
+    && rm -rf /var/lib/apt/lists/*
 
 # AWS CLI for S3
 RUN curl -sS "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o /tmp/awscliv2.zip \
@@ -26,8 +19,11 @@ RUN curl -sS "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o /tmp/
 
 WORKDIR /app
 
-# Install deps: vLLM (GPU; Triton JIT needs gcc for some kernels), boto3 for S3.
-RUN pip install --no-cache-dir "vllm>=0.4.0" "boto3>=1.28"
+# CPU-only: torch (no CUDA), transformers, boto3
+RUN pip install --no-cache-dir \
+    torch --index-url https://download.pytorch.org/whl/cpu \
+    "transformers>=4.45.0" \
+    "boto3>=1.28"
 
 # Copy only the code needed for LLM analysis (analysis module, batch llm job, api loader)
 COPY src/debate_analyzer /app/src/debate_analyzer
@@ -36,10 +32,8 @@ ENV PYTHONPATH=/app/src
 COPY deploy/scripts/entrypoints/entrypoint_llm_analysis.sh /entrypoint_llm_analysis.sh
 RUN chmod +x /entrypoint_llm_analysis.sh
 
-# Default model and context (override with LLM_MODEL_ID env in job)
+# Default model (override with LLM_MODEL_ID env in job)
 ENV LLM_MODEL_ID=Qwen/Qwen2-1.5B-Instruct
-# Reduce CUDA fragmentation (helps avoid OOM on 16 GB GPUs)
-ENV PYTORCH_ALLOC_CONF=expandable_segments:True
 
 ENTRYPOINT []
 CMD ["/entrypoint_llm_analysis.sh"]

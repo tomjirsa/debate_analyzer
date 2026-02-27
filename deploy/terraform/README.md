@@ -43,10 +43,9 @@ For a **step-by-step AWS setup** and full variable descriptions, see [doc/AWS_SE
 | `yt_cookies_file_path` | Path to local cookies.txt (Netscape format); Terraform creates the secret from this file | `null` |
 | `ecr_image_tag` | Docker image tag for job definition | `latest` |
 | `batch_compute_instance_types` | GPU instance types (transcribe, full pipeline) | `["g4dn.xlarge", "g4dn.2xlarge"]` |
-| `batch_llm_compute_instance_types` | GPU instance types for LLM job (16 GB T4, e.g. g4dn.2xlarge; default model Qwen2-1.5B, LLM_MAX_MODEL_LEN=8192; for 32k use 24 GB+ instance) | `["g4dn.2xlarge"]` |
 | `batch_min_vcpus` | Min vCPUs for GPU CE (0 = scale to zero) | `0` |
 | `batch_max_vcpus` | Max vCPUs for GPU CE | `256` |
-| `batch_cpu_instance_types` | CPU instance types (download and stats job) | `["c5.xlarge"]` |
+| `batch_cpu_instance_types` | CPU instance types (download, stats, and LLM job) | `["c5.xlarge"]` |
 | `batch_cpu_min_vcpus` | Min vCPUs for CPU CE (0 = scale to zero) | `0` |
 | `batch_cpu_max_vcpus` | Max vCPUs for CPU CE | `64` |
 | `vpc_id` | VPC ID (null = default VPC) | `null` |
@@ -57,7 +56,7 @@ For a **step-by-step AWS setup** and full variable descriptions, see [doc/AWS_SE
 ## Outputs
 
 - `batch_job_queue_name` – GPU queue (full pipeline and transcribe job)
-- `batch_job_queue_llm_name` – LLM job queue (16 GB GPU; use for submit-llm-analysis-job.sh)
+- `batch_job_queue_llm_name` – LLM job queue (CPU; use for submit-llm-analysis-job.sh)
 - `batch_job_queue_cpu_name` – CPU queue (download and stats job)
 - `batch_job_definition_name` – full pipeline (download + transcribe)
 - `batch_job_definition_download_name` – download-only (Job 1)

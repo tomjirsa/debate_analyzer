@@ -3,7 +3,7 @@
 # Usage: ./submit-llm-analysis-job.sh <transcript_s3_uri>
 # Example: ./submit-llm-analysis-job.sh s3://bucket/jobs/job-id-123/transcripts/foo_transcription.json
 # Or:     ./submit-llm-analysis-job.sh s3://bucket/jobs/job-id-123/transcripts  (processes all *_transcription.json under prefix)
-# Requires the LLM image to be built and pushed to the debate-analyzer-llm ECR repo first.
+# Job runs on CPU. Requires the LLM image to be built and pushed to the debate-analyzer-llm ECR repo first.
 
 set -euo pipefail
 

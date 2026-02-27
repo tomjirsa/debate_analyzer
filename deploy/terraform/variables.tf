@@ -47,12 +47,6 @@ variable "batch_compute_instance_types" {
   default     = ["g4dn.xlarge", "g4dn.2xlarge"]
 }
 
-variable "batch_llm_compute_instance_types" {
-  description = "EC2 instance types for the LLM analysis job (g4dn.2xlarge has 16 GB T4; default model Qwen2-1.5B, LLM_MAX_MODEL_LEN=8192; for 32k use a 24 GB+ instance)."
-  type        = list(string)
-  default     = ["g4dn.2xlarge"]
-}
-
 variable "batch_cpu_instance_types" {
   description = "EC2 instance types for the CPU compute environment (download job)."
   type        = list(string)
