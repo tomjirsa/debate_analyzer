@@ -4,7 +4,9 @@ from debate_analyzer.analysis.backend import MockLLMBackend
 from debate_analyzer.analysis.chunking import (
     estimate_tokens,
     flatten_transcription,
+    get_topic_relevant_excerpt,
     split_into_chunks,
+    truncate_to_tokens,
 )
 from debate_analyzer.analysis.runner import run_analysis
 from debate_analyzer.analysis.schema import LLMAnalysisResult
@@ -82,8 +84,73 @@ def test_run_analysis_mock_backend():
     assert backend.call_count >= 1
 
 
+def test_run_analysis_respects_max_context_tokens():
+    """With small max_context_tokens, Phase 1 uses multiple chunks."""
+    backend = MockLLMBackend()
+    # Payload that flattens to ~500 tokens so we get multiple chunks with max 100
+    lines = [f"SPEAKER_00: Segment number {i} with some content." for i in range(80)]
+    text = "\n".join(lines)
+    assert estimate_tokens(text) > 100
+    payload = {
+        "transcription": [
+            {"speaker": "SPEAKER_00", "text": line.split(": ", 1)[1]} for line in lines
+        ]
+    }
+    calls: list[tuple[str, str, str]] = []
+
+    def capture(label: str, prompt: str, response: str) -> None:
+        calls.append((label, prompt, response))
+
+    run_analysis(
+        payload,
+        backend.generate,
+        max_context_tokens=100,
+        log_llm_call=capture,
+    )
+    phase1_labels = [c[0] for c in calls if "Phase 1 chunk" in c[0]]
+    assert (
+        len(phase1_labels) >= 2
+    ), "expected multiple Phase 1 chunks when max_context_tokens is small"
+
+
+def test_get_topic_relevant_excerpt_includes_matching_region():
+    """Excerpt for a topic whose title appears only in the middle includes that part."""
+    prefix = "\n".join([f"SPEAKER_00: Preamble line {i}." for i in range(30)])
+    middle = "SPEAKER_01: UniqueKeywordXYZ here and only here."
+    suffix = "\n".join([f"SPEAKER_00: Suffix line {i}." for i in range(30)])
+    flat = prefix + "\n" + middle + "\n" + suffix
+    excerpt = get_topic_relevant_excerpt(
+        flat,
+        topic_title="UniqueKeywordXYZ",
+        topic_description="",
+        max_tokens=500,
+    )
+    assert "UniqueKeywordXYZ" in excerpt
+    assert estimate_tokens(excerpt) <= 500 + 50  # allow small over-estimate
+
+
+def test_get_topic_relevant_excerpt_fallback_when_no_match():
+    """When topic keywords do not appear, excerpt is start of transcript truncated."""
+    flat = "\n".join([f"SPEAKER_00: Line {i}." for i in range(100)])
+    excerpt = get_topic_relevant_excerpt(
+        flat,
+        topic_title="NonexistentTopic123",
+        topic_description="",
+        max_tokens=50,
+    )
+    assert "Line 0." in excerpt
+    assert estimate_tokens(excerpt) <= 50 + 20
+
+
+def test_truncate_to_tokens_bounds_output():
+    """truncate_to_tokens keeps output within token bound."""
+    text = "\n".join([f"SPEAKER_00: Line {i}." for i in range(200)])
+    out = truncate_to_tokens(text, max_tokens=100)
+    assert estimate_tokens(out) <= 100 + 30  # line boundary may leave small slack
+
+
 def test_run_analysis_log_llm_call_invoked():
-    """When log_llm_call is provided, it is invoked for each Phase 1/2/3 call with expected labels."""
+    """log_llm_call is invoked for each Phase 1/2/3 call with expected labels."""
     backend = MockLLMBackend()
     payload = {
         "transcription": [
@@ -103,8 +170,18 @@ def test_run_analysis_log_llm_call_invoked():
     assert any("Phase 1" in lbl for lbl in labels)
     assert any("Phase 2" in lbl for lbl in labels)
     assert any("Phase 3" in lbl for lbl in labels)
-    for label, prompt, resp in calls:
+    for _, prompt, resp in calls:
         assert isinstance(prompt, str) and isinstance(resp, str)
+
+
+def test_extract_json_strips_markdown_fences():
+    """_extract_json parses JSON wrapped in markdown code fences on retry."""
+    from debate_analyzer.analysis.runner import _extract_json
+
+    wrapped = '```json\n{"main_topics": [{"id": "t1", "title": "A"}]}\n```'
+    parsed = _extract_json(wrapped)
+    assert isinstance(parsed, dict)
+    assert parsed.get("main_topics") == [{"id": "t1", "title": "A"}]
 
 
 def test_llm_analysis_result_from_dict():

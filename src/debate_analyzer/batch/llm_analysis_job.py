@@ -27,6 +27,19 @@ from debate_analyzer.analysis.runner import run_analysis
 _LOG_REQUEST_MAX = 500
 _LOG_RESPONSE_MAX = 1000
 
+# Reserve tokens for prompt template and model reply so chunks/excerpts fit in context
+_RESERVE_CONTEXT_TOKENS = 2000
+
+
+def _get_max_context_tokens() -> int:
+    """Compute max context tokens for runner from LLM_MAX_MODEL_LEN (default 8192)."""
+    raw = os.environ.get("LLM_MAX_MODEL_LEN", "8192").strip()
+    try:
+        model_len = int(raw)
+    except ValueError:
+        model_len = 8192
+    return max(1000, model_len - _RESERVE_CONTEXT_TOKENS)
+
 
 def _log(msg: str) -> None:
     """Emit progress message to stderr with [LLM] prefix for CloudWatch visibility."""
@@ -129,6 +142,7 @@ def _write_result_file(result: dict, path: Path) -> None:
 def _run_one(
     source_uri: str,
     generate,
+    max_context_tokens: int,
     log_progress: Callable[[str], None] | None = None,
     log_llm_call: Callable[[str, str, str], None] | None = None,
 ) -> bool:
@@ -144,6 +158,7 @@ def _run_one(
     result = run_analysis(
         payload,
         generate,
+        max_context_tokens=max_context_tokens,
         log_progress=log_progress,
         log_llm_call=log_llm_call,
     )
@@ -185,13 +200,20 @@ def run(prefix_or_uri: str) -> int:
 
     # Single file: URI or path that points to a transcript JSON
     if "_transcription.json" in s:
+        max_context_tokens = _get_max_context_tokens()
         _log(f"Processing single file: {s}")
         _log("Loading model (this may take a few minutes)...")
         t0 = time.perf_counter()
         generate = _get_backend()
         _log(f"Model ready in {time.perf_counter() - t0:.1f}s.")
         _log(f"Processing transcript: {s}")
-        ok = _run_one(s, generate, log_progress=_log, log_llm_call=_log_llm_call)
+        ok = _run_one(
+            s,
+            generate,
+            max_context_tokens,
+            log_progress=_log,
+            log_llm_call=_log_llm_call,
+        )
         if ok:
             _log("Completed transcript.")
         else:
@@ -228,6 +250,7 @@ def run(prefix_or_uri: str) -> int:
         _log("Job finished: 0 transcript(s) analyzed.")
         return 0
 
+    max_context_tokens = _get_max_context_tokens()
     _log("Loading model (this may take a few minutes)...")
     t0 = time.perf_counter()
     generate = _get_backend()
@@ -238,7 +261,13 @@ def run(prefix_or_uri: str) -> int:
     for i, uri in enumerate(uris):
         short_key = uri.split("/")[-1] if "/" in uri else uri
         _log(f"Processing transcript {i + 1}/{n}: {short_key}")
-        ok = _run_one(uri, generate, log_progress=_log, log_llm_call=_log_llm_call)
+        ok = _run_one(
+            uri,
+            generate,
+            max_context_tokens,
+            log_progress=_log,
+            log_llm_call=_log_llm_call,
+        )
         if ok:
             succeeded += 1
             _log(f"Completed transcript {i + 1}/{n}.")

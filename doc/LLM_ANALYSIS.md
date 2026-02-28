@@ -7,7 +7,7 @@ This document describes how to run **LLM analysis** on transcripts: main topics,
 - **Model:** Qwen2-1.5B-Instruct (default). Default context 8k; 1.5B fits 16 GB T4 (e.g. g4dn.2xlarge) comfortably. For 32k use a 24 GB+ GPU or set `LLM_MAX_MODEL_LEN`. LLM jobs use a dedicated queue.
 - **Input:** Transcript JSON (from S3 or local), in the same format as the transcribe job output (`transcription` list with `speaker`, `text`, `start`, `end`).
 - **Output:** JSON with `main_topics`, `topic_summaries`, `speaker_contributions`, written to S3 as `<stem>_llm_analysis.json` alongside the transcript, or imported into the DB via the admin API.
-- **Chunking:** Long transcripts (over the configured context) are split into chunks for topic extraction; topics are merged and then summarized. All phases respect the context limit set by `LLM_MAX_MODEL_LEN`.
+- **Chunking:** Long transcripts (over the configured context) are split into chunks for topic extraction; topics are merged and then summarized. The batch job passes `LLM_MAX_MODEL_LEN` into the runner so chunk and excerpt sizes respect the model context (with a reserve for prompt and reply). Phase 2 and Phase 3 use **topic-relevant excerpts** (keyword-based) when available, so summaries and speaker contributions use transcript regions that mention each topic.
 
 ### Model cache (EFS)
 
@@ -104,15 +104,15 @@ To attach analysis to a transcript in the DB (for the admin UI or API):
 
 Get the latest analysis: `GET /api/admin/transcripts/{transcript_id}/analysis`.
 
-## 6. Chunking (long transcripts)
+## 6. Chunking and excerpts (long transcripts)
 
-Transcripts longer than the configured context (see `LLM_MAX_MODEL_LEN`, default 8k tokens) are handled as follows:
+The job sets chunk and excerpt size from `LLM_MAX_MODEL_LEN` (default 8k) so the model never receives more context than it supports.
 
 - **Phase 1 (topics):** The flattened transcript is split into overlapping chunks (within the context limit). The LLM extracts topics per chunk; topics are merged and deduplicated by title.
-- **Phase 2 (summaries):** For each topic, an excerpt of the transcript (truncated to the context limit) is used to generate the discussion summary.
-- **Phase 3 (speaker contributions):** Same excerpt is used to summarize each speaker’s contribution per topic.
+- **Phase 2 (summaries):** For each topic, a **topic-relevant excerpt** is built by finding lines that mention the topic (from its title/description) and taking a window around them, truncated to the context limit. If no match is found, the start of the transcript is used. That excerpt is used to generate the discussion summary.
+- **Phase 3 (speaker contributions):** The same per-topic excerpt is used to summarize each speaker’s contribution for that topic.
 
-So chunking is **required** when the transcript exceeds the configured context; the runner enforces it automatically.
+Chunking is **required** when the transcript exceeds the configured context; the runner enforces it automatically.
 
 ## 7. Local / testing
 

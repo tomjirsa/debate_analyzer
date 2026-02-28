@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import json
+import re
 from typing import Any, Callable
 
 from debate_analyzer.analysis.chunking import (
     DEFAULT_MAX_CHUNK_TOKENS,
     flatten_transcription,
+    get_topic_relevant_excerpt,
     split_into_chunks,
 )
 from debate_analyzer.analysis.prompts import (
@@ -21,7 +23,17 @@ from debate_analyzer.analysis.schema import LLMAnalysisResult
 def _extract_json(text: str) -> dict[str, Any] | list[Any] | None:
     """Extract a JSON object or array from model output (may be wrapped in markdown)."""
     text = text.strip()
-    # Find first { or [ and matching } or ].
+    result = _parse_json_once(text)
+    if result is not None:
+        return result
+    # Retry after stripping markdown code fences
+    stripped = re.sub(r"^```(?:json)?\s*", "", text)
+    stripped = re.sub(r"\s*```\s*$", "", stripped)
+    return _parse_json_once(stripped.strip())
+
+
+def _parse_json_once(text: str) -> dict[str, Any] | list[Any] | None:
+    """Find first { or [ and matching } or ], parse; return None on failure."""
     start_obj = text.find("{")
     start_arr = text.find("[")
     if start_obj >= 0 and (start_arr < 0 or start_obj < start_arr):
@@ -53,15 +65,32 @@ def _extract_json(text: str) -> dict[str, Any] | list[Any] | None:
     return None
 
 
+def _normalize_topic_title(title: str) -> str:
+    """Normalize title for merge: strip parentheticals, collapse whitespace, lower."""
+    s = (title or "").strip().lower()
+    s = re.sub(r"\s*\([^)]*\)\s*", " ", s)
+    s = re.sub(r"[\s\-–—]+", " ", s)
+    return " ".join(s.split())
+
+
 def _merge_topic_ids(topic_dicts: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Deduplicate topics by title (case-insensitive); assign stable ids t1, t2, ..."""
+    """Deduplicate topics by normalized title; merge when one is prefix of another."""
     seen: dict[str, dict[str, Any]] = {}
     for t in topic_dicts:
-        title = (t.get("title") or "").strip().lower()
+        title = (t.get("title") or "").strip()
         if not title:
             continue
-        if title not in seen:
-            seen[title] = dict(t)
+        n = _normalize_topic_title(title)
+        merged = False
+        for k in list(seen.keys()):
+            if n.startswith(k) or k.startswith(n):
+                if len(n) < len(k):
+                    del seen[k]
+                    seen[n] = dict(t)
+                merged = True
+                break
+        if not merged:
+            seen[n] = dict(t)
     result = []
     for i, (_, t) in enumerate(sorted(seen.items(), key=lambda x: x[0]), start=1):
         t["id"] = f"t{i}"
@@ -105,12 +134,12 @@ def run_analysis(
         payload: Transcript dict with "transcription" list of segments.
         generate: Backend function (prompt, max_tokens) -> model output text.
         max_context_tokens: Max tokens per chunk for Phase 1; also for excerpt in 2/3.
+            Should match model context (e.g. LLM_MAX_MODEL_LEN minus reserve).
         token_counter: Optional token counter; if None, uses character-based estimate.
         max_tokens_per_reply: Max tokens to request from the model per call.
-        log_progress: Optional callback for progress messages (e.g. [LLM]-prefixed stderr).
-        log_llm_call: Optional callback (label, prompt, response) for each LLM call; for
-            debugging/observability. May contain transcript content; truncation is typically
-            applied by the caller.
+        log_progress: Optional callback for progress (e.g. [LLM]-prefixed stderr).
+        log_llm_call: Optional (label, prompt, response) for each LLM call; truncation
+            is typically applied by the caller.
 
     Returns:
         Dict with main_topics, topic_summaries, speaker_contributions for DB storage.
@@ -138,7 +167,7 @@ def run_analysis(
         if log_progress:
             log_progress(f"Phase 1: Processing chunk {i + 1}/{num_chunks}.")
         prompt = build_topics_chunk_prompt(chunk)
-        out = generate(prompt, max_tokens=max_tokens_per_reply)
+        out = generate(prompt, max_tokens_per_reply)
         if log_llm_call:
             log_llm_call(f"Phase 1 chunk {i + 1}/{num_chunks}", prompt, out)
         parsed = _extract_json(out)
@@ -155,9 +184,6 @@ def run_analysis(
             speaker_contributions=[],
         ).to_dict()
 
-    # Excerpt for Phase 2 and 3: full text truncated to max_context_tokens
-    excerpt = _truncate_to_tokens(flat, max_context_tokens, token_counter=count)
-
     topic_summaries: list[dict[str, Any]] = []
     speaker_contributions: list[dict[str, Any]] = []
 
@@ -168,11 +194,20 @@ def run_analysis(
         if log_progress:
             log_progress(f"Phase 2/3: Topic {i + 1}/{len(main_topics)}: {title}")
 
+        # Per-topic excerpt: keyword-based so Phase 2/3 see relevant context
+        excerpt = get_topic_relevant_excerpt(
+            flat,
+            title,
+            desc,
+            max_context_tokens,
+            token_counter=count,
+        )
+
         # Phase 2: topic summary
         prompt2 = build_topic_summary_prompt(topic_id, title, desc, excerpt)
         if log_progress:
             log_progress(f"Phase 2: Generating summary for topic {topic_id}.")
-        out2 = generate(prompt2, max_tokens=max_tokens_per_reply)
+        out2 = generate(prompt2, max_tokens_per_reply)
         if log_llm_call:
             log_llm_call(f"Phase 2 topic {topic_id}", prompt2, out2)
         parsed2 = _extract_json(out2)
@@ -183,6 +218,8 @@ def run_analysis(
                     "summary": str(parsed2["summary"]),
                 }
             )
+        elif log_progress:
+            log_progress(f"Phase 2: could not parse summary for topic {topic_id}.")
 
         # Phase 3: speaker contributions for this topic
         prompt3 = build_speaker_contributions_prompt(topic_id, title, excerpt)
@@ -190,7 +227,7 @@ def run_analysis(
             log_progress(
                 f"Phase 3: Generating speaker contributions for topic {topic_id}."
             )
-        out3 = generate(prompt3, max_tokens=max_tokens_per_reply)
+        out3 = generate(prompt3, max_tokens_per_reply)
         if log_llm_call:
             log_llm_call(f"Phase 3 topic {topic_id}", prompt3, out3)
         parsed3 = _extract_json(out3)
@@ -206,6 +243,10 @@ def run_analysis(
                             "summary": str(sc.get("summary", "")),
                         }
                     )
+        elif log_progress:
+            log_progress(
+                f"Phase 3: could not parse speaker contributions for topic {topic_id}."
+            )
 
     return LLMAnalysisResult(
         main_topics=main_topics,
