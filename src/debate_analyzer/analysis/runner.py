@@ -120,7 +120,7 @@ def _truncate_to_tokens(
 
 def run_analysis(
     payload: dict[str, Any],
-    generate: Callable[[str, int], str],
+    generate_batch: Callable[[list[str], int], list[str]],
     max_context_tokens: int = DEFAULT_MAX_CHUNK_TOKENS,
     token_counter: Callable[[str], int] | None = None,
     max_tokens_per_reply: int = 2048,
@@ -128,11 +128,11 @@ def run_analysis(
     log_llm_call: Callable[[str, str, str], None] | None = None,
 ) -> dict[str, Any]:
     """
-    Run the three-phase LLM analysis on a transcript payload.
+    Run the three-phase LLM analysis on a transcript payload using batched inference.
 
     Args:
         payload: Transcript dict with "transcription" list of segments.
-        generate: Backend function (prompt, max_tokens) -> model output text.
+        generate_batch: Backend function (prompts, max_tokens) -> list of model outputs.
         max_context_tokens: Max tokens per chunk for Phase 1; also for excerpt in 2/3.
             Should match model context (e.g. LLM_MAX_MODEL_LEN minus reserve).
         token_counter: Optional token counter; if None, uses character-based estimate.
@@ -157,19 +157,21 @@ def run_analysis(
 
     count = token_counter or estimate_tokens
 
-    # Phase 1: topics (chunked if needed)
+    # Phase 1: topics (batched)
     chunks = split_into_chunks(flat, max_tokens=max_context_tokens, token_counter=count)
     if log_progress:
         log_progress(f"Phase 1: Extracting topics ({len(chunks)} chunks).")
+    phase1_prompts = [build_topics_chunk_prompt(chunk) for chunk in chunks]
+    phase1_responses = generate_batch(phase1_prompts, max_tokens_per_reply)
+    if log_llm_call and phase1_prompts:
+        p0 = phase1_prompts[0]
+        log_llm_call(
+            f"Phase 1 batch ({len(phase1_prompts)} chunks)",
+            p0[:200] + "..." if len(p0) > 200 else p0,
+            f"<{len(phase1_responses)} responses>",
+        )
     all_topic_dicts: list[dict[str, Any]] = []
-    num_chunks = len(chunks)
-    for i, chunk in enumerate(chunks):
-        if log_progress:
-            log_progress(f"Phase 1: Processing chunk {i + 1}/{num_chunks}.")
-        prompt = build_topics_chunk_prompt(chunk)
-        out = generate(prompt, max_tokens_per_reply)
-        if log_llm_call:
-            log_llm_call(f"Phase 1 chunk {i + 1}/{num_chunks}", prompt, out)
+    for out in phase1_responses:
         parsed = _extract_json(out)
         if isinstance(parsed, dict) and "main_topics" in parsed:
             all_topic_dicts.extend(parsed["main_topics"])
@@ -184,32 +186,31 @@ def run_analysis(
             speaker_contributions=[],
         ).to_dict()
 
-    topic_summaries: list[dict[str, Any]] = []
-    speaker_contributions: list[dict[str, Any]] = []
-
-    for i, topic in enumerate(main_topics):
+    # Phase 2: topic summaries (batched)
+    if log_progress:
+        log_progress(f"Phase 2: Generating summaries for {len(main_topics)} topics.")
+    phase2_prompts: list[str] = []
+    for topic in main_topics:
         topic_id = topic.get("id", "")
         title = topic.get("title") or ""
         desc = topic.get("description") or ""
-        if log_progress:
-            log_progress(f"Phase 2/3: Topic {i + 1}/{len(main_topics)}: {title}")
-
-        # Per-topic excerpt: keyword-based so Phase 2/3 see relevant context
         excerpt = get_topic_relevant_excerpt(
-            flat,
-            title,
-            desc,
-            max_context_tokens,
-            token_counter=count,
+            flat, title, desc, max_context_tokens, token_counter=count
         )
-
-        # Phase 2: topic summary
-        prompt2 = build_topic_summary_prompt(topic_id, title, desc, excerpt)
-        if log_progress:
-            log_progress(f"Phase 2: Generating summary for topic {topic_id}.")
-        out2 = generate(prompt2, max_tokens_per_reply)
-        if log_llm_call:
-            log_llm_call(f"Phase 2 topic {topic_id}", prompt2, out2)
+        phase2_prompts.append(
+            build_topic_summary_prompt(topic_id, title, desc, excerpt)
+        )
+    phase2_responses = generate_batch(phase2_prompts, max_tokens_per_reply)
+    if log_llm_call and phase2_prompts:
+        p0 = phase2_prompts[0]
+        log_llm_call(
+            f"Phase 2 batch ({len(phase2_prompts)} topics)",
+            p0[:200] + "..." if len(p0) > 200 else p0,
+            f"<{len(phase2_responses)} responses>",
+        )
+    topic_summaries: list[dict[str, Any]] = []
+    for topic, out2 in zip(main_topics, phase2_responses):
+        topic_id = topic.get("id", "")
         parsed2 = _extract_json(out2)
         if isinstance(parsed2, dict) and "topic_id" in parsed2 and "summary" in parsed2:
             topic_summaries.append(
@@ -221,15 +222,33 @@ def run_analysis(
         elif log_progress:
             log_progress(f"Phase 2: could not parse summary for topic {topic_id}.")
 
-        # Phase 3: speaker contributions for this topic
-        prompt3 = build_speaker_contributions_prompt(topic_id, title, excerpt)
-        if log_progress:
-            log_progress(
-                f"Phase 3: Generating speaker contributions for topic {topic_id}."
-            )
-        out3 = generate(prompt3, max_tokens_per_reply)
-        if log_llm_call:
-            log_llm_call(f"Phase 3 topic {topic_id}", prompt3, out3)
+    # Phase 3: speaker contributions (batched)
+    if log_progress:
+        log_progress(
+            f"Phase 3: Generating speaker contributions for {len(main_topics)} topics."
+        )
+    phase3_prompts: list[str] = []
+    for topic in main_topics:
+        topic_id = topic.get("id", "")
+        title = topic.get("title") or ""
+        desc = topic.get("description") or ""
+        excerpt = get_topic_relevant_excerpt(
+            flat, title, desc, max_context_tokens, token_counter=count
+        )
+        phase3_prompts.append(
+            build_speaker_contributions_prompt(topic_id, title, excerpt)
+        )
+    phase3_responses = generate_batch(phase3_prompts, max_tokens_per_reply)
+    if log_llm_call and phase3_prompts:
+        p0 = phase3_prompts[0]
+        log_llm_call(
+            f"Phase 3 batch ({len(phase3_prompts)} topics)",
+            p0[:200] + "..." if len(p0) > 200 else p0,
+            f"<{len(phase3_responses)} responses>",
+        )
+    speaker_contributions: list[dict[str, Any]] = []
+    for topic, out3 in zip(main_topics, phase3_responses):
+        topic_id = topic.get("id", "")
         parsed3 = _extract_json(out3)
         if isinstance(parsed3, dict) and "speaker_contributions" in parsed3:
             for sc in parsed3["speaker_contributions"]:

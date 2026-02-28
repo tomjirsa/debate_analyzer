@@ -84,10 +84,10 @@ def _parse_s3_uri(uri: str) -> tuple[str, str]:
 
 
 def _get_backend():
-    """Return generate callable (mock, or Transformers GPU/CPU backend)."""
+    """Return generate_batch callable (mock, or Transformers GPU/CPU backend)."""
     if os.environ.get("MOCK_LLM", "").strip() in ("1", "true", "yes"):
         backend = MockLLMBackend()
-        return backend.generate
+        return backend.generate_batch
     use_gpu = os.environ.get("LLM_USE_GPU", "").strip().lower() in ("1", "true", "yes")
     if use_gpu:
         try:
@@ -96,7 +96,7 @@ def _get_backend():
             )
 
             backend = get_transformers_gpu_backend()
-            return backend.generate
+            return backend.generate_batch
         except (ImportError, RuntimeError) as e:
             print(
                 f"[LLM] GPU backend unavailable ({e}), falling back to CPU.",
@@ -110,7 +110,7 @@ def _get_backend():
             )
 
             backend = get_transformers_cpu_backend()
-            return backend.generate
+            return backend.generate_batch
         except ImportError as e:
             print(
                 "Error: Transformers not available. Set MOCK_LLM=1 or use LLM image.",
@@ -141,7 +141,7 @@ def _write_result_file(result: dict, path: Path) -> None:
 
 def _run_one(
     source_uri: str,
-    generate,
+    generate_batch,
     max_context_tokens: int,
     log_progress: Callable[[str], None] | None = None,
     log_llm_call: Callable[[str, str, str], None] | None = None,
@@ -157,7 +157,7 @@ def _run_one(
 
     result = run_analysis(
         payload,
-        generate,
+        generate_batch,
         max_context_tokens=max_context_tokens,
         log_progress=log_progress,
         log_llm_call=log_llm_call,
@@ -204,12 +204,12 @@ def run(prefix_or_uri: str) -> int:
         _log(f"Processing single file: {s}")
         _log("Loading model (this may take a few minutes)...")
         t0 = time.perf_counter()
-        generate = _get_backend()
+        generate_batch = _get_backend()
         _log(f"Model ready in {time.perf_counter() - t0:.1f}s.")
         _log(f"Processing transcript: {s}")
         ok = _run_one(
             s,
-            generate,
+            generate_batch,
             max_context_tokens,
             log_progress=_log,
             log_llm_call=_log_llm_call,
@@ -253,7 +253,7 @@ def run(prefix_or_uri: str) -> int:
     max_context_tokens = _get_max_context_tokens()
     _log("Loading model (this may take a few minutes)...")
     t0 = time.perf_counter()
-    generate = _get_backend()
+    generate_batch = _get_backend()
     _log(f"Model ready in {time.perf_counter() - t0:.1f}s.")
     n = len(uris)
     succeeded = 0
@@ -263,7 +263,7 @@ def run(prefix_or_uri: str) -> int:
         _log(f"Processing transcript {i + 1}/{n}: {short_key}")
         ok = _run_one(
             uri,
-            generate,
+            generate_batch,
             max_context_tokens,
             log_progress=_log,
             log_llm_call=_log_llm_call,

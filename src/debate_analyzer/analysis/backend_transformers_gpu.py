@@ -25,7 +25,7 @@ def get_transformers_gpu_backend(
         max_model_len: Max context length. Default from env LLM_MAX_MODEL_LEN (8192).
 
     Returns:
-        Object implementing generate(prompt, max_tokens) -> str.
+        Object implementing generate and generate_batch.
 
     Raises:
         ImportError: If transformers or torch is not installed.
@@ -68,31 +68,82 @@ def get_transformers_gpu_backend(
     elapsed = time.perf_counter() - t0
     print(f"[LLM] Model loaded on GPU in {elapsed:.1f}s.", file=sys.stderr)
 
+    raw_batch_size = os.environ.get("LLM_BATCH_SIZE", "8").strip()
+    try:
+        max_batch_size = max(1, int(raw_batch_size))
+    except ValueError:
+        max_batch_size = 8
+    pad_token_id = tokenizer.pad_token_id or tokenizer.eos_token_id
+    if tokenizer.pad_token_id is None:
+        tokenizer.pad_token_id = tokenizer.eos_token_id
+
     class TransformersGPUBackend:
         def generate(self, prompt: str, max_tokens: int = 2048) -> str:
-            messages = [{"role": "user", "content": prompt}]
-            text = tokenizer.apply_chat_template(
-                messages,
-                tokenize=False,
-                add_generation_prompt=True,
-            )
-            model_inputs = tokenizer(
-                text,
-                return_tensors="pt",
-                truncation=True,
-                max_length=max_model_len,
-            ).to(device)
+            out = self.generate_batch([prompt], max_tokens)
+            return out[0] if out else ""
+
+        def generate_batch(
+            self, prompts: list[str], max_tokens: int = 2048
+        ) -> list[str]:
+            if not prompts:
+                return []
+            results: list[str] = []
+            for start in range(0, len(prompts), max_batch_size):
+                batch_prompts = prompts[start : start + max_batch_size]
+                batch_results = self._generate_batch_chunk(
+                    batch_prompts, max_tokens, pad_token_id
+                )
+                results.extend(batch_results)
+            return results
+
+        def _generate_batch_chunk(
+            self,
+            prompts: list[str],
+            max_tokens: int,
+            pad_token_id: int,
+        ) -> list[str]:
+            messages_list = [[{"role": "user", "content": p}] for p in prompts]
+            texts = [
+                tokenizer.apply_chat_template(
+                    msgs,
+                    tokenize=False,
+                    add_generation_prompt=True,
+                )
+                for msgs in messages_list
+            ]
+            old_padding_side = tokenizer.padding_side
+            tokenizer.padding_side = "left"
+            try:
+                model_inputs = tokenizer(
+                    texts,
+                    return_tensors="pt",
+                    padding=True,
+                    truncation=True,
+                    max_length=max_model_len,
+                ).to(device)
+            finally:
+                tokenizer.padding_side = old_padding_side
+            input_ids = model_inputs.input_ids
+            attention_mask = model_inputs.attention_mask
+            input_lengths = attention_mask.sum(dim=1)
             with torch.inference_mode():
                 generated_ids = model.generate(
-                    **model_inputs,
+                    input_ids=input_ids,
+                    attention_mask=attention_mask,
                     max_new_tokens=max_tokens,
                     do_sample=True,
                     temperature=0.2,
-                    pad_token_id=tokenizer.pad_token_id or tokenizer.eos_token_id,
+                    pad_token_id=pad_token_id,
                 )
-            input_len = model_inputs.input_ids.shape[1]
-            new_ids = generated_ids[:, input_len:]
-            response = tokenizer.decode(new_ids[0], skip_special_tokens=True)
-            return response.strip() or ""
+            batch_size = input_ids.shape[0]
+            out_list: list[str] = []
+            for i in range(batch_size):
+                start = input_lengths[i].item()
+                new_ids = generated_ids[i, start:]
+                response = tokenizer.decode(
+                    new_ids, skip_special_tokens=True
+                ).strip()
+                out_list.append(response or "")
+            return out_list
 
     return TransformersGPUBackend()

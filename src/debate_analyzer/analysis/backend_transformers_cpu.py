@@ -89,4 +89,10 @@ def get_transformers_cpu_backend(
             response = tokenizer.decode(new_ids[0], skip_special_tokens=True)
             return response.strip() or ""
 
+        def generate_batch(
+            self, prompts: list[str], max_tokens: int = 2048
+        ) -> list[str]:
+            """Run generate for each prompt (no real batching on CPU)."""
+            return [self.generate(p, max_tokens) for p in prompts]
+
     return TransformersCPUBackend()

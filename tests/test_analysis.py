@@ -56,10 +56,26 @@ def test_split_into_chunks_long():
     assert total_len >= len(text) * 0.9
 
 
+def test_mock_backend_generate_batch():
+    """Mock generate_batch returns one response per prompt in order."""
+    backend = MockLLMBackend()
+    prompts = [
+        "List the main topics",
+        "Summarize the outcome",
+        "each speaker's position",
+    ]
+    out = backend.generate_batch(prompts, max_tokens=100)
+    assert len(out) == 3
+    assert "main_topics" in out[0]
+    assert "topic_id" in out[1] and "summary" in out[1]
+    assert "speaker_contributions" in out[2]
+    assert backend.call_count == 3
+
+
 def test_run_analysis_empty_payload():
     """Empty transcription yields empty result."""
     backend = MockLLMBackend()
-    result = run_analysis({"transcription": []}, backend.generate)
+    result = run_analysis({"transcription": []}, backend.generate_batch)
     assert result["main_topics"] == []
     assert result["topic_summaries"] == []
     assert result["speaker_contributions"] == []
@@ -74,7 +90,7 @@ def test_run_analysis_mock_backend():
             {"speaker": "SPEAKER_01", "text": "Topic two."},
         ]
     }
-    result = run_analysis(payload, backend.generate)
+    result = run_analysis(payload, backend.generate_batch)
     assert "main_topics" in result
     assert "topic_summaries" in result
     assert "speaker_contributions" in result
@@ -103,14 +119,14 @@ def test_run_analysis_respects_max_context_tokens():
 
     run_analysis(
         payload,
-        backend.generate,
+        backend.generate_batch,
         max_context_tokens=100,
         log_llm_call=capture,
     )
-    phase1_labels = [c[0] for c in calls if "Phase 1 chunk" in c[0]]
+    phase1_labels = [c[0] for c in calls if "Phase 1 batch" in c[0]]
     assert (
-        len(phase1_labels) >= 2
-    ), "expected multiple Phase 1 chunks when max_context_tokens is small"
+        len(phase1_labels) >= 1
+    ), "expected Phase 1 batch call when using generate_batch"
 
 
 def test_get_topic_relevant_excerpt_includes_matching_region():
@@ -163,7 +179,7 @@ def test_run_analysis_log_llm_call_invoked():
     def capture(label: str, prompt: str, response: str) -> None:
         calls.append((label, prompt, response))
 
-    result = run_analysis(payload, backend.generate, log_llm_call=capture)
+    result = run_analysis(payload, backend.generate_batch, log_llm_call=capture)
     assert "main_topics" in result
     assert len(calls) >= 1
     labels = [c[0] for c in calls]

@@ -7,7 +7,8 @@ This document describes how to run **LLM analysis** on transcripts: main topics,
 - **Model:** Qwen2-1.5B-Instruct (default). Default context 8k; 1.5B fits 16 GB T4 (e.g. g4dn.2xlarge) comfortably. For 32k use a 24 GB+ GPU or set `LLM_MAX_MODEL_LEN`. LLM jobs use a dedicated queue.
 - **Input:** Transcript JSON (from S3 or local), in the same format as the transcribe job output (`transcription` list with `speaker`, `text`, `start`, `end`).
 - **Output:** JSON with `main_topics`, `topic_summaries`, `speaker_contributions`, written to S3 as `<stem>_llm_analysis.json` alongside the transcript, or imported into the DB via the admin API.
-- **Chunking:** Long transcripts (over the configured context) are split into chunks for topic extraction; topics are merged and then summarized. The batch job passes `LLM_MAX_MODEL_LEN` into the runner so chunk and excerpt sizes respect the model context (with a reserve for prompt and reply). Phase 2 and Phase 3 use **topic-relevant excerpts** (keyword-based) when available, so summaries and speaker contributions use transcript regions that mention each topic.
+- **Chunking:** Long transcripts (over the configured context) are split into chunks for topic extraction; topics are merged and then summarized. The batch job passes `LLM_MAX_MODEL_LEN` into the runner so chunk and excerpt sizes respect the model context (with a reserve for prompt and reply). Phase 2 and Phase 3 use **topic-relevant excerpts** (keyword-based) when available.
+- **Batched inference:** Phase 1, Phase 2, and Phase 3 each run as one or more batched GPU/CPU calls (multiple prompts per call) for better throughput. Batch size is limited by `LLM_BATCH_SIZE` (default 8) on GPU to avoid OOM.
 
 ### Model cache (EFS)
 
@@ -68,6 +69,7 @@ The job reads each `*_transcription.json`, runs the three-phase analysis (topics
 | `LLM_MODEL_ID` | Hugging Face model id (default: `Qwen/Qwen2-1.5B-Instruct`). |
 | `LLM_MAX_MODEL_LEN` | Max context length (default: `8192`). Qwen2-1.5B fits 16 GB T4 easily. For 32k use a 24 GB+ GPU and set to `32768`. |
 | `LLM_USE_GPU` | Set to `1` by the GPU job definition; selects Transformers GPU backend (CUDA). Omit or leave unset for CPU. |
+| `LLM_BATCH_SIZE` | Max prompts per GPU batch (default `8`). Lower if OOM; raise for smaller prompts. |
 | `MOCK_LLM` | Set to `1` to use a mock backend (no GPU; for testing). |
 | `LLM_LOG_FULL` | Set to `1`, `true`, or `yes` to log full prompts and responses; otherwise they are truncated (see Logging below). Use only for dev/debug; full logs may include PII. |
 

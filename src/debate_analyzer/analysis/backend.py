@@ -7,10 +7,14 @@ from typing import Protocol, runtime_checkable
 
 @runtime_checkable
 class LLMBackend(Protocol):
-    """Protocol for generate(prompt, max_tokens) -> text."""
+    """Protocol for batch inference: generate_batch(prompts, max_tokens) -> list."""
 
     def generate(self, prompt: str, max_tokens: int = 2048) -> str:
         """Generate completion for the given prompt. Returns raw model output text."""
+        ...
+
+    def generate_batch(self, prompts: list[str], max_tokens: int = 2048) -> list[str]:
+        """Generate completions for the given prompts. Same order as input."""
         ...
 
 
@@ -35,9 +39,8 @@ class MockLLMBackend:
         )
         self.call_count = 0
 
-    def generate(self, prompt: str, max_tokens: int = 2048) -> str:
-        """Return a canned response based on prompt content."""
-        self.call_count += 1
+    def _response_for_prompt(self, prompt: str) -> str:
+        """Return canned response for one prompt."""
         if "main_topics" in prompt or "List the main topics" in prompt:
             return self.topics_response
         if (
@@ -49,3 +52,13 @@ class MockLLMBackend:
         if "speaker_contributions" in prompt or "each speaker's position" in prompt:
             return self.speaker_response
         return self.topics_response
+
+    def generate(self, prompt: str, max_tokens: int = 2048) -> str:
+        """Return a canned response based on prompt content."""
+        self.call_count += 1
+        return self._response_for_prompt(prompt)
+
+    def generate_batch(self, prompts: list[str], max_tokens: int = 2048) -> list[str]:
+        """Return canned responses, one per prompt."""
+        self.call_count += len(prompts)
+        return [self._response_for_prompt(p) for p in prompts]
