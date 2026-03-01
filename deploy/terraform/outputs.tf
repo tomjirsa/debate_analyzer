@@ -78,6 +78,11 @@ output "ecr_repository_llm_url" {
   value       = aws_ecr_repository.llm.repository_url
 }
 
+output "ecr_image_uri_llm_ollama" {
+  description = "Full ECR image URI for the LLM Ollama job (debate-analyzer-llm:latest-ollama). Use to verify image exists before running the Ollama Batch job."
+  value       = local.ecr_image_llm_ollama
+}
+
 output "batch_job_definition_llm_analysis_name" {
   description = "Name of the LLM analysis job definition (Job 4; run after transcribe)."
   value       = aws_batch_job_definition.llm_analysis.name

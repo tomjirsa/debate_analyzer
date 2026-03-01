@@ -2,7 +2,8 @@
 # Build: docker build -f Dockerfile.llm.ollama -t debate-analyzer-llm:latest-ollama .
 # Push to ECR (debate-analyzer-llm repo) with tag latest-ollama; submit with submit-llm-analysis-job-ollama.sh.
 # EFS is mounted at /cache; OLLAMA_MODELS=/cache/ollama so models are cached across jobs.
-FROM nvidia/cuda:12.1-runtime-ubuntu22.04
+# Use full semver tag; 12.1-runtime-ubuntu22.04 was removed from Docker Hub.
+FROM nvidia/cuda:12.9.1-runtime-ubuntu22.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV PYTHONUNBUFFERED=1

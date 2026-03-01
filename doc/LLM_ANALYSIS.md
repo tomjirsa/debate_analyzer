@@ -121,6 +121,20 @@ docker push "$ECR_LLM:latest-ollama"
 
 The first job (or first per EFS cache) may be slower while the model is pulled; subsequent jobs reuse the EFS cache.
 
+**Troubleshooting: "manifest unknown" / CannotPullImageManifestError**
+
+This means the Batch job is trying to pull an image that does not exist (or not with the expected tag) in your ECR repo. The Ollama job definition uses the image **`debate-analyzer-llm:latest-ollama`** in the same ECR repo as the other LLM images.
+
+1. **Ensure the image exists in ECR** (same account and region as your Batch stack). Either:
+   - Run the **GitHub Actions** workflow **"Build and push to ECR"** (manual dispatch or push a change that triggers it). The workflow builds `Dockerfile.llm.ollama` and pushes to `debate-analyzer-llm:latest-ollama`.
+   - Or build and push locally (see "Build and push the Ollama image" above).
+2. **Verify** the image is present:
+   ```bash
+   aws ecr describe-images --repository-name debate-analyzer-llm --image-ids imageTag=latest-ollama --region $(terraform -chdir=deploy/terraform output -raw aws_region)
+   ```
+   Or use the full image URI from Terraform: `terraform -chdir=deploy/terraform output -raw ecr_image_uri_llm_ollama`.
+3. **Region/account**: The workflow must push to the **same AWS account and region** as your Terraform deploy. In GitHub Actions, the region is set by the `AWS_REGION` input (default `eu-central-1`); it must match your Terraform `aws_region`.
+
 ## 3. Environment variables (job)
 
 | Variable | Description |
