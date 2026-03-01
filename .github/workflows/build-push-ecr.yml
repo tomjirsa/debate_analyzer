@@ -4,6 +4,7 @@
 # - Web app image (Fargate): Dockerfile.webapp -> debate-analyzer-webapp
 # - LLM image (Batch): Dockerfile.llm -> debate-analyzer-llm
 # - LLM GPU image (Batch): Dockerfile.llm.gpu -> debate-analyzer-llm:latest-gpu
+# - LLM Ollama image (Batch): Dockerfile.llm.ollama -> debate-analyzer-llm:latest-ollama
 # For OIDC: set up an IAM role with trust for token.actions.githubusercontent.com
 #   and permissions for ECR GetAuthorizationToken, ECR PutImage, InitiateLayerUpload, UploadLayerPart, CompleteLayerUpload
 #   on ALL THREE ECR repositories (debate-analyzer, debate-analyzer-webapp, debate-analyzer-llm).
@@ -22,6 +23,7 @@ on:
       - 'Dockerfile.webapp'
       - 'Dockerfile.llm'
       - 'Dockerfile.llm.gpu'
+      - 'Dockerfile.llm.ollama'
       - 'frontend/**'
       - 'deploy/scripts/entrypoints/**'
   workflow_dispatch:
@@ -74,7 +76,9 @@ jobs:
             llm:
               - 'Dockerfile.llm'
               - 'Dockerfile.llm.gpu'
+              - 'Dockerfile.llm.ollama'
               - 'deploy/scripts/entrypoints/entrypoint_llm_analysis.sh'
+              - 'deploy/scripts/entrypoints/entrypoint_llm_ollama.sh'
               - 'src/debate_analyzer/analysis/**'
               - 'src/debate_analyzer/batch/llm_analysis_job.py'
               - 'src/debate_analyzer/api/loader.py'
@@ -134,3 +138,14 @@ jobs:
           tags: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY_LLM }}:latest-gpu
           cache-from: type=registry,ref=${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY_LLM }}:buildcache-gpu
           cache-to: type=registry,ref=${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY_LLM }}:buildcache-gpu,mode=max
+
+      - name: Build and push LLM Ollama image
+        if: steps.buildall.outputs.build_all == 'true' || steps.filters.outputs.llm == 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.llm.ollama
+          push: true
+          tags: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY_LLM }}:latest-ollama
+          cache-from: type=registry,ref=${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY_LLM }}:buildcache-ollama
+          cache-to: type=registry,ref=${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY_LLM }}:buildcache-ollama,mode=max
