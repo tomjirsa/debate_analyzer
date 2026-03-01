@@ -52,16 +52,18 @@ def get_ollama_backend(
         file=sys.stderr,
     )
 
+    # Do not pass num_predict: the underlying ollama client.chat() expects it inside
+    # options={}, but langchain-ollama passes it as a top-level kwarg, causing TypeError.
+    # Rely on model default max output length (or set via OLLAMA_NUM_PREDICT if needed).
     llm = ChatOllama(
         base_url=base_url,
         model=model,
         temperature=0.2,
-        num_predict=2048,
     )
 
     class OllamaBackend:
         def generate(self, prompt: str, max_tokens: int = 2048) -> str:
-            bound = llm.bind(num_predict=max_tokens)
+            bound = llm
             msg = HumanMessage(content=prompt)
             response = bound.invoke([msg])
             content = getattr(response, "content", "")
