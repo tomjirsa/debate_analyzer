@@ -15,9 +15,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3-venv \
     sudo \
     unzip \
+    zstd \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Ollama (to /usr/local/bin)
+# Install Ollama (to /usr/local/bin; install script needs zstd for extraction)
 RUN curl -fsSL https://ollama.com/install.sh | sh
 
 # AWS CLI for S3
