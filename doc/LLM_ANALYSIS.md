@@ -60,6 +60,32 @@ Or use `submit-llm-analysis-job-gpu.sh` with the same URI.
 
 The job reads each `*_transcription.json`, runs the three-phase analysis (topics → topic summaries → speaker contributions), and writes `*_llm_analysis.json` to the same S3 prefix.
 
+### 2a. Running with Ollama (local)
+
+You can run the same job **locally** with the model served by **Ollama** on the same machine. The job talks to Ollama over HTTP (default `http://localhost:11434`) via LangChain. No Transformers or GPU in the job process; Ollama uses the GPU if available.
+
+**Prerequisites:**
+
+- Ollama installed and running (e.g. `ollama serve` or `ollama run <model>`).
+- Model pulled (e.g. `ollama pull qwen2.5:7b`).
+- Install the LLM extra: `poetry install --extras llm`.
+
+**Environment:**
+
+- `LLM_BACKEND=ollama` (or `LLM_USE_OLLAMA=1`).
+- `OLLAMA_HOST` (optional; default `http://localhost:11434`).
+- `OLLAMA_MODEL` or `LLM_MODEL_ID` — Ollama model name (e.g. `qwen2.5:7b`, `llama3.2`).
+
+**Example (single transcript):**
+
+```bash
+TRANSCRIPT_S3_URI=file:///path/to/foo_transcription.json \
+LLM_BACKEND=ollama \
+python -m debate_analyzer.batch.llm_analysis_job
+```
+
+Output is written next to the transcript as `foo_llm_analysis.json`.
+
 ## 3. Environment variables (job)
 
 | Variable | Description |
@@ -71,6 +97,10 @@ The job reads each `*_transcription.json`, runs the three-phase analysis (topics
 | `LLM_USE_GPU` | Set to `1` by the GPU job definition; selects Transformers GPU backend (CUDA). Omit or leave unset for CPU. |
 | `LLM_BATCH_SIZE` | Max prompts per GPU batch (default `2` for 16 GB GPUs). Use 4–8 on 24 GB+ if OOM does not occur. |
 | `MOCK_LLM` | Set to `1` to use a mock backend (no GPU; for testing). |
+| `LLM_BACKEND` | Set to `ollama` to use Ollama via LangChain (local). Omit for Transformers. |
+| `LLM_USE_OLLAMA` | Set to `1`, `true`, or `yes` as alternative to `LLM_BACKEND=ollama`. |
+| `OLLAMA_HOST` | Ollama API base URL (default: `http://localhost:11434`). Used when `LLM_BACKEND=ollama`. |
+| `OLLAMA_MODEL` | Ollama model name (e.g. `qwen2.5:7b`). Fallback: `LLM_MODEL_ID`. Used when `LLM_BACKEND=ollama`. |
 | `LLM_LOG_FULL` | Set to `1`, `true`, or `yes` to log full prompts and responses; otherwise they are truncated (see Logging below). Use only for dev/debug; full logs may include PII. |
 
 ### Logging (batch job)

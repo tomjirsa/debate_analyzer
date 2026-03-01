@@ -141,9 +141,7 @@ def get_transformers_gpu_backend(
             for i in range(batch_size):
                 start = input_lengths[i].item()
                 new_ids = generated_ids[i, start:]
-                response = tokenizer.decode(
-                    new_ids, skip_special_tokens=True
-                ).strip()
+                response = tokenizer.decode(new_ids, skip_special_tokens=True).strip()
                 out_list.append(response or "")
             return out_list
 

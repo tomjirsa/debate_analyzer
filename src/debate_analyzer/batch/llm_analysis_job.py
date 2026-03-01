@@ -7,8 +7,9 @@ Reads from environment:
 - TRANSCRIPTS_S3_PREFIX: S3 prefix listing *_transcription.json;
   processes each, writes _llm_analysis.json per file.
 
-Uses MOCK_LLM=1 for tests. Otherwise Transformers backend: set LLM_USE_GPU=1 for
-GPU (dedicated LLM GPU image on AWS Batch); else CPU backend (dedicated LLM image).
+Backend selection: MOCK_LLM=1 for tests. LLM_BACKEND=ollama (or LLM_USE_OLLAMA=1) for
+Ollama via LangChain over localhost (ensure Ollama is running on OLLAMA_HOST with the
+chosen model). Otherwise Transformers: LLM_USE_GPU=1 for GPU (AWS Batch); else CPU.
 """
 
 from __future__ import annotations
@@ -84,10 +85,32 @@ def _parse_s3_uri(uri: str) -> tuple[str, str]:
 
 
 def _get_backend():
-    """Return generate_batch callable (mock, or Transformers GPU/CPU backend)."""
+    """Return generate_batch callable: mock, Ollama, or Transformers GPU/CPU backend."""
     if os.environ.get("MOCK_LLM", "").strip() in ("1", "true", "yes"):
         backend = MockLLMBackend()
         return backend.generate_batch
+    use_ollama = os.environ.get(
+        "LLM_BACKEND", ""
+    ).strip().lower() == "ollama" or os.environ.get(
+        "LLM_USE_OLLAMA", ""
+    ).strip().lower() in (
+        "1",
+        "true",
+        "yes",
+    )
+    if use_ollama:
+        try:
+            from debate_analyzer.analysis.backend_ollama import get_ollama_backend
+
+            backend = get_ollama_backend()
+            return backend.generate_batch
+        except ImportError as e:
+            print(
+                "Error: Ollama backend selected but langchain-ollama not available. "
+                "Install with: poetry install --extras llm",
+                file=sys.stderr,
+            )
+            raise SystemExit(1) from e
     use_gpu = os.environ.get("LLM_USE_GPU", "").strip().lower() in ("1", "true", "yes")
     if use_gpu:
         try:
