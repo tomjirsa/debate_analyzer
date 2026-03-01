@@ -68,11 +68,12 @@ def get_transformers_gpu_backend(
     elapsed = time.perf_counter() - t0
     print(f"[LLM] Model loaded on GPU in {elapsed:.1f}s.", file=sys.stderr)
 
-    raw_batch_size = os.environ.get("LLM_BATCH_SIZE", "8").strip()
+    # Default 2 to avoid OOM on 16 GB GPUs (e.g. g4dn.xlarge T4); use 4-8 on 24 GB+
+    raw_batch_size = os.environ.get("LLM_BATCH_SIZE", "2").strip()
     try:
         max_batch_size = max(1, int(raw_batch_size))
     except ValueError:
-        max_batch_size = 8
+        max_batch_size = 2
     pad_token_id = tokenizer.pad_token_id or tokenizer.eos_token_id
     if tokenizer.pad_token_id is None:
         tokenizer.pad_token_id = tokenizer.eos_token_id

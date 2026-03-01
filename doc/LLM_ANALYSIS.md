@@ -69,7 +69,7 @@ The job reads each `*_transcription.json`, runs the three-phase analysis (topics
 | `LLM_MODEL_ID` | Hugging Face model id (default: `Qwen/Qwen2-1.5B-Instruct`). |
 | `LLM_MAX_MODEL_LEN` | Max context length (default: `8192`). Qwen2-1.5B fits 16 GB T4 easily. For 32k use a 24 GB+ GPU and set to `32768`. |
 | `LLM_USE_GPU` | Set to `1` by the GPU job definition; selects Transformers GPU backend (CUDA). Omit or leave unset for CPU. |
-| `LLM_BATCH_SIZE` | Max prompts per GPU batch (default `8`). Lower if OOM; raise for smaller prompts. |
+| `LLM_BATCH_SIZE` | Max prompts per GPU batch (default `2` for 16 GB GPUs). Use 4–8 on 24 GB+ if OOM does not occur. |
 | `MOCK_LLM` | Set to `1` to use a mock backend (no GPU; for testing). |
 | `LLM_LOG_FULL` | Set to `1`, `true`, or `yes` to log full prompts and responses; otherwise they are truncated (see Logging below). Use only for dev/debug; full logs may include PII. |
 
