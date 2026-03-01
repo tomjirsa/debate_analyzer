@@ -1,4 +1,4 @@
-"""Orchestrate LLM analysis: chunking, prompts, and result assembly."""
+"""Orchestrate LLM analysis: chunking, prompts, and result assembly. """
 
 from __future__ import annotations
 

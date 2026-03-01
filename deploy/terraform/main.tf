@@ -305,11 +305,12 @@ locals {
       },
       {
         rulePriority = 2
-        description  = "Keep only last 5 tagged images"
+        description  = "Keep only last 5 tagged images (tags starting with 'latest')"
         selection = {
-          tagStatus   = "tagged"
-          countType   = "imageCountMoreThan"
-          countNumber = 5
+          tagStatus     = "tagged"
+          tagPrefixList = ["latest"]
+          countType     = "imageCountMoreThan"
+          countNumber   = 5
         }
         action = { type = "expire" }
       }
