@@ -1,0 +1,48 @@
+# LLM analysis image using Ollama (GPU). For AWS Batch: start Ollama in container, job talks to localhost.
+# Build: docker build -f Dockerfile.llm.ollama -t debate-analyzer-llm:latest-ollama .
+# Push to ECR (debate-analyzer-llm repo) with tag latest-ollama; submit with submit-llm-analysis-job-ollama.sh.
+# EFS is mounted at /cache; OLLAMA_MODELS=/cache/ollama so models are cached across jobs.
+FROM nvidia/cuda:12.1-runtime-ubuntu22.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV PYTHONUNBUFFERED=1
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    python3 \
+    python3-pip \
+    python3-venv \
+    sudo \
+    unzip \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Ollama (to /usr/local/bin)
+RUN curl -fsSL https://ollama.com/install.sh | sh
+
+# AWS CLI for S3
+RUN curl -sS "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o /tmp/awscliv2.zip \
+    && unzip -q /tmp/awscliv2.zip -d /tmp \
+    && /tmp/aws/install -b /usr/local/bin \
+    && rm -rf /tmp/awscliv2.zip /tmp/aws
+
+WORKDIR /app
+
+# Python deps: langchain-ollama for Ollama backend; boto3, pyarrow for S3/loader
+RUN pip3 install --no-cache-dir --break-system-packages \
+    "langchain-ollama>=0.2.0" \
+    "boto3>=1.28" \
+    "pyarrow>=18.0.0"
+
+# Copy only the code needed for LLM analysis (analysis module, batch llm job, api loader)
+COPY src/debate_analyzer /app/src/debate_analyzer
+ENV PYTHONPATH=/app/src
+
+COPY deploy/scripts/entrypoints/entrypoint_llm_ollama.sh /entrypoint_llm_ollama.sh
+RUN chmod +x /entrypoint_llm_ollama.sh
+
+# EFS is mounted at /cache; Ollama will store models in /cache/ollama
+ENV OLLAMA_MODELS=/cache/ollama
+ENV OLLAMA_MODEL=qwen2.5:7b
+
+ENTRYPOINT []
+CMD ["/entrypoint_llm_ollama.sh"]

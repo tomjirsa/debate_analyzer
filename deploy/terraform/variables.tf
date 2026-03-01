@@ -47,6 +47,12 @@ variable "ecr_image_tag_llm_gpu" {
   default     = "latest-gpu"
 }
 
+variable "ecr_image_tag_llm_ollama" {
+  description = "Docker image tag for the LLM Ollama image (same ECR repo; build with Dockerfile.llm.ollama)."
+  type        = string
+  default     = "latest-ollama"
+}
+
 variable "batch_llm_gpu_job_memory_mib" {
   description = "Memory (MiB) for the LLM analysis GPU Batch job. Default 8192 (8 GiB); model runs on GPU so host memory is for process overhead (g4dn.xlarge has 16 GiB)."
   type        = number

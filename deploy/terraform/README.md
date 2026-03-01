@@ -44,6 +44,7 @@ For a **step-by-step AWS setup** and full variable descriptions, see [doc/AWS_SE
 | `ecr_image_tag` | Docker image tag for job definition | `latest` |
 | `ecr_image_tag_llm` | Docker image tag for the LLM image (CPU) | `latest` |
 | `ecr_image_tag_llm_gpu` | Docker image tag for the LLM GPU image (same ECR repo; build with Dockerfile.llm.gpu) | `latest-gpu` |
+| `ecr_image_tag_llm_ollama` | Docker image tag for the LLM Ollama image (same ECR repo; build with Dockerfile.llm.ollama) | `latest-ollama` |
 | `batch_llm_job_memory_mib` | Memory (MiB) for the LLM analysis CPU job | `20480` |
 | `batch_llm_gpu_job_memory_mib` | Memory (MiB) for the LLM analysis GPU job (host overhead; model on GPU) | `8192` |
 | `batch_compute_instance_types` | GPU instance types (transcribe, full pipeline, LLM GPU job) | `["g4dn.xlarge", "g4dn.2xlarge"]` |
@@ -67,14 +68,17 @@ For a **step-by-step AWS setup** and full variable descriptions, see [doc/AWS_SE
 - `batch_job_definition_transcribe_name` – transcribe-only (Job 2)
 - `batch_job_definition_llm_analysis_name` – LLM analysis (Job 4; CPU)
 - `batch_job_definition_llm_analysis_gpu_name` – LLM analysis GPU (Job 4 GPU; use with GPU queue and submit-llm-analysis-job-gpu.sh)
+- `batch_job_definition_llm_analysis_ollama_name` – LLM analysis Ollama (Job 4 Ollama; use with GPU queue and submit-llm-analysis-job-ollama.sh)
 - `s3_bucket_name` – where videos and transcripts are written
 - `ecr_repository_url` – where CI pushes the image
 - `output_s3_prefix_example` – example value for `OUTPUT_S3_PREFIX`
 - `submit_job_example` – example `aws batch submit-job` command for full pipeline
 
-**Submit scripts (from repo root):** `./deploy/scripts/submit-jobs/submit-job.sh`, `./deploy/scripts/submit-jobs/submit-download-job.sh`, `./deploy/scripts/submit-jobs/submit-transcribe-job.sh`, `./deploy/scripts/submit-jobs/submit-llm-analysis-job.sh`, `./deploy/scripts/submit-jobs/submit-llm-analysis-job-gpu.sh`. See **doc/DEPLOYMENT_AWS_BATCH.md** for the two-job flow.
+**Submit scripts (from repo root):** `./deploy/scripts/submit-jobs/submit-job.sh`, `./deploy/scripts/submit-jobs/submit-download-job.sh`, `./deploy/scripts/submit-jobs/submit-transcribe-job.sh`, `./deploy/scripts/submit-jobs/submit-llm-analysis-job.sh`, `./deploy/scripts/submit-jobs/submit-llm-analysis-job-gpu.sh`, `./deploy/scripts/submit-jobs/submit-llm-analysis-job-ollama.sh`. See **doc/DEPLOYMENT_AWS_BATCH.md** for the two-job flow.
 
 **LLM on GPU:** To run LLM analysis on the GPU queue (faster inference), use `./deploy/scripts/submit-jobs/submit-llm-analysis-job-gpu.sh`. The GPU LLM image must be built and pushed to the same ECR repo with tag `latest-gpu` (e.g. by CI when Dockerfile.llm.gpu or LLM code changes).
+
+**LLM with Ollama on AWS:** To run LLM analysis using Ollama in the Batch container (GPU), use `./deploy/scripts/submit-jobs/submit-llm-analysis-job-ollama.sh`. Build and push the Ollama image with `Dockerfile.llm.ollama` and tag `latest-ollama` to the same ECR repo.
 
 ## Teardown
 

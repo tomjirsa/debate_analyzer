@@ -88,6 +88,11 @@ output "batch_job_definition_llm_analysis_gpu_name" {
   value       = aws_batch_job_definition.llm_analysis_gpu.name
 }
 
+output "batch_job_definition_llm_analysis_ollama_name" {
+  description = "Name of the LLM analysis Ollama job definition (Job 4 Ollama; use with GPU queue and submit-llm-analysis-job-ollama.sh)."
+  value       = aws_batch_job_definition.llm_analysis_ollama.name
+}
+
 output "batch_job_queue_llm_name" {
   description = "Name of the LLM job queue (CPU; use for submit-llm-analysis-job.sh)."
   value       = aws_batch_job_queue.llm.name

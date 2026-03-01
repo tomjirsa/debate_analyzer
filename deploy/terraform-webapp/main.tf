@@ -121,6 +121,36 @@ resource "aws_ecr_repository" "app" {
   name = local.name
 }
 
+resource "aws_ecr_lifecycle_policy" "app" {
+  repository = aws_ecr_repository.app.name
+
+  policy = jsonencode({
+    rules = [
+      {
+        rulePriority = 1
+        description  = "Expire untagged images older than 1 day"
+        selection = {
+          tagStatus   = "untagged"
+          countType   = "sinceImagePushed"
+          countUnit   = "days"
+          countNumber = 1
+        }
+        action = { type = "expire" }
+      },
+      {
+        rulePriority = 2
+        description  = "Keep only last 5 tagged images"
+        selection = {
+          tagStatus   = "tagged"
+          countType   = "imageCountMoreThan"
+          countNumber = 5
+        }
+        action = { type = "expire" }
+      }
+    ]
+  })
+}
+
 # --- ECS cluster and task execution role ---
 resource "aws_ecs_cluster" "app" {
   name = local.name

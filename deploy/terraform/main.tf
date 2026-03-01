@@ -25,6 +25,8 @@ locals {
   ecr_image_llm = "${local.account_id}.dkr.ecr.${local.region}.amazonaws.com/${aws_ecr_repository.llm.name}:${var.ecr_image_tag_llm}"
   # LLM GPU image (build with Dockerfile.llm.gpu; same ECR repo, tag latest-gpu)
   ecr_image_llm_gpu = "${local.account_id}.dkr.ecr.${local.region}.amazonaws.com/${aws_ecr_repository.llm.name}:${var.ecr_image_tag_llm_gpu}"
+  # LLM Ollama image (build with Dockerfile.llm.ollama; same ECR repo, tag latest-ollama)
+  ecr_image_llm_ollama = "${local.account_id}.dkr.ecr.${local.region}.amazonaws.com/${aws_ecr_repository.llm.name}:${var.ecr_image_tag_llm_ollama}"
   # Stable suffix for CE name so create_before_destroy can create new CE (new name) before destroying old one
   ce_name_suffix = substr(md5(jsonencode({
     instance_types = join(",", var.batch_compute_instance_types)
@@ -284,6 +286,45 @@ resource "aws_ecr_repository" "this" {
 resource "aws_ecr_repository" "llm" {
   name         = "${local.name}-llm"
   force_delete = false
+}
+
+# --- ECR lifecycle policy: expire untagged and keep last 5 tagged ---
+locals {
+  ecr_lifecycle_policy = jsonencode({
+    rules = [
+      {
+        rulePriority = 1
+        description  = "Expire untagged images older than 1 day"
+        selection = {
+          tagStatus   = "untagged"
+          countType   = "sinceImagePushed"
+          countUnit   = "days"
+          countNumber = 1
+        }
+        action = { type = "expire" }
+      },
+      {
+        rulePriority = 2
+        description  = "Keep only last 5 tagged images"
+        selection = {
+          tagStatus   = "tagged"
+          countType   = "imageCountMoreThan"
+          countNumber = 5
+        }
+        action = { type = "expire" }
+      }
+    ]
+  })
+}
+
+resource "aws_ecr_lifecycle_policy" "this" {
+  repository = aws_ecr_repository.this.name
+  policy     = local.ecr_lifecycle_policy
+}
+
+resource "aws_ecr_lifecycle_policy" "llm" {
+  repository = aws_ecr_repository.llm.name
+  policy     = local.ecr_lifecycle_policy
 }
 
 # --- VPC / subnets (use default if not provided) ---
@@ -641,6 +682,56 @@ resource "aws_batch_job_definition" "llm_analysis_gpu" {
       { name = "HF_HOME", value = "/cache" },
       { name = "LLM_MAX_MODEL_LEN", value = "8192" },
       { name = "LLM_USE_GPU", value = "1" }
+    ]
+    volumes = [
+      {
+        name = "llm-cache"
+        efsVolumeConfiguration = {
+          fileSystemId = aws_efs_file_system.llm_cache.id
+        }
+      }
+    ]
+    mountPoints = [
+      {
+        containerPath = "/cache"
+        sourceVolume  = "llm-cache"
+        readOnly      = false
+      }
+    ]
+    logConfiguration = {
+      logDriver = "awslogs"
+      options = {
+        "awslogs-group"         = aws_cloudwatch_log_group.batch.name
+        "awslogs-region"        = local.region
+        "awslogs-stream-prefix" = "batch"
+      }
+    }
+  })
+}
+
+# Job 4 Ollama: LLM analysis with Ollama on GPU queue (same EFS at /cache for OLLAMA_MODELS)
+resource "aws_batch_job_definition" "llm_analysis_ollama" {
+  name                  = "${local.name}-job-llm-analysis-ollama"
+  type                  = "container"
+  platform_capabilities = ["EC2"]
+
+  container_properties = jsonencode({
+    image   = local.ecr_image_llm_ollama
+    command = ["/entrypoint_llm_ollama.sh"]
+    resourceRequirements = [
+      { type = "VCPU", value = "4" },
+      { type = "MEMORY", value = tostring(var.batch_llm_gpu_job_memory_mib) },
+      { type = "GPU", value = "1" }
+    ]
+    jobRoleArn       = aws_iam_role.batch_job.arn
+    executionRoleArn = aws_iam_role.batch_execution.arn
+    secrets          = []
+    environment = [
+      { name = "LLM_BACKEND", value = "ollama" },
+      { name = "OLLAMA_HOST", value = "http://localhost:11434" },
+      { name = "OLLAMA_MODELS", value = "/cache/ollama" },
+      { name = "OLLAMA_MODEL", value = "qwen2.5:7b" },
+      { name = "LLM_MAX_MODEL_LEN", value = "8192" }
     ]
     volumes = [
       {

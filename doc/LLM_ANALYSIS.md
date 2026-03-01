@@ -33,7 +33,7 @@ The LLM job uses a **separate image** (Option B) so the main app image stays sma
    docker push "$ECR_LLM:latest"
    ```
 
-3. **Terraform** must be applied first so the `debate-analyzer-llm` ECR repository exists. The CPU job definition uses tag `latest`; the GPU job definition uses tag `latest-gpu`. For **GPU** jobs, build and push the GPU image: `docker build -f Dockerfile.llm.gpu -t debate-analyzer-llm:latest-gpu .` then push to the same ECR repo with tag `latest-gpu` (CI does this when Dockerfile.llm.gpu or LLM code changes).
+3. **Terraform** must be applied first so the `debate-analyzer-llm` ECR repository exists. The CPU job definition uses tag `latest`; the GPU job definition uses tag `latest-gpu`. For **GPU** jobs, build and push the GPU image: `docker build -f Dockerfile.llm.gpu -t debate-analyzer-llm:latest-gpu .` then push to the same ECR repo with tag `latest-gpu` (CI does this when Dockerfile.llm.gpu or LLM code changes). For **Ollama on AWS Batch**, see section 2b below (build with `Dockerfile.llm.ollama`, tag `latest-ollama`).
 
 ## 2. Run the LLM analysis job
 
@@ -86,6 +86,41 @@ python -m debate_analyzer.batch.llm_analysis_job
 
 Output is written next to the transcript as `foo_llm_analysis.json`.
 
+### 2b. Running with Ollama on AWS Batch
+
+You can run LLM analysis on **AWS Batch** using **Ollama** inside the same container: the entrypoint starts the Ollama daemon, then runs the Python job with `LLM_BACKEND=ollama` talking to localhost. Models are stored on the shared **EFS** volume at `/cache/ollama` so the first job pulls the model and later jobs reuse it.
+
+**Prerequisites:**
+
+- Terraform applied (Batch stack with EFS and GPU queue).
+- Ollama image built and pushed to the `debate-analyzer-llm` ECR repo with tag `latest-ollama`.
+
+**Build and push the Ollama image:**
+
+```bash
+docker build -f Dockerfile.llm.ollama -t debate-analyzer-llm:latest-ollama .
+cd deploy/terraform
+ECR_LLM=$(terraform output -raw ecr_repository_llm_url)
+aws ecr get-login-password --region $(terraform output -raw aws_region) | \
+  docker login --username AWS --password-stdin "${ECR_LLM%%/*}"
+docker tag debate-analyzer-llm:latest-ollama "$ECR_LLM:latest-ollama"
+docker push "$ECR_LLM:latest-ollama"
+```
+
+**Environment (set by job definition):** `LLM_BACKEND=ollama`, `OLLAMA_HOST=http://localhost:11434`, `OLLAMA_MODELS=/cache/ollama`, `OLLAMA_MODEL` (e.g. `qwen2.5:7b`), `LLM_MAX_MODEL_LEN=8192`. You can override `OLLAMA_MODEL` via container overrides when submitting.
+
+**Example (single transcript or all under prefix):**
+
+```bash
+./deploy/scripts/submit-jobs/submit-llm-analysis-job-ollama.sh \
+  s3://<bucket>/jobs/<job-id>/transcripts/<stem>_transcription.json
+# Or all transcripts under prefix:
+./deploy/scripts/submit-jobs/submit-llm-analysis-job-ollama.sh \
+  s3://<bucket>/jobs/<job-id>/transcripts
+```
+
+The first job (or first per EFS cache) may be slower while the model is pulled; subsequent jobs reuse the EFS cache.
+
 ## 3. Environment variables (job)
 
 | Variable | Description |
@@ -100,6 +135,7 @@ Output is written next to the transcript as `foo_llm_analysis.json`.
 | `LLM_BACKEND` | Set to `ollama` to use Ollama via LangChain (local). Omit for Transformers. |
 | `LLM_USE_OLLAMA` | Set to `1`, `true`, or `yes` as alternative to `LLM_BACKEND=ollama`. |
 | `OLLAMA_HOST` | Ollama API base URL (default: `http://localhost:11434`). Used when `LLM_BACKEND=ollama`. |
+| `OLLAMA_MODELS` | Directory for Ollama model storage. On AWS Batch set to `/cache/ollama` (EFS). |
 | `OLLAMA_MODEL` | Ollama model name (e.g. `qwen2.5:7b`). Fallback: `LLM_MODEL_ID`. Used when `LLM_BACKEND=ollama`. |
 | `LLM_LOG_FULL` | Set to `1`, `true`, or `yes` to log full prompts and responses; otherwise they are truncated (see Logging below). Use only for dev/debug; full logs may include PII. |
 
