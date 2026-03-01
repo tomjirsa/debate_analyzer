@@ -30,7 +30,7 @@ RUN curl -sS "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o /tmp/
 WORKDIR /app
 
 # Python deps: langchain-ollama for Ollama backend; boto3, pyarrow for S3/loader
-RUN pip3 install --no-cache-dir --break-system-packages \
+RUN pip3 install --no-cache-dir \
     "langchain-ollama>=0.2.0" \
     "boto3>=1.28" \
     "pyarrow>=18.0.0"
