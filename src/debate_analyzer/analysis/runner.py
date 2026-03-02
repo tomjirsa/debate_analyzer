@@ -14,8 +14,7 @@ from debate_analyzer.analysis.chunking import (
     topic_keywords,
 )
 from debate_analyzer.analysis.prompts import (
-    build_speaker_contributions_prompt,
-    build_topic_summary_prompt,
+    build_topic_summary_and_contributions_prompt,
     build_topics_chunk_prompt,
 )
 from debate_analyzer.analysis.schema import LLMAnalysisResult
@@ -99,6 +98,47 @@ def _merge_topic_ids(topic_dicts: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return result
 
 
+def _aggregate_speaker_contributions(
+    speaker_contributions: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """
+    Aggregate multiple contributions from the same speaker for the same topic into one.
+
+    Groups by (topic_id, speaker_id_in_transcript), preserves order of first
+    occurrence, and concatenates summary strings with a space.
+
+    Args:
+        speaker_contributions: List of dicts with topic_id, speaker_id_in_transcript,
+            and summary.
+
+    Returns:
+        One dict per (topic_id, speaker_id_in_transcript) with combined summary.
+    """
+    key_order: list[tuple[str, str]] = []
+    groups: dict[tuple[str, str], list[str]] = {}
+    for sc in speaker_contributions:
+        topic_id = str(sc.get("topic_id", "")).strip()
+        speaker_id = str(sc.get("speaker_id_in_transcript", "")).strip()
+        summary = str(sc.get("summary", "")).strip()
+        key = (topic_id, speaker_id)
+        if key not in groups:
+            key_order.append(key)
+            groups[key] = []
+        if summary:
+            groups[key].append(summary)
+    result: list[dict[str, Any]] = []
+    for topic_id, speaker_id in key_order:
+        summaries = groups[(topic_id, speaker_id)]
+        result.append(
+            {
+                "topic_id": topic_id,
+                "speaker_id_in_transcript": speaker_id,
+                "summary": " ".join(summaries) if summaries else "",
+            }
+        )
+    return result
+
+
 def _truncate_to_tokens(
     text: str, max_tokens: int, token_counter: Callable[[str], int] | None = None
 ) -> str:
@@ -130,17 +170,19 @@ def run_analysis(
     log_llm_call: Callable[[str, str, str], None] | None = None,
 ) -> dict[str, Any]:
     """
-    Run the three-phase LLM analysis on a transcript payload using batched inference.
+    Run the two-phase LLM analysis on a transcript payload using batched inference.
+
+    Phase 1: extract main topics from the full transcript (in chunks). Phase 2: for
+    each topic, one call returns both topic summary and speaker contributions (hybrid).
+    Result shape is unchanged: main_topics, topic_summaries, speaker_contributions.
 
     Args:
         payload: Transcript dict with "transcription" list of segments.
         generate_batch: Backend function (prompts, max_tokens) -> list of model outputs.
-        max_context_tokens: Max tokens per chunk for Phase 1; also for excerpt in 2/3
-            when max_excerpt_tokens is not set. Should match model context (e.g.
-            LLM_MAX_MODEL_LEN minus reserve).
-        max_excerpt_tokens: Optional. When set, Phase 2 and 3 excerpts are capped
-            at this value (to stay within context when template + excerpt + reply
-            are large).
+        max_context_tokens: Max tokens per chunk for Phase 1; also for excerpt in
+            Phase 2 when max_excerpt_tokens is not set. Match model context
+            (e.g. LLM_MAX_MODEL_LEN minus reserve).
+        max_excerpt_tokens: Optional. When set, Phase 2 excerpts are capped.
         token_counter: Optional token counter; if None, uses character-based estimate.
         max_tokens_per_reply: Max tokens to request from the model per call.
         log_progress: Optional callback for progress (e.g. [LLM]-prefixed stderr).
@@ -199,9 +241,11 @@ def run_analysis(
             speaker_contributions=[],
         ).to_dict()
 
-    # Phase 2: topic summaries (batched)
+    # Phase 2: summary and speaker contributions per topic (hybrid, one call per topic)
     if log_progress:
-        log_progress(f"Phase 2: Generating summaries for {len(main_topics)} topics.")
+        log_progress(
+            f"Phase 2: Summary and speaker contributions for {len(main_topics)} topics."
+        )
     phase2_prompts: list[str] = []
     for idx, topic in enumerate(main_topics):
         topic_id = topic.get("id", "")
@@ -216,7 +260,7 @@ def run_analysis(
             fallback_offset_index=idx,
         )
         phase2_prompts.append(
-            build_topic_summary_prompt(topic_id, title, desc, excerpt)
+            build_topic_summary_and_contributions_prompt(topic_id, title, desc, excerpt)
         )
     phase2_responses = generate_batch(phase2_prompts, max_tokens_per_reply)
     if log_llm_call and phase2_prompts:
@@ -227,69 +271,35 @@ def run_analysis(
             f"<{len(phase2_responses)} responses>",
         )
     topic_summaries: list[dict[str, Any]] = []
-    for topic, out2 in zip(main_topics, phase2_responses):
+    speaker_contributions: list[dict[str, Any]] = []
+    for topic, out in zip(main_topics, phase2_responses):
         topic_id = topic.get("id", "")
-        parsed2 = _extract_json(out2)
-        if isinstance(parsed2, dict) and "topic_id" in parsed2 and "summary" in parsed2:
+        parsed = _extract_json(out)
+        if not isinstance(parsed, dict):
+            if log_progress:
+                log_progress(f"Phase 2: could not parse response for topic {topic_id}.")
+            continue
+        summary = parsed.get("summary")
+        if "topic_id" in parsed and summary is not None:
             topic_summaries.append(
                 {
-                    "topic_id": str(parsed2["topic_id"]),
-                    "summary": str(parsed2["summary"]),
+                    "topic_id": str(parsed["topic_id"]),
+                    "summary": str(summary),
                 }
             )
-        elif log_progress:
-            log_progress(f"Phase 2: could not parse summary for topic {topic_id}.")
+        for sc in parsed.get("speaker_contributions") or []:
+            if isinstance(sc, dict) and str(sc.get("topic_id", "")).strip() == topic_id:
+                speaker_contributions.append(
+                    {
+                        "topic_id": str(sc.get("topic_id", "")),
+                        "speaker_id_in_transcript": str(
+                            sc.get("speaker_id_in_transcript", "")
+                        ),
+                        "summary": str(sc.get("summary", "")),
+                    }
+                )
 
-    # Phase 3: speaker contributions (batched)
-    if log_progress:
-        log_progress(
-            f"Phase 3: Generating speaker contributions for {len(main_topics)} topics."
-        )
-    phase3_prompts: list[str] = []
-    for idx, topic in enumerate(main_topics):
-        topic_id = topic.get("id", "")
-        title = topic.get("title") or ""
-        desc = topic.get("description") or ""
-        excerpt = get_topic_relevant_excerpt(
-            flat,
-            title,
-            desc,
-            excerpt_max,
-            token_counter=count,
-            fallback_offset_index=idx,
-        )
-        phase3_prompts.append(
-            build_speaker_contributions_prompt(topic_id, title, excerpt)
-        )
-    phase3_responses = generate_batch(phase3_prompts, max_tokens_per_reply)
-    if log_llm_call and phase3_prompts:
-        p0 = phase3_prompts[0]
-        log_llm_call(
-            f"Phase 3 batch ({len(phase3_prompts)} topics)",
-            p0[:200] + "..." if len(p0) > 200 else p0,
-            f"<{len(phase3_responses)} responses>",
-        )
-    speaker_contributions: list[dict[str, Any]] = []
-    for topic, out3 in zip(main_topics, phase3_responses):
-        topic_id = topic.get("id", "")
-        parsed3 = _extract_json(out3)
-        if isinstance(parsed3, dict) and "speaker_contributions" in parsed3:
-            for sc in parsed3["speaker_contributions"]:
-                if isinstance(sc, dict) and sc.get("topic_id") == topic_id:
-                    speaker_contributions.append(
-                        {
-                            "topic_id": str(sc.get("topic_id", "")),
-                            "speaker_id_in_transcript": str(
-                                sc.get("speaker_id_in_transcript", "")
-                            ),
-                            "summary": str(sc.get("summary", "")),
-                        }
-                    )
-        elif log_progress:
-            log_progress(
-                f"Phase 3: could not parse speaker contributions for topic {topic_id}."
-            )
-
+    speaker_contributions = _aggregate_speaker_contributions(speaker_contributions)
     return LLMAnalysisResult(
         main_topics=main_topics,
         topic_summaries=topic_summaries,

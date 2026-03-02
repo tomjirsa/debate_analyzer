@@ -9,7 +9,10 @@ from debate_analyzer.analysis.chunking import (
     topic_keywords,
     truncate_to_tokens,
 )
-from debate_analyzer.analysis.runner import run_analysis
+from debate_analyzer.analysis.runner import (
+    _aggregate_speaker_contributions,
+    run_analysis,
+)
 from debate_analyzer.analysis.schema import LLMAnalysisResult
 
 
@@ -40,7 +43,7 @@ def test_estimate_tokens():
 
 
 def test_topic_keywords():
-    """topic_keywords returns sorted list from title/description; Czech words included."""
+    """topic_keywords returns sorted list from title/description (Czech included)."""
     kw = topic_keywords("Hlasování o rozpočtu", "")
     assert isinstance(kw, list)
     assert kw == sorted(kw)
@@ -180,9 +183,9 @@ def test_run_analysis_respects_max_excerpt_tokens():
         for part in parts[1:]:
             excerpt = part.strip().split("\n---")[0].strip()
             if excerpt and "SPEAKER" in excerpt:
-                assert estimate_tokens(excerpt) <= 50 + 40, (
-                    "Phase 2 excerpt capped at max_excerpt_tokens (with slack)"
-                )
+                assert (
+                    estimate_tokens(excerpt) <= 50 + 40
+                ), "Phase 2 excerpt capped at max_excerpt_tokens (with slack)"
                 break
 
 
@@ -216,7 +219,7 @@ def test_get_topic_relevant_excerpt_fallback_when_no_match():
 
 
 def test_get_topic_relevant_excerpt_prefix_match_czech():
-    """Line containing 'rozpočtu' matches topic with keyword 'rozpočet' (prefix match)."""
+    """Line with 'rozpočtu' matches topic keyword 'rozpočet' (prefix match)."""
     prefix = "\n".join([f"SPEAKER_00: Preamble {i}." for i in range(20)])
     middle = "SPEAKER_01: Hlasování o rozpočtu proběhlo v úterý."
     suffix = "\n".join([f"SPEAKER_00: Suffix {i}." for i in range(20)])
@@ -263,7 +266,7 @@ def test_truncate_to_tokens_bounds_output():
 
 
 def test_run_analysis_log_llm_call_invoked():
-    """log_llm_call is invoked for each Phase 1/2/3 call with expected labels."""
+    """log_llm_call is invoked for Phase 1 and Phase 2 (hybrid) with expected labels."""
     backend = MockLLMBackend()
     payload = {
         "transcription": [
@@ -282,7 +285,6 @@ def test_run_analysis_log_llm_call_invoked():
     labels = [c[0] for c in calls]
     assert any("Phase 1" in lbl for lbl in labels)
     assert any("Phase 2" in lbl for lbl in labels)
-    assert any("Phase 3" in lbl for lbl in labels)
     for _, prompt, resp in calls:
         assert isinstance(prompt, str) and isinstance(resp, str)
 
@@ -316,3 +318,60 @@ def test_llm_analysis_result_from_dict():
     assert len(r.topic_summaries) == 1
     assert len(r.speaker_contributions) == 1
     assert r.to_dict()["main_topics"] == d["main_topics"]
+
+
+def test_run_analysis_combined_phase_parsing():
+    """Phase 2 combined response -> topic_summaries + speaker_contributions."""
+    combined = (
+        '{"topic_id": "t1", "summary": "Shrnutí tématu.", '
+        '"speaker_contributions": ['
+        '{"topic_id": "t1", "speaker_id_in_transcript": "SPEAKER_00", '
+        '"summary": "Pro."}, '
+        '{"topic_id": "t1", "speaker_id_in_transcript": "SPEAKER_01", '
+        '"summary": "Proti."}'
+        "]}"
+    )
+    backend = MockLLMBackend(combined_response=combined)
+    payload = {
+        "transcription": [
+            {"speaker": "SPEAKER_00", "text": "First."},
+            {"speaker": "SPEAKER_01", "text": "Second."},
+        ]
+    }
+    result = run_analysis(payload, backend.generate_batch)
+    assert len(result["topic_summaries"]) == 1
+    assert result["topic_summaries"][0]["topic_id"] == "t1"
+    assert result["topic_summaries"][0]["summary"] == "Shrnutí tématu."
+    assert len(result["speaker_contributions"]) == 2
+    ids = {sc["speaker_id_in_transcript"] for sc in result["speaker_contributions"]}
+    assert ids == {"SPEAKER_00", "SPEAKER_01"}
+    assert all(sc["topic_id"] == "t1" for sc in result["speaker_contributions"])
+
+
+def test_aggregate_speaker_contributions_merges_same_topic_speaker():
+    """Multiple contributions for same (topic_id, speaker) are merged into one."""
+    raw = [
+        {
+            "topic_id": "t1",
+            "speaker_id_in_transcript": "SPEAKER_04",
+            "summary": "Navrhl předřazení bodu 22.",
+        },
+        {
+            "topic_id": "t1",
+            "speaker_id_in_transcript": "SPEAKER_04",
+            "summary": "Odpověděl na dotazy kolegů.",
+        },
+        {
+            "topic_id": "t1",
+            "speaker_id_in_transcript": "SPEAKER_06",
+            "summary": "Vítal zastupitelstvo.",
+        },
+    ]
+    aggregated = _aggregate_speaker_contributions(raw)
+    assert len(aggregated) == 2
+    by_speaker = {(r["topic_id"], r["speaker_id_in_transcript"]): r for r in aggregated}
+    assert ("t1", "SPEAKER_04") in by_speaker
+    assert by_speaker[("t1", "SPEAKER_04")]["summary"] == (
+        "Navrhl předřazení bodu 22. Odpověděl na dotazy kolegů."
+    )
+    assert by_speaker[("t1", "SPEAKER_06")]["summary"] == "Vítal zastupitelstvo."

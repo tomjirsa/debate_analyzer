@@ -26,6 +26,7 @@ class MockLLMBackend:
         topics_response: str | None = None,
         summary_response: str | None = None,
         speaker_response: str | None = None,
+        combined_response: str | None = None,
     ) -> None:
         self.topics_response = topics_response or (
             '{"main_topics": [{"id": "t1", "title": "Topic A", "description": ""}]}'
@@ -37,12 +38,19 @@ class MockLLMBackend:
             '{"speaker_contributions": [{"topic_id": "t1", '
             '"speaker_id_in_transcript": "SPEAKER_00", "summary": "In favor."}]}'
         )
+        self.combined_response = combined_response or (
+            '{"topic_id": "t1", "summary": "Summary of discussion.", '
+            '"speaker_contributions": [{"topic_id": "t1", '
+            '"speaker_id_in_transcript": "SPEAKER_00", "summary": "In favor."}]}'
+        )
         self.call_count = 0
 
     def _response_for_prompt(self, prompt: str) -> str:
         """Return canned response for one prompt."""
         if "main_topics" in prompt or "List the main topics" in prompt:
             return self.topics_response
+        if "Output a single JSON object" in prompt:
+            return self.combined_response
         if (
             "Summarize the outcome" in prompt
             or '"summary":' in prompt
