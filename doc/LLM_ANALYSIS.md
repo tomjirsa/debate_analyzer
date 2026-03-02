@@ -75,6 +75,9 @@ You can run the same job **locally** with the model served by **Ollama** on the 
 - `LLM_BACKEND=ollama` (or `LLM_USE_OLLAMA=1`).
 - `OLLAMA_HOST` (optional; default `http://localhost:11434`).
 - `OLLAMA_MODEL` or `LLM_MODEL_ID` — Ollama model name (e.g. `qwen2.5:7b`, `llama3.2`).
+- `LLM_MAX_MODEL_LEN` — Context length (default `8192`). The Ollama backend passes this as `num_ctx` to avoid "truncating input prompt"; use at least `4096` if you see that warning. For Batch, the entrypoint also sets `OLLAMA_CONTEXT_LENGTH` from this.
+
+**If the server still logs "truncating input prompt" (limit=2048):** Many Ollama setups only apply a larger context when the **server** is started with it. Stop `ollama serve` and start it with the same value as your job, e.g. `OLLAMA_CONTEXT_LENGTH=4096 ollama serve` (or `8192` to match default `LLM_MAX_MODEL_LEN`). Then run the Python job as usual.
 
 **Example (single transcript):**
 
@@ -142,7 +145,7 @@ This means the Batch job is trying to pull an image that does not exist (or not 
 | `TRANSCRIPT_S3_URI` | Single transcript JSON URI (s3:// or file). |
 | `TRANSCRIPTS_S3_PREFIX` | S3 prefix; all `*_transcription.json` under it are processed. |
 | `LLM_MODEL_ID` | Hugging Face model id (default: `Qwen/Qwen2-1.5B-Instruct`). |
-| `LLM_MAX_MODEL_LEN` | Max context length (default: `8192`). Qwen2-1.5B fits 16 GB T4 easily. For 32k use a 24 GB+ GPU and set to `32768`. |
+| `LLM_MAX_MODEL_LEN` | Max context length (default: `8192`). Qwen2-1.5B fits 16 GB T4 easily. For 32k use a 24 GB+ GPU and set to `32768`. With Ollama, this is also passed as `num_ctx` (and as `OLLAMA_CONTEXT_LENGTH` in the Batch entrypoint); use at least 4096 to avoid input truncation. |
 | `LLM_USE_GPU` | Set to `1` by the GPU job definition; selects Transformers GPU backend (CUDA). Omit or leave unset for CPU. |
 | `LLM_BATCH_SIZE` | Max prompts per GPU batch (default `2` for 16 GB GPUs). Use 4–8 on 24 GB+ if OOM does not occur. |
 | `MOCK_LLM` | Set to `1` to use a mock backend (no GPU; for testing). |
@@ -157,7 +160,17 @@ This means the Batch job is trying to pull an image that does not exist (or not 
 
 The LLM batch job writes progress and, when running in batch, **each LLM request and response** to stderr with a `[LLM]` prefix so you can filter in CloudWatch. By default, prompts are truncated to 500 characters and responses to 1000 characters to limit noise and PII. Set **`LLM_LOG_FULL=1`** (or `true`/`yes`) to log full prompts and responses; use only in development or debugging, as they may contain transcript content.
 
-## 4. Output schema
+## 4. Language of analysis output (Czech)
+
+The transcripts are typically in **Czech**. To keep all analysis text in Czech:
+
+- **Phase 1 (topics):** Prompts already instruct the model to keep topic labels in the same language as the transcript (Czech).
+- **Phase 2 (topic summaries):** The prompt explicitly requires the summary to be written in Czech so `topic_summaries[].summary` is in Czech.
+- **Phase 3 (speaker contributions):** The prompt explicitly requires each speaker contribution summary to be written in Czech so `speaker_contributions[].summary` is in Czech.
+
+Prompt templates are in `src/debate_analyzer/analysis/prompts.py`. Changing the language instruction there affects all future LLM runs.
+
+## 5. Output schema
 
 Each `_llm_analysis.json` file contains:
 
@@ -175,7 +188,7 @@ Each `_llm_analysis.json` file contains:
 }
 ```
 
-## 5. Import into the web app
+## 6. Import into the web app
 
 To attach analysis to a transcript in the DB (for the admin UI or API):
 
@@ -186,7 +199,7 @@ To attach analysis to a transcript in the DB (for the admin UI or API):
 
 Get the latest analysis: `GET /api/admin/transcripts/{transcript_id}/analysis`.
 
-## 6. Chunking and excerpts (long transcripts)
+## 7. Chunking and excerpts (long transcripts)
 
 The job sets chunk and excerpt size from `LLM_MAX_MODEL_LEN` (default 8k) so the model never receives more context than it supports.
 
@@ -196,12 +209,12 @@ The job sets chunk and excerpt size from `LLM_MAX_MODEL_LEN` (default 8k) so the
 
 Chunking is **required** when the transcript exceeds the configured context; the runner enforces it automatically.
 
-## 7. Local / testing
+## 8. Local / testing
 
 - **Mock backend:** Run the batch module with `MOCK_LLM=1` and `TRANSCRIPT_S3_URI` or `TRANSCRIPTS_S3_PREFIX` pointing to a local file or directory (e.g. `file:///path/to/transcript.json`). No GPU or vLLM needed.
 - **Analysis module:** The `debate_analyzer.analysis` package can be tested with `MockLLMBackend` in unit tests; see `tests/`.
 
-## 8. Related
+## 9. Related
 
 - **AWS Batch (transcribe, download, stats):** [DEPLOYMENT_AWS_BATCH.md](DEPLOYMENT_AWS_BATCH.md)
 - **Terraform:** LLM job definition and ECR repo are in `deploy/terraform/` (job definition `debate-analyzer-job-llm-analysis`, ECR `debate-analyzer-llm`).

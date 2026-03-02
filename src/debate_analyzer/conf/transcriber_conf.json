@@ -17,5 +17,8 @@
     "sample_rate": 16000,
     "channels": 1,
     "format": "wav"
+  },
+  "segment_aggregation": {
+    "max_segment_duration_sec": 60
   }
 }

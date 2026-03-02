@@ -18,10 +18,12 @@ fi
 export OLLAMA_MODELS="${OLLAMA_MODELS:-/cache/ollama}"
 export LLM_BACKEND=ollama
 export OLLAMA_HOST=http://localhost:11434
+# So Ollama server uses same context as the job (avoids truncation when prompts exceed default 2048)
+export OLLAMA_CONTEXT_LENGTH="${LLM_MAX_MODEL_LEN:-4096}"
 
 mkdir -p "$OLLAMA_MODELS"
 
-echo "Starting Ollama in background (models at $OLLAMA_MODELS)..."
+echo "Starting Ollama in background (models at $OLLAMA_MODELS, context=${OLLAMA_CONTEXT_LENGTH})..."
 ollama serve &
 OLLAMA_PID=$!
 

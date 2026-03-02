@@ -16,10 +16,8 @@ def test_ollama_backend_generate_returns_content():
     """get_ollama_backend().generate returns the mocked invoke content."""
     mock_invoke_return = MagicMock()
     mock_invoke_return.content = '{"main_topics": [{"id": "t1", "title": "Test"}]}'
-    mock_bound = MagicMock()
-    mock_bound.invoke.return_value = mock_invoke_return
     mock_llm = MagicMock()
-    mock_llm.bind.return_value = mock_bound
+    mock_llm.invoke.return_value = mock_invoke_return
 
     with (
         patch("langchain_ollama.ChatOllama", return_value=mock_llm),
@@ -30,18 +28,15 @@ def test_ollama_backend_generate_returns_content():
         backend = get_ollama_backend(base_url="http://localhost:11434", model="test")
         out = backend.generate("List topics", max_tokens=512)
     assert "main_topics" in out
-    mock_llm.bind.assert_called_once_with(num_predict=512)
-    mock_bound.invoke.assert_called_once()
+    mock_llm.invoke.assert_called_once()
 
 
 def test_ollama_backend_generate_batch_order():
     """generate_batch returns one response per prompt in order."""
     mock_invoke_return = MagicMock()
     mock_invoke_return.content = '{"summary": "ok"}'
-    mock_bound = MagicMock()
-    mock_bound.invoke.return_value = mock_invoke_return
     mock_llm = MagicMock()
-    mock_llm.bind.return_value = mock_bound
+    mock_llm.invoke.return_value = mock_invoke_return
 
     with (
         patch("langchain_ollama.ChatOllama", return_value=mock_llm),
@@ -54,7 +49,7 @@ def test_ollama_backend_generate_batch_order():
         results = backend.generate_batch(prompts, max_tokens=100)
     assert len(results) == 3
     assert all("summary" in r for r in results)
-    assert mock_bound.invoke.call_count == 3
+    assert mock_llm.invoke.call_count == 3
 
 
 def test_llm_job_get_backend_returns_ollama_when_env_set():

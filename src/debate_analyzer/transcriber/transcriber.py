@@ -26,6 +26,7 @@ def _format_elapsed(seconds: float) -> str:
 
 from faster_whisper import WhisperModel  # type: ignore[import-untyped]
 
+from debate_analyzer.transcriber.aggregator import aggregate_segments
 from debate_analyzer.transcriber.audio_extractor import AudioExtractor
 from debate_analyzer.transcriber.diarizer import SpeakerDiarizer
 from debate_analyzer.transcriber.merger import TranscriptMerger
@@ -234,7 +235,7 @@ def transcribe_video(
 
     # Step 1: Extract audio
     step_start = time.time()
-    print("Step 1/4: Extracting audio from video...")
+    print("Step 1/5: Extracting audio from video...")
     extractor = AudioExtractor(
         sample_rate=config["audio_extraction"]["sample_rate"],
         channels=config["audio_extraction"]["channels"],
@@ -257,7 +258,7 @@ def transcribe_video(
 
     # Step 2: Transcribe
     step_start = time.time()
-    print("\nStep 2/4: Transcribing audio with Whisper...")
+    print("\nStep 2/5: Transcribing audio with Whisper...")
     transcriber = WhisperTranscriber(
         model_size=config["whisper"]["model_size"],
         device=device,
@@ -282,7 +283,7 @@ def transcribe_video(
 
     # Step 3: Diarize
     step_start = time.time()
-    print("\nStep 3/4: Identifying speakers with pyannote...")
+    print("\nStep 3/5: Identifying speakers with pyannote...")
     diarizer = SpeakerDiarizer(
         hf_token=hf_token,
         pipeline_name=config["pyannote"]["pipeline"],
@@ -303,12 +304,31 @@ def transcribe_video(
 
     # Step 4: Merge
     step_start = time.time()
-    print("\nStep 4/4: Merging transcription with speaker labels...")
+    print("\nStep 4/5: Merging transcription with speaker labels...")
     merger = TranscriptMerger()
     merged_segments = merger.merge(transcript_segments, speaker_segments)
     step_elapsed = time.time() - step_start
     total_elapsed = time.time() - start_time
-    print(f"  Created {len(merged_segments)} final segments")
+    print(f"  Created {len(merged_segments)} merged segments")
+    print(
+        f"  Done in {_format_elapsed(step_elapsed)} (elapsed: {_format_elapsed(total_elapsed)})"
+    )
+
+    # Step 5: Aggregate
+    step_start = time.time()
+    agg_config = config.get("segment_aggregation") or {}
+    max_sec = agg_config.get("max_segment_duration_sec", 60)
+    if not isinstance(max_sec, (int, float)) or max_sec <= 0:
+        max_sec = 60
+    else:
+        max_sec = float(max_sec)
+    print(f"\nStep 5/5: Aggregating segments (max duration {max_sec:.0f} s)...")
+    aggregated_segments = aggregate_segments(
+        merged_segments, max_segment_duration_sec=max_sec
+    )
+    step_elapsed = time.time() - step_start
+    total_elapsed = time.time() - start_time
+    print(f"  Aggregated to {len(aggregated_segments)} segments")
     print(
         f"  Done in {_format_elapsed(step_elapsed)} (elapsed: {_format_elapsed(total_elapsed)})"
     )
@@ -327,7 +347,7 @@ def transcribe_video(
             "diarization": config["pyannote"]["pipeline"],
         },
         "speakers_count": unique_speakers,
-        "transcription": [seg.to_dict() for seg in merged_segments],
+        "transcription": [seg.to_dict() for seg in aggregated_segments],
     }
 
     # Save to JSON

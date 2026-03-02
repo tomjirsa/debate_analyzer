@@ -47,18 +47,25 @@ def get_ollama_backend(
         or os.environ.get("LLM_MODEL_ID", "qwen2.5:7b").strip()
     )
 
+    raw_ctx = os.environ.get("LLM_MAX_MODEL_LEN", "8192").strip()
+    try:
+        num_ctx = max(1024, int(raw_ctx))
+    except ValueError:
+        num_ctx = 8192
+
     print(
-        f"[LLM] Using Ollama backend: {base_url} model={model}",
+        f"[LLM] Using Ollama backend: {base_url} model={model} num_ctx={num_ctx}",
         file=sys.stderr,
     )
 
-    # Do not pass num_predict: the underlying ollama client.chat() expects it inside
-    # options={}, but langchain-ollama passes it as a top-level kwarg, causing TypeError.
-    # Rely on model default max output length (or set via OLLAMA_NUM_PREDICT if needed).
+    # Do not pass num_predict: ollama expects it in options={}, not top-level.
+    # Rely on model default max output length (or OLLAMA_NUM_PREDICT if needed).
+    # num_ctx sets context window size (avoids "truncating input prompt" when >2048).
     llm = ChatOllama(
         base_url=base_url,
         model=model,
         temperature=0.2,
+        num_ctx=num_ctx,
     )
 
     class OllamaBackend:

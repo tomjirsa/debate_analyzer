@@ -85,6 +85,7 @@ for seg in result["transcription"]:
 - `WhisperTranscriber` — Speech-to-text only (no diarization).
 - `SpeakerDiarizer` — Speaker diarization (pyannote).
 - `TranscriptMerger` — Merge Whisper segments with diarization.
+- **Segment aggregation** — The last pipeline step merges consecutive segments from the same speaker into one, with a configurable maximum duration per segment (default 60 s). Configure via `segment_aggregation.max_segment_duration_sec` in `conf/transcriber_conf.json`.
 
 Example: transcribe without diarization (Whisper only):
 
@@ -126,6 +127,8 @@ output_dir/
   - `speaker` — Speaker ID (e.g. `SPEAKER_00`).
   - `confidence` — Optional confidence score.
 - `output_path` — Path to the saved JSON file (in the returned dict).
+
+The written `transcription` list is aggregated: consecutive same-speaker segments are merged, and no segment exceeds the configured max duration (see `segment_aggregation.max_segment_duration_sec` in `conf/transcriber_conf.json`).
 
 ---
 

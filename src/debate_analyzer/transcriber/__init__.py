@@ -1,5 +1,6 @@
 """Transcriber module for video transcription with speaker identification."""
 
+from debate_analyzer.transcriber.aggregator import aggregate_segments
 from debate_analyzer.transcriber.models import (
     TranscriptSegment,
     SpeakerSegment,
@@ -11,6 +12,7 @@ from debate_analyzer.transcriber.diarizer import SpeakerDiarizer
 from debate_analyzer.transcriber.merger import TranscriptMerger
 
 __all__ = [
+    "aggregate_segments",
     "transcribe_video",
     "TranscriptSegment",
     "SpeakerSegment",

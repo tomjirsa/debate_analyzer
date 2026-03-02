@@ -35,8 +35,9 @@ Transcript (excerpt):
 ---
 
 Summarize the outcome or main points for this topic in 2-4 sentences. \
+Write the summary in Czech (the transcript is in Czech). \
 If this topic is not discussed in the excerpt, set summary to: \
-[Topic not present in provided excerpt.] \
+[Téma v poskytnutém úryvku není obsaženo.] \
 Respond with a JSON object only:
 {{"topic_id": "{topic_id}", "summary": "..."}}
 
@@ -56,10 +57,11 @@ Transcript excerpt:
 
 Respond with a JSON object only. Include one entry per speaker in the excerpt. \
 Use the exact speaker IDs (e.g. SPEAKER_00) from the transcript. \
+Write each speaker's summary in Czech (the transcript is in Czech). \
 If this topic is not discussed in the excerpt, return: \
 {{"speaker_contributions": [{{"topic_id": "{topic_id}", \
-"speaker_id_in_transcript": "SPEAKER_UNKNOWN", "summary": "[Not in excerpt]"}}]}}. \
-Otherwise use real speaker IDs and summaries.
+"speaker_id_in_transcript": "SPEAKER_UNKNOWN", "summary": "[V úryvku není obsaženo]"}}]}}. \
+Otherwise use real speaker IDs and summaries in Czech.
 {{"speaker_contributions": [{{"topic_id": "{topic_id}", \
 "speaker_id_in_transcript": "SPEAKER_00", "summary": "..."}}, ...]}}
 JSON:"""
