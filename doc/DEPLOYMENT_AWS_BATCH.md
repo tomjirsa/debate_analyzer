@@ -9,7 +9,7 @@ This guide describes how to run the debate-analyzer pipeline on AWS Batch: you c
   - **Job 1 (download):** Submit a video URL; downloads and uploads to `s3://<bucket>/jobs/<job-id>/videos/`. Runs on CPU (cheaper). Use `submit-download-job.sh`.
   - **Job 2 (transcribe):** Submit an S3 prefix where the video already lives; transcribes and uploads to `s3://<bucket>/jobs/<path>/transcripts/`. Runs on GPU. Use `submit-transcribe-job.sh`.
 - **Output (S3):** Downloaded video and optional subtitles under `s3://<bucket>/jobs/<job-id>/videos/`; transcription JSON (and optionally audio) under `s3://<bucket>/jobs/<job-id>/transcripts/`.
-- **Job 4 (LLM analysis):** Optional. After transcribe, run LLM analysis on transcript(s) to get main topics, per-topic summaries, and per-speaker contributions. Uses a **dedicated LLM image** (see [LLM_ANALYSIS.md](LLM_ANALYSIS.md)). Use `submit-llm-analysis-job.sh` for CPU, or `submit-llm-analysis-job.sh --gpu` (or `submit-llm-analysis-job-gpu.sh`) to run on the **GPU queue** (launches a GPU instance; faster inference).
+- **Job 4 (LLM analysis):** Optional. After transcribe, run LLM analysis on transcript(s) to get main topics, per-topic summaries, and per-speaker contributions. Uses a **dedicated LLM image** (Ollama; see [LLM_ANALYSIS.md](LLM_ANALYSIS.md)). Use `submit-llm-analysis-job.sh`; the job runs on the **GPU queue**.
 - **Secrets:** HuggingFace token is stored in AWS Secrets Manager and injected into the transcribe job (and full-pipeline job). The download and LLM analysis jobs do not need it (Qwen2 is public).
 - **Cost:** CPU compute environment scales to zero when idle; GPU same. Using two jobs lets you re-run transcription without re-downloading.
 

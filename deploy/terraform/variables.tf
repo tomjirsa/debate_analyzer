@@ -35,18 +35,6 @@ variable "ecr_image_tag" {
   default     = "latest"
 }
 
-variable "ecr_image_tag_llm" {
-  description = "Docker image tag for the dedicated LLM image (debate-analyzer-llm)."
-  type        = string
-  default     = "latest"
-}
-
-variable "ecr_image_tag_llm_gpu" {
-  description = "Docker image tag for the dedicated LLM GPU image (same ECR repo; build with Dockerfile.llm.gpu)."
-  type        = string
-  default     = "latest-gpu"
-}
-
 variable "ecr_image_tag_llm_ollama" {
   description = "Docker image tag for the LLM Ollama image (same ECR repo; build with Dockerfile.llm.ollama)."
   type        = string
@@ -69,12 +57,6 @@ variable "batch_cpu_instance_types" {
   description = "EC2 instance types for the CPU compute environment (download, stats, LLM job). Must include at least one type with >= 32 GB memory for the LLM job when using 20+ GiB (e.g. c5.4xlarge)."
   type        = list(string)
   default     = ["c5.xlarge", "c5.2xlarge", "c5.4xlarge"]
-}
-
-variable "batch_llm_job_memory_mib" {
-  description = "Memory (MiB) for the LLM analysis Batch job. Default 20480 (20 GiB) for Qwen2-1.5B float32; ensure an instance type with at least this much RAM is in batch_cpu_instance_types (e.g. c5.4xlarge has 32 GiB)."
-  type        = number
-  default     = 20480
 }
 
 variable "batch_cpu_min_vcpus" {

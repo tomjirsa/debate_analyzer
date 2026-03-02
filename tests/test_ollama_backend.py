@@ -52,13 +52,13 @@ def test_ollama_backend_generate_batch_order():
     assert mock_llm.invoke.call_count == 3
 
 
-def test_llm_job_get_backend_returns_ollama_when_env_set():
-    """_get_backend() returns Ollama generate_batch when LLM_BACKEND=ollama."""
+def test_llm_job_get_backend_returns_ollama_when_not_mock():
+    """_get_backend() returns Ollama backend generate_batch when MOCK_LLM is not set."""
     from debate_analyzer.analysis.backend import MockLLMBackend
 
     mock_backend = MockLLMBackend()
     with (
-        patch.dict(os.environ, {"LLM_BACKEND": "ollama"}, clear=False),
+        patch.dict(os.environ, {"MOCK_LLM": ""}, clear=False),
         patch(
             "debate_analyzer.analysis.backend_ollama.get_ollama_backend",
             return_value=mock_backend,
@@ -67,7 +67,6 @@ def test_llm_job_get_backend_returns_ollama_when_env_set():
         from debate_analyzer.batch import llm_analysis_job
 
         generate_batch = llm_analysis_job._get_backend()
-    # Returned callable should be the Ollama backend's generate_batch (same behavior)
     out = generate_batch(["hello"], max_tokens=10)
     assert len(out) == 1
     assert mock_backend.call_count == 1

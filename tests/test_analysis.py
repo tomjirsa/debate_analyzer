@@ -375,3 +375,17 @@ def test_aggregate_speaker_contributions_merges_same_topic_speaker():
         "Navrhl předřazení bodu 22. Odpověděl na dotazy kolegů."
     )
     assert by_speaker[("t1", "SPEAKER_06")]["summary"] == "Vítal zastupitelstvo."
+
+
+def test_get_backend_returns_mock_when_mock_llm_set():
+    """_get_backend() returns mock generate_batch when MOCK_LLM=1."""
+    import os
+    from unittest.mock import patch
+
+    with patch.dict(os.environ, {"MOCK_LLM": "1"}, clear=False):
+        from debate_analyzer.batch import llm_analysis_job
+
+        generate_batch = llm_analysis_job._get_backend()
+    out = generate_batch(["List the main topics"], max_tokens=100)
+    assert len(out) == 1
+    assert "main_topics" in out[0]

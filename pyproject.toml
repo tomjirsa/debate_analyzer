@@ -20,13 +20,12 @@ alembic = {version = "^1.18.4", optional = true}
 psycopg2-binary = {version = "^2.9.11", optional = true}
 boto3 = {version = "^1.42.53", optional = true}
 pyarrow = {version = "^18.0.0", optional = true}
-transformers = {version = "^4.45.0", optional = true}
 langchain-ollama = {version = "^0.2.0", optional = true}
 
 [tool.poetry.extras]
 transcribe = ["yt-dlp", "faster-whisper", "pyannote-audio", "soundfile", "torch", "boto3", "pyarrow"]
 webapp = ["fastapi", "uvicorn", "sqlalchemy", "alembic", "psycopg2-binary", "boto3", "pyarrow"]
-llm = ["torch", "transformers", "boto3", "langchain-ollama"]
+llm = ["boto3", "langchain-ollama"]
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.4.0"

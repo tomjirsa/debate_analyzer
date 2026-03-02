@@ -7,9 +7,9 @@ Reads from environment:
 - TRANSCRIPTS_S3_PREFIX: S3 prefix listing *_transcription.json;
   processes each, writes _llm_analysis.json per file.
 
-Backend selection: MOCK_LLM=1 for tests. LLM_BACKEND=ollama (or LLM_USE_OLLAMA=1) for
-Ollama via LangChain over localhost (ensure Ollama is running on OLLAMA_HOST with the
-chosen model). Otherwise Transformers: LLM_USE_GPU=1 for GPU (AWS Batch); else CPU.
+Backend: MOCK_LLM=1 for tests (mock backend). Otherwise Ollama via LangChain over
+localhost (ensure Ollama is running on OLLAMA_HOST with the chosen model).
+Install with: poetry install --extras llm
 """
 
 from __future__ import annotations
@@ -29,52 +29,33 @@ _LOG_REQUEST_MAX = 500
 _LOG_RESPONSE_MAX = 1000
 
 # Reserve tokens for prompt template and model reply so chunks/excerpts fit in context
-_RESERVE_CONTEXT_TOKENS = 2000
 _RESERVE_OLLAMA = 3500
 
 # Default excerpt cap for Ollama Phase 2/3 when LLM_OLLAMA_MAX_EXCERPT_TOKENS not set
 _DEFAULT_OLLAMA_MAX_EXCERPT_TOKENS = 3000
 
 
-def _use_ollama() -> bool:
-    """True when LLM_BACKEND=ollama or LLM_USE_OLLAMA is set."""
-    return os.environ.get(
-        "LLM_BACKEND", ""
-    ).strip().lower() == "ollama" or os.environ.get(
-        "LLM_USE_OLLAMA", ""
-    ).strip().lower() in (
-        "1",
-        "true",
-        "yes",
-    )
-
-
-def _get_max_context_tokens(use_ollama: bool = False) -> int:
+def _get_max_context_tokens() -> int:
     """Compute max context tokens for runner from LLM_MAX_MODEL_LEN (default 8192).
 
-    When use_ollama is True: use LLM_OLLAMA_MAX_CONTENT_TOKENS if set, else
-    model_len - _RESERVE_OLLAMA. Otherwise: model_len - _RESERVE_CONTEXT_TOKENS.
+    Uses LLM_OLLAMA_MAX_CONTENT_TOKENS if set, else model_len - _RESERVE_OLLAMA.
     """
     raw = os.environ.get("LLM_MAX_MODEL_LEN", "8192").strip()
     try:
         model_len = int(raw)
     except ValueError:
         model_len = 8192
-    if use_ollama:
-        explicit = os.environ.get("LLM_OLLAMA_MAX_CONTENT_TOKENS", "").strip()
-        if explicit:
-            try:
-                return max(1000, int(explicit))
-            except ValueError:
-                pass
-        return max(1000, model_len - _RESERVE_OLLAMA)
-    return max(1000, model_len - _RESERVE_CONTEXT_TOKENS)
+    explicit = os.environ.get("LLM_OLLAMA_MAX_CONTENT_TOKENS", "").strip()
+    if explicit:
+        try:
+            return max(1000, int(explicit))
+        except ValueError:
+            pass
+    return max(1000, model_len - _RESERVE_OLLAMA)
 
 
-def _get_max_excerpt_tokens(use_ollama: bool, max_context_tokens: int) -> int | None:
-    """When use_ollama, return excerpt cap for Phase 2/3; else None."""
-    if not use_ollama:
-        return None
+def _get_max_excerpt_tokens() -> int:
+    """Return excerpt cap for Phase 2/3 (LLM_OLLAMA_MAX_EXCERPT_TOKENS or default)."""
     raw = os.environ.get("LLM_OLLAMA_MAX_EXCERPT_TOKENS", "").strip()
     if raw:
         try:
@@ -127,61 +108,22 @@ def _parse_s3_uri(uri: str) -> tuple[str, str]:
 
 
 def _get_backend():
-    """Return generate_batch callable: mock, Ollama, or Transformers GPU/CPU backend."""
+    """Return generate_batch callable: mock when MOCK_LLM=1, else Ollama backend."""
     if os.environ.get("MOCK_LLM", "").strip() in ("1", "true", "yes"):
         backend = MockLLMBackend()
         return backend.generate_batch
-    use_ollama = os.environ.get(
-        "LLM_BACKEND", ""
-    ).strip().lower() == "ollama" or os.environ.get(
-        "LLM_USE_OLLAMA", ""
-    ).strip().lower() in (
-        "1",
-        "true",
-        "yes",
-    )
-    if use_ollama:
-        try:
-            from debate_analyzer.analysis.backend_ollama import get_ollama_backend
+    try:
+        from debate_analyzer.analysis.backend_ollama import get_ollama_backend
 
-            backend = get_ollama_backend()
-            return backend.generate_batch
-        except ImportError as e:
-            print(
-                "Error: Ollama backend selected but langchain-ollama not available. "
-                "Install with: poetry install --extras llm",
-                file=sys.stderr,
-            )
-            raise SystemExit(1) from e
-    use_gpu = os.environ.get("LLM_USE_GPU", "").strip().lower() in ("1", "true", "yes")
-    if use_gpu:
-        try:
-            from debate_analyzer.analysis.backend_transformers_gpu import (
-                get_transformers_gpu_backend,
-            )
-
-            backend = get_transformers_gpu_backend()
-            return backend.generate_batch
-        except (ImportError, RuntimeError) as e:
-            print(
-                f"[LLM] GPU backend unavailable ({e}), falling back to CPU.",
-                file=sys.stderr,
-            )
-            use_gpu = False
-    if not use_gpu:
-        try:
-            from debate_analyzer.analysis.backend_transformers_cpu import (
-                get_transformers_cpu_backend,
-            )
-
-            backend = get_transformers_cpu_backend()
-            return backend.generate_batch
-        except ImportError as e:
-            print(
-                "Error: Transformers not available. Set MOCK_LLM=1 or use LLM image.",
-                file=sys.stderr,
-            )
-            raise SystemExit(1) from e
+        backend = get_ollama_backend()
+        return backend.generate_batch
+    except ImportError as e:
+        print(
+            "Error: Ollama backend requires langchain-ollama. "
+            "Install with: poetry install --extras llm",
+            file=sys.stderr,
+        )
+        raise SystemExit(1) from e
 
 
 def _write_result_s3(result: dict, bucket: str, key: str) -> None:
@@ -267,9 +209,8 @@ def run(prefix_or_uri: str) -> int:
 
     # Single file: URI or path that points to a transcript JSON
     if "_transcription.json" in s:
-        use_ollama = _use_ollama()
-        max_context_tokens = _get_max_context_tokens(use_ollama=use_ollama)
-        max_excerpt_tokens = _get_max_excerpt_tokens(use_ollama, max_context_tokens)
+        max_context_tokens = _get_max_context_tokens()
+        max_excerpt_tokens = _get_max_excerpt_tokens()
         _log(f"Processing single file: {s}")
         _log("Loading model (this may take a few minutes)...")
         t0 = time.perf_counter()
@@ -320,9 +261,8 @@ def run(prefix_or_uri: str) -> int:
         _log("Job finished: 0 transcript(s) analyzed.")
         return 0
 
-    use_ollama = _use_ollama()
-    max_context_tokens = _get_max_context_tokens(use_ollama=use_ollama)
-    max_excerpt_tokens = _get_max_excerpt_tokens(use_ollama, max_context_tokens)
+    max_context_tokens = _get_max_context_tokens()
+    max_excerpt_tokens = _get_max_excerpt_tokens()
     _log("Loading model (this may take a few minutes)...")
     t0 = time.perf_counter()
     generate_batch = _get_backend()

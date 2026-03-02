@@ -1,26 +1,26 @@
 # LLM-based transcript analysis
 
-This document describes how to run **LLM analysis** on transcripts: main topics, per-topic discussion summary, and per-speaker contributions. The analysis runs as a **one-time job** (e.g. after transcription) using a **dedicated LLM Docker image** and **AWS Batch** (GPU).
+This document describes how to run **LLM analysis** on transcripts: main topics, per-topic discussion summary, and per-speaker contributions. The analysis runs as a **one-time job** (e.g. after transcription) using **Ollama** (or a mock backend for tests) and a **dedicated LLM Docker image** for **AWS Batch** (GPU).
 
 ## Overview
 
-- **Model:** Qwen2-1.5B-Instruct (default). Default context 8k; 1.5B fits 16 GB T4 (e.g. g4dn.2xlarge) comfortably. For 32k use a 24 GB+ GPU or set `LLM_MAX_MODEL_LEN`. LLM jobs use a dedicated queue.
+- **Backend:** **Ollama** only (production). Use `MOCK_LLM=1` for tests (no model required).
+- **Model:** Ollama model name (e.g. `qwen2.5:7b` via `OLLAMA_MODEL` or `LLM_MODEL_ID`). Default context 8k; set `LLM_MAX_MODEL_LEN` as needed. On AWS Batch the job runs on the GPU queue.
 - **Input:** Transcript JSON (from S3 or local), in the same format as the transcribe job output (`transcription` list with `speaker`, `text`, `start`, `end`).
 - **Output:** JSON with `main_topics`, `topic_summaries`, `speaker_contributions`, written to S3 as `<stem>_llm_analysis.json` alongside the transcript, or imported into the DB via the admin API.
-- **Chunking:** Long transcripts (over the configured context) are split into chunks for topic extraction; topics are merged and then summarized. The batch job passes `LLM_MAX_MODEL_LEN` into the runner so chunk and excerpt sizes respect the model context (with a reserve for prompt and reply). Phase 2 and Phase 3 use **topic-relevant excerpts** (keyword-based) when available.
-- **Batched inference:** Phase 1, Phase 2, and Phase 3 each run as one or more batched GPU/CPU calls (multiple prompts per call) for better throughput. Batch size is limited by `LLM_BATCH_SIZE` (default 8) on GPU to avoid OOM.
+- **Chunking:** Long transcripts (over the configured context) are split into chunks for topic extraction; topics are merged and then summarized. The job uses `LLM_MAX_MODEL_LEN` and Ollama-specific reserves so chunk and excerpt sizes fit in context. Phase 2 and Phase 3 use **topic-relevant excerpts** (keyword-based) when available.
 
-### Model cache (EFS)
+### Model cache (EFS, AWS Batch)
 
-The LLM job mounts a shared **EFS** volume at `/cache` and sets `HF_HOME=/cache`. The first job (or first run after the cache is empty) downloads the model from Hugging Face into EFS; subsequent jobs reuse that cache and do not re-download. The very first job (or first job in a new region/account) may be slower due to the initial download; later jobs start faster.
+On AWS Batch the LLM job mounts a shared **EFS** volume at `/cache`; Ollama stores models at `/cache/ollama` (`OLLAMA_MODELS`). The first job pulls the model; subsequent jobs reuse the cache.
 
-## 1. Build and push the LLM image
+## 1. Build and push the LLM image (AWS)
 
-The LLM job uses a **separate image** (Option B) so the main app image stays small.
+The LLM job uses a **separate image** so the main app image stays small. Only the **Ollama** image is used.
 
 1. **Build** from the repo root:
    ```bash
-   docker build -f Dockerfile.llm -t debate-analyzer-llm:latest .
+   docker build -f Dockerfile.llm.ollama -t debate-analyzer-llm:latest-ollama .
    ```
 
 2. **Tag and push** to the ECR repo created by Terraform:
@@ -29,32 +29,22 @@ The LLM job uses a **separate image** (Option B) so the main app image stays sma
    ECR_LLM=$(terraform output -raw ecr_repository_llm_url)
    aws ecr get-login-password --region $(terraform output -raw aws_region) | \
      docker login --username AWS --password-stdin "${ECR_LLM%%/*}"
-   docker tag debate-analyzer-llm:latest "$ECR_LLM:latest"
-   docker push "$ECR_LLM:latest"
+   docker tag debate-analyzer-llm:latest-ollama "$ECR_LLM:latest-ollama"
+   docker push "$ECR_LLM:latest-ollama"
    ```
 
-3. **Terraform** must be applied first so the `debate-analyzer-llm` ECR repository exists. The CPU job definition uses tag `latest`; the GPU job definition uses tag `latest-gpu`. For **GPU** jobs, build and push the GPU image: `docker build -f Dockerfile.llm.gpu -t debate-analyzer-llm:latest-gpu .` then push to the same ECR repo with tag `latest-gpu` (CI does this when Dockerfile.llm.gpu or LLM code changes). For **Ollama on AWS Batch**, see section 2b below (build with `Dockerfile.llm.ollama`, tag `latest-ollama`).
+3. **Terraform** must be applied first so the `debate-analyzer-llm` ECR repository exists. The LLM job definition uses the image with tag `latest-ollama`. CI (GitHub Actions) can build and push this image when LLM code or the Dockerfile changes.
 
 ## 2. Run the LLM analysis job
 
-After transcripts exist in S3 (e.g. after the transcribe job). You can run on **CPU** (cheaper, slower) or **GPU** (faster; launches a GPU instance with 16 GB T4). Job uses Qwen2-1.5B and `LLM_MAX_MODEL_LEN=8192` by default. For 32k context use a 24 GB+ GPU and set `LLM_MAX_MODEL_LEN=32768`.
+After transcripts exist in S3 (e.g. after the transcribe job). The job uses **Ollama** (locally or on AWS Batch).
 
-**CPU (default; no GPU instance):**
+**On AWS Batch (single transcript or prefix):**
 ```bash
 ./deploy/scripts/submit-jobs/submit-llm-analysis-job.sh \
   s3://<bucket>/jobs/<job-id>/transcripts/<stem>_transcription.json
-```
-
-**GPU (faster; requires LLM GPU image pushed as `latest-gpu`):**
-```bash
-./deploy/scripts/submit-jobs/submit-llm-analysis-job.sh --gpu \
-  s3://<bucket>/jobs/<job-id>/transcripts/<stem>_transcription.json
-```
-Or use `submit-llm-analysis-job-gpu.sh` with the same URI.
-
-**All transcripts under a prefix:** Use the same script with the prefix; add `--gpu` for GPU:
-```bash
-./deploy/scripts/submit-jobs/submit-llm-analysis-job.sh --gpu \
+# Or all transcripts under a prefix:
+./deploy/scripts/submit-jobs/submit-llm-analysis-job.sh \
   s3://<bucket>/jobs/<job-id>/transcripts
 ```
 
@@ -62,7 +52,7 @@ The job reads each `*_transcription.json`, runs the three-phase analysis (topics
 
 ### 2a. Running with Ollama (local)
 
-You can run the same job **locally** with the model served by **Ollama** on the same machine. The job talks to Ollama over HTTP (default `http://localhost:11434`) via LangChain. No Transformers or GPU in the job process; Ollama uses the GPU if available.
+You can run the same job **locally** with the model served by **Ollama** on the same machine. The job talks to Ollama over HTTP (default `http://localhost:11434`) via LangChain. Ollama uses the GPU if available.
 
 **Prerequisites:**
 
@@ -72,10 +62,9 @@ You can run the same job **locally** with the model served by **Ollama** on the 
 
 **Environment:**
 
-- `LLM_BACKEND=ollama` (or `LLM_USE_OLLAMA=1`).
 - `OLLAMA_HOST` (optional; default `http://localhost:11434`).
 - `OLLAMA_MODEL` or `LLM_MODEL_ID` — Ollama model name (e.g. `qwen2.5:7b`, `llama3.2`).
-- `LLM_MAX_MODEL_LEN` — Context length (default `8192`). The Ollama backend passes this as `num_ctx` to avoid "truncating input prompt"; use at least `4096` if you see that warning. For Batch, the entrypoint also sets `OLLAMA_CONTEXT_LENGTH` from this.
+- `LLM_MAX_MODEL_LEN` — Context length (default `8192`). The Ollama backend passes this as `num_ctx`; use at least `4096` to avoid "truncating input prompt". For Batch, the entrypoint also sets `OLLAMA_CONTEXT_LENGTH` from this.
 
 **If the server still logs "truncating input prompt" (limit=2048):** Many Ollama setups only apply a larger context when the **server** is started with it. Stop `ollama serve` and start it with the same value as your job, e.g. `OLLAMA_CONTEXT_LENGTH=4096 ollama serve` (or `8192` to match default `LLM_MAX_MODEL_LEN`). Then run the Python job as usual.
 
@@ -91,7 +80,7 @@ Example: `LLM_OLLAMA_MAX_CONTENT_TOKENS=4000 LLM_CHARS_PER_TOKEN=3` (and optiona
 
 ```bash
 TRANSCRIPT_S3_URI=file:///path/to/foo_transcription.json \
-LLM_BACKEND=ollama \
+OLLAMA_MODEL=qwen2.5:7b \
 python -m debate_analyzer.batch.llm_analysis_job
 ```
 
@@ -99,7 +88,7 @@ Output is written next to the transcript as `foo_llm_analysis.json`.
 
 ### 2b. Running with Ollama on AWS Batch
 
-You can run LLM analysis on **AWS Batch** using **Ollama** inside the same container: the entrypoint starts the Ollama daemon, then runs the Python job with `LLM_BACKEND=ollama` talking to localhost. Models are stored on the shared **EFS** volume at `/cache/ollama` so the first job pulls the model and later jobs reuse it.
+You can run LLM analysis on **AWS Batch** using **Ollama** inside the same container: the entrypoint starts the Ollama daemon, then runs the Python job talking to localhost. Models are stored on the shared **EFS** volume at `/cache/ollama` so the first job pulls the model and later jobs reuse it.
 
 **Prerequisites:**
 
@@ -118,15 +107,15 @@ docker tag debate-analyzer-llm:latest-ollama "$ECR_LLM:latest-ollama"
 docker push "$ECR_LLM:latest-ollama"
 ```
 
-**Environment (set by job definition):** `LLM_BACKEND=ollama`, `OLLAMA_HOST=http://localhost:11434`, `OLLAMA_MODELS=/cache/ollama`, `OLLAMA_MODEL` (e.g. `qwen2.5:7b`), `LLM_MAX_MODEL_LEN=8192`. You can override `OLLAMA_MODEL` via container overrides when submitting.
+**Environment (set by job definition):** `OLLAMA_HOST=http://localhost:11434`, `OLLAMA_MODELS=/cache/ollama`, `OLLAMA_MODEL` (e.g. `qwen2.5:7b`), `LLM_MAX_MODEL_LEN=8192`. You can override `OLLAMA_MODEL` via container overrides when submitting.
 
 **Example (single transcript or all under prefix):**
 
 ```bash
-./deploy/scripts/submit-jobs/submit-llm-analysis-job-ollama.sh \
+./deploy/scripts/submit-jobs/submit-llm-analysis-job.sh \
   s3://<bucket>/jobs/<job-id>/transcripts/<stem>_transcription.json
 # Or all transcripts under prefix:
-./deploy/scripts/submit-jobs/submit-llm-analysis-job-ollama.sh \
+./deploy/scripts/submit-jobs/submit-llm-analysis-job.sh \
   s3://<bucket>/jobs/<job-id>/transcripts
 ```
 
@@ -134,7 +123,7 @@ The first job (or first per EFS cache) may be slower while the model is pulled; 
 
 **Troubleshooting: "manifest unknown" / CannotPullImageManifestError**
 
-This means the Batch job is trying to pull an image that does not exist (or not with the expected tag) in your ECR repo. The Ollama job definition uses the image **`debate-analyzer-llm:latest-ollama`** in the same ECR repo as the other LLM images.
+This means the Batch job is trying to pull an image that does not exist (or not with the expected tag) in your ECR repo. The LLM job definition uses the image **`debate-analyzer-llm:latest-ollama`** in the ECR repo.
 
 1. **Ensure the image exists in ECR** (same account and region as your Batch stack). Either:
    - Run the **GitHub Actions** workflow **"Build and push to ECR"** (manual dispatch or push a change that triggers it). The workflow builds `Dockerfile.llm.ollama` and pushes to `debate-analyzer-llm:latest-ollama`.
@@ -152,18 +141,14 @@ This means the Batch job is trying to pull an image that does not exist (or not 
 |----------|-------------|
 | `TRANSCRIPT_S3_URI` | Single transcript JSON URI (s3:// or file). |
 | `TRANSCRIPTS_S3_PREFIX` | S3 prefix; all `*_transcription.json` under it are processed. |
-| `LLM_MODEL_ID` | Hugging Face model id (default: `Qwen/Qwen2-1.5B-Instruct`). |
-| `LLM_MAX_MODEL_LEN` | Max context length (default: `8192`). Qwen2-1.5B fits 16 GB T4 easily. For 32k use a 24 GB+ GPU and set to `32768`. With Ollama, this is also passed as `num_ctx` (and as `OLLAMA_CONTEXT_LENGTH` in the Batch entrypoint); use at least 4096 to avoid input truncation. |
-| `LLM_USE_GPU` | Set to `1` by the GPU job definition; selects Transformers GPU backend (CUDA). Omit or leave unset for CPU. |
-| `LLM_BATCH_SIZE` | Max prompts per GPU batch (default `2` for 16 GB GPUs). Use 4–8 on 24 GB+ if OOM does not occur. |
-| `MOCK_LLM` | Set to `1` to use a mock backend (no GPU; for testing). |
-| `LLM_BACKEND` | Set to `ollama` to use Ollama via LangChain (local). Omit for Transformers. |
-| `LLM_USE_OLLAMA` | Set to `1`, `true`, or `yes` as alternative to `LLM_BACKEND=ollama`. |
-| `OLLAMA_HOST` | Ollama API base URL (default: `http://localhost:11434`). Used when `LLM_BACKEND=ollama`. |
+| `MOCK_LLM` | Set to `1`, `true`, or `yes` to use a mock backend (no model; for testing). |
+| `LLM_MAX_MODEL_LEN` | Max context length (default: `8192`). Passed to Ollama as `num_ctx`; use at least 4096 to avoid input truncation. On AWS Batch the entrypoint sets `OLLAMA_CONTEXT_LENGTH` from this. |
+| `OLLAMA_HOST` | Ollama API base URL (default: `http://localhost:11434`). |
 | `OLLAMA_MODELS` | Directory for Ollama model storage. On AWS Batch set to `/cache/ollama` (EFS). |
-| `OLLAMA_MODEL` | Ollama model name (e.g. `qwen2.5:7b`). Fallback: `LLM_MODEL_ID`. Used when `LLM_BACKEND=ollama`. |
-| `LLM_OLLAMA_MAX_CONTENT_TOKENS` | (Optional.) When using Ollama, max content tokens for chunks/excerpts. If set (e.g. `4000`), overrides the default reserve-based cap; helps avoid context truncation. |
-| `LLM_OLLAMA_MAX_EXCERPT_TOKENS` | (Optional.) When using Ollama, Phase 2 and 3 excerpts are capped at this size (e.g. `3000`). Default 3000 when Ollama is used and this is unset. |
+| `OLLAMA_MODEL` | Ollama model name (e.g. `qwen2.5:7b`). Fallback: `LLM_MODEL_ID`. |
+| `LLM_MODEL_ID` | Fallback for `OLLAMA_MODEL` if unset (e.g. `qwen2.5:7b`). |
+| `LLM_OLLAMA_MAX_CONTENT_TOKENS` | (Optional.) Max content tokens for chunks/excerpts (e.g. `4000`). Overrides the default reserve-based cap; helps avoid context truncation. |
+| `LLM_OLLAMA_MAX_EXCERPT_TOKENS` | (Optional.) Phase 2 and 3 excerpts are capped at this size (e.g. `3000`). Default 3000 if unset. |
 | `LLM_CHARS_PER_TOKEN` | (Optional; default `4`.) Characters per token for chunk/excerpt sizing. Use `3` for safer estimation with Ollama/Czech. |
 | `LLM_LOG_FULL` | Set to `1`, `true`, or `yes` to log full prompts and responses; otherwise they are truncated (see Logging below). Use only for dev/debug; full logs may include PII. |
 

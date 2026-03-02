@@ -74,33 +74,18 @@ output "batch_job_definition_stats_name" {
 }
 
 output "ecr_repository_llm_url" {
-  description = "ECR repository URL for the LLM image (build with Dockerfile.llm, push here)."
+  description = "ECR repository URL for the LLM image (build with Dockerfile.llm.ollama, push here)."
   value       = aws_ecr_repository.llm.repository_url
 }
 
 output "ecr_image_uri_llm_ollama" {
-  description = "Full ECR image URI for the LLM Ollama job (debate-analyzer-llm:latest-ollama). Use to verify image exists before running the Ollama Batch job."
+  description = "Full ECR image URI for the LLM job (debate-analyzer-llm:latest-ollama). Use to verify image exists before running the LLM Batch job."
   value       = local.ecr_image_llm_ollama
 }
 
 output "batch_job_definition_llm_analysis_name" {
-  description = "Name of the LLM analysis job definition (Job 4; run after transcribe)."
-  value       = aws_batch_job_definition.llm_analysis.name
-}
-
-output "batch_job_definition_llm_analysis_gpu_name" {
-  description = "Name of the LLM analysis GPU job definition (Job 4 GPU; use with GPU queue and submit-llm-analysis-job-gpu.sh)."
-  value       = aws_batch_job_definition.llm_analysis_gpu.name
-}
-
-output "batch_job_definition_llm_analysis_ollama_name" {
-  description = "Name of the LLM analysis Ollama job definition (Job 4 Ollama; use with GPU queue and submit-llm-analysis-job-ollama.sh)."
+  description = "Name of the LLM analysis job definition (Job 4 Ollama; use with GPU queue and submit-llm-analysis-job.sh)."
   value       = aws_batch_job_definition.llm_analysis_ollama.name
-}
-
-output "batch_job_queue_llm_name" {
-  description = "Name of the LLM job queue (CPU; use for submit-llm-analysis-job.sh)."
-  value       = aws_batch_job_queue.llm.name
 }
 
 output "output_s3_prefix_example" {
