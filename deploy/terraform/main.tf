@@ -634,7 +634,8 @@ resource "aws_batch_job_definition" "llm_analysis" {
     secrets          = []
     environment = [
       { name = "HF_HOME", value = "/cache" },
-      { name = "LLM_MAX_MODEL_LEN", value = "8192" }
+      { name = "LLM_MAX_MODEL_LEN", value = "8192" },
+      { name = "LLM_CHARS_PER_TOKEN", value = "4" }
     ]
     volumes = [
       {
@@ -682,7 +683,8 @@ resource "aws_batch_job_definition" "llm_analysis_gpu" {
     environment = [
       { name = "HF_HOME", value = "/cache" },
       { name = "LLM_MAX_MODEL_LEN", value = "8192" },
-      { name = "LLM_USE_GPU", value = "1" }
+      { name = "LLM_USE_GPU", value = "1" },
+      { name = "LLM_CHARS_PER_TOKEN", value = "4" }
     ]
     volumes = [
       {
@@ -732,7 +734,10 @@ resource "aws_batch_job_definition" "llm_analysis_ollama" {
       { name = "OLLAMA_HOST", value = "http://localhost:11434" },
       { name = "OLLAMA_MODELS", value = "/cache/ollama" },
       { name = "OLLAMA_MODEL", value = "qwen2.5:7b" },
-      { name = "LLM_MAX_MODEL_LEN", value = "8192" }
+      { name = "LLM_MAX_MODEL_LEN", value = "8192" },
+      { name = "LLM_OLLAMA_MAX_CONTENT_TOKENS", value = "4692" },
+      { name = "LLM_OLLAMA_MAX_EXCERPT_TOKENS", value = "3000" },
+      { name = "LLM_CHARS_PER_TOKEN", value = "4" }
     ]
     volumes = [
       {
