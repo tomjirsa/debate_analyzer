@@ -11,6 +11,7 @@ from debate_analyzer.analysis.chunking import (
     flatten_transcription,
     get_topic_relevant_excerpt,
     split_into_chunks,
+    topic_keywords,
 )
 from debate_analyzer.analysis.prompts import (
     build_speaker_contributions_prompt,
@@ -122,6 +123,7 @@ def run_analysis(
     payload: dict[str, Any],
     generate_batch: Callable[[list[str], int], list[str]],
     max_context_tokens: int = DEFAULT_MAX_CHUNK_TOKENS,
+    max_excerpt_tokens: int | None = None,
     token_counter: Callable[[str], int] | None = None,
     max_tokens_per_reply: int = 2048,
     log_progress: Callable[[str], None] | None = None,
@@ -133,8 +135,12 @@ def run_analysis(
     Args:
         payload: Transcript dict with "transcription" list of segments.
         generate_batch: Backend function (prompts, max_tokens) -> list of model outputs.
-        max_context_tokens: Max tokens per chunk for Phase 1; also for excerpt in 2/3.
-            Should match model context (e.g. LLM_MAX_MODEL_LEN minus reserve).
+        max_context_tokens: Max tokens per chunk for Phase 1; also for excerpt in 2/3
+            when max_excerpt_tokens is not set. Should match model context (e.g.
+            LLM_MAX_MODEL_LEN minus reserve).
+        max_excerpt_tokens: Optional. When set, Phase 2 and 3 excerpts are capped
+            at this value (to stay within context when template + excerpt + reply
+            are large).
         token_counter: Optional token counter; if None, uses character-based estimate.
         max_tokens_per_reply: Max tokens to request from the model per call.
         log_progress: Optional callback for progress (e.g. [LLM]-prefixed stderr).
@@ -156,6 +162,9 @@ def run_analysis(
         ).to_dict()
 
     count = token_counter or estimate_tokens
+    excerpt_max = (
+        max_excerpt_tokens if max_excerpt_tokens is not None else max_context_tokens
+    )
 
     # Phase 1: topics (batched)
     chunks = split_into_chunks(flat, max_tokens=max_context_tokens, token_counter=count)
@@ -177,6 +186,10 @@ def run_analysis(
             all_topic_dicts.extend(parsed["main_topics"])
 
     main_topics = _merge_topic_ids(all_topic_dicts)
+    for topic in main_topics:
+        topic["keywords"] = topic_keywords(
+            topic.get("title") or "", topic.get("description") or ""
+        )
     if log_progress:
         log_progress(f"Phase 1 done: {len(main_topics)} topics.")
     if not main_topics:
@@ -190,12 +203,17 @@ def run_analysis(
     if log_progress:
         log_progress(f"Phase 2: Generating summaries for {len(main_topics)} topics.")
     phase2_prompts: list[str] = []
-    for topic in main_topics:
+    for idx, topic in enumerate(main_topics):
         topic_id = topic.get("id", "")
         title = topic.get("title") or ""
         desc = topic.get("description") or ""
         excerpt = get_topic_relevant_excerpt(
-            flat, title, desc, max_context_tokens, token_counter=count
+            flat,
+            title,
+            desc,
+            excerpt_max,
+            token_counter=count,
+            fallback_offset_index=idx,
         )
         phase2_prompts.append(
             build_topic_summary_prompt(topic_id, title, desc, excerpt)
@@ -228,12 +246,17 @@ def run_analysis(
             f"Phase 3: Generating speaker contributions for {len(main_topics)} topics."
         )
     phase3_prompts: list[str] = []
-    for topic in main_topics:
+    for idx, topic in enumerate(main_topics):
         topic_id = topic.get("id", "")
         title = topic.get("title") or ""
         desc = topic.get("description") or ""
         excerpt = get_topic_relevant_excerpt(
-            flat, title, desc, max_context_tokens, token_counter=count
+            flat,
+            title,
+            desc,
+            excerpt_max,
+            token_counter=count,
+            fallback_offset_index=idx,
         )
         phase3_prompts.append(
             build_speaker_contributions_prompt(topic_id, title, excerpt)

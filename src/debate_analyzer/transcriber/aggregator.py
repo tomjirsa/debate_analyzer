@@ -51,9 +51,7 @@ def aggregate_segments(
             # Emit current run
             text = " ".join(t.strip() for t in run_texts if t.strip())
             avg_conf = (
-                sum(run_confidences) / len(run_confidences)
-                if run_confidences
-                else 1.0
+                sum(run_confidences) / len(run_confidences) if run_confidences else 1.0
             )
             result.append(
                 TranscriptWithSpeaker(
@@ -71,9 +69,7 @@ def aggregate_segments(
             run_confidences = [seg.confidence]
 
     text = " ".join(t.strip() for t in run_texts if t.strip())
-    avg_conf = (
-        sum(run_confidences) / len(run_confidences) if run_confidences else 1.0
-    )
+    avg_conf = sum(run_confidences) / len(run_confidences) if run_confidences else 1.0
     result.append(
         TranscriptWithSpeaker(
             start=run_start,

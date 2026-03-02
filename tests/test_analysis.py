@@ -6,6 +6,7 @@ from debate_analyzer.analysis.chunking import (
     flatten_transcription,
     get_topic_relevant_excerpt,
     split_into_chunks,
+    topic_keywords,
     truncate_to_tokens,
 )
 from debate_analyzer.analysis.runner import run_analysis
@@ -36,6 +37,16 @@ def test_estimate_tokens():
     """Token estimate is roughly length/4."""
     assert estimate_tokens("abcd") >= 1
     assert estimate_tokens("a" * 400) == 100
+
+
+def test_topic_keywords():
+    """topic_keywords returns sorted list from title/description; Czech words included."""
+    kw = topic_keywords("Hlasování o rozpočtu", "")
+    assert isinstance(kw, list)
+    assert kw == sorted(kw)
+    assert len(kw) == len(set(kw))
+    assert "rozpočtu" in kw
+    assert "hlasování" in kw
 
 
 def test_split_into_chunks_short():
@@ -97,6 +108,10 @@ def test_run_analysis_mock_backend():
     assert isinstance(result["main_topics"], list)
     assert isinstance(result["topic_summaries"], list)
     assert isinstance(result["speaker_contributions"], list)
+    for topic in result["main_topics"]:
+        assert "keywords" in topic
+        assert isinstance(topic["keywords"], list)
+        assert all(isinstance(s, str) for s in topic["keywords"])
     assert backend.call_count >= 1
 
 
@@ -129,6 +144,48 @@ def test_run_analysis_respects_max_context_tokens():
     ), "expected Phase 1 batch call when using generate_batch"
 
 
+def test_run_analysis_respects_max_excerpt_tokens():
+    """With max_excerpt_tokens set, Phase 2/3 excerpts are capped at that size."""
+    backend = MockLLMBackend()
+    # Long transcript so topic-relevant excerpt could be large without cap
+    lines = (
+        [f"SPEAKER_00: Preamble {i}." for i in range(20)]
+        + ["SPEAKER_01: UniqueTopicXYZ discussed here."]
+        + [f"SPEAKER_00: More line {i}." for i in range(80)]
+    )
+    payload = {
+        "transcription": [
+            {"speaker": line.split(": ", 1)[0], "text": line.split(": ", 1)[1]}
+            for line in lines
+        ]
+    }
+    calls: list[tuple[str, str, str]] = []
+
+    def capture(label: str, prompt: str, response: str) -> None:
+        calls.append((label, prompt, response))
+
+    run_analysis(
+        payload,
+        backend.generate_batch,
+        max_context_tokens=2000,
+        max_excerpt_tokens=50,
+        log_llm_call=capture,
+    )
+    # Find Phase 2 prompt and extract excerpt (between --- and ---)
+    phase2 = [c for c in calls if "Phase 2" in c[0]]
+    assert len(phase2) >= 1
+    prompt = phase2[0][1]
+    if "---" in prompt:
+        parts = prompt.split("---")
+        for part in parts[1:]:
+            excerpt = part.strip().split("\n---")[0].strip()
+            if excerpt and "SPEAKER" in excerpt:
+                assert estimate_tokens(excerpt) <= 50 + 40, (
+                    "Phase 2 excerpt capped at max_excerpt_tokens (with slack)"
+                )
+                break
+
+
 def test_get_topic_relevant_excerpt_includes_matching_region():
     """Excerpt for a topic whose title appears only in the middle includes that part."""
     prefix = "\n".join([f"SPEAKER_00: Preamble line {i}." for i in range(30)])
@@ -156,6 +213,46 @@ def test_get_topic_relevant_excerpt_fallback_when_no_match():
     )
     assert "Line 0." in excerpt
     assert estimate_tokens(excerpt) <= 50 + 20
+
+
+def test_get_topic_relevant_excerpt_prefix_match_czech():
+    """Line containing 'rozpočtu' matches topic with keyword 'rozpočet' (prefix match)."""
+    prefix = "\n".join([f"SPEAKER_00: Preamble {i}." for i in range(20)])
+    middle = "SPEAKER_01: Hlasování o rozpočtu proběhlo v úterý."
+    suffix = "\n".join([f"SPEAKER_00: Suffix {i}." for i in range(20)])
+    flat = prefix + "\n" + middle + "\n" + suffix
+    excerpt = get_topic_relevant_excerpt(
+        flat,
+        topic_title="Hlasování o rozpočtu",
+        topic_description="",
+        max_tokens=500,
+    )
+    assert "rozpočtu" in excerpt
+    assert "Hlasování" in excerpt or "proběhlo" in excerpt
+
+
+def test_get_topic_relevant_excerpt_staggered_fallback():
+    """When no keyword match, fallback_offset_index yields different excerpt starts."""
+    lines = [f"SPEAKER_00: Line {i}." for i in range(200)]
+    flat = "\n".join(lines)
+    excerpt0 = get_topic_relevant_excerpt(
+        flat,
+        topic_title="NonexistentXYZ",
+        topic_description="",
+        max_tokens=50,
+        fallback_offset_index=0,
+    )
+    excerpt2 = get_topic_relevant_excerpt(
+        flat,
+        topic_title="NonexistentXYZ",
+        topic_description="",
+        max_tokens=50,
+        fallback_offset_index=2,
+    )
+    assert "Line 0." in excerpt0
+    # With window_lines=50, index 2 -> start at line 100
+    assert "Line 100." in excerpt2
+    assert excerpt0.strip() != excerpt2.strip()
 
 
 def test_truncate_to_tokens_bounds_output():

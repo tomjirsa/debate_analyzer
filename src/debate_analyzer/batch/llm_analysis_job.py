@@ -30,16 +30,58 @@ _LOG_RESPONSE_MAX = 1000
 
 # Reserve tokens for prompt template and model reply so chunks/excerpts fit in context
 _RESERVE_CONTEXT_TOKENS = 2000
+_RESERVE_OLLAMA = 3500
+
+# Default excerpt cap for Ollama Phase 2/3 when LLM_OLLAMA_MAX_EXCERPT_TOKENS not set
+_DEFAULT_OLLAMA_MAX_EXCERPT_TOKENS = 3000
 
 
-def _get_max_context_tokens() -> int:
-    """Compute max context tokens for runner from LLM_MAX_MODEL_LEN (default 8192)."""
+def _use_ollama() -> bool:
+    """True when LLM_BACKEND=ollama or LLM_USE_OLLAMA is set."""
+    return os.environ.get(
+        "LLM_BACKEND", ""
+    ).strip().lower() == "ollama" or os.environ.get(
+        "LLM_USE_OLLAMA", ""
+    ).strip().lower() in (
+        "1",
+        "true",
+        "yes",
+    )
+
+
+def _get_max_context_tokens(use_ollama: bool = False) -> int:
+    """Compute max context tokens for runner from LLM_MAX_MODEL_LEN (default 8192).
+
+    When use_ollama is True: use LLM_OLLAMA_MAX_CONTENT_TOKENS if set, else
+    model_len - _RESERVE_OLLAMA. Otherwise: model_len - _RESERVE_CONTEXT_TOKENS.
+    """
     raw = os.environ.get("LLM_MAX_MODEL_LEN", "8192").strip()
     try:
         model_len = int(raw)
     except ValueError:
         model_len = 8192
+    if use_ollama:
+        explicit = os.environ.get("LLM_OLLAMA_MAX_CONTENT_TOKENS", "").strip()
+        if explicit:
+            try:
+                return max(1000, int(explicit))
+            except ValueError:
+                pass
+        return max(1000, model_len - _RESERVE_OLLAMA)
     return max(1000, model_len - _RESERVE_CONTEXT_TOKENS)
+
+
+def _get_max_excerpt_tokens(use_ollama: bool, max_context_tokens: int) -> int | None:
+    """When use_ollama, return excerpt cap for Phase 2/3; else None."""
+    if not use_ollama:
+        return None
+    raw = os.environ.get("LLM_OLLAMA_MAX_EXCERPT_TOKENS", "").strip()
+    if raw:
+        try:
+            return max(500, int(raw))
+        except ValueError:
+            pass
+    return _DEFAULT_OLLAMA_MAX_EXCERPT_TOKENS
 
 
 def _log(msg: str) -> None:
@@ -166,6 +208,7 @@ def _run_one(
     source_uri: str,
     generate_batch,
     max_context_tokens: int,
+    max_excerpt_tokens: int | None = None,
     log_progress: Callable[[str], None] | None = None,
     log_llm_call: Callable[[str, str, str], None] | None = None,
 ) -> bool:
@@ -182,6 +225,7 @@ def _run_one(
         payload,
         generate_batch,
         max_context_tokens=max_context_tokens,
+        max_excerpt_tokens=max_excerpt_tokens,
         log_progress=log_progress,
         log_llm_call=log_llm_call,
     )
@@ -223,7 +267,9 @@ def run(prefix_or_uri: str) -> int:
 
     # Single file: URI or path that points to a transcript JSON
     if "_transcription.json" in s:
-        max_context_tokens = _get_max_context_tokens()
+        use_ollama = _use_ollama()
+        max_context_tokens = _get_max_context_tokens(use_ollama=use_ollama)
+        max_excerpt_tokens = _get_max_excerpt_tokens(use_ollama, max_context_tokens)
         _log(f"Processing single file: {s}")
         _log("Loading model (this may take a few minutes)...")
         t0 = time.perf_counter()
@@ -234,6 +280,7 @@ def run(prefix_or_uri: str) -> int:
             s,
             generate_batch,
             max_context_tokens,
+            max_excerpt_tokens=max_excerpt_tokens,
             log_progress=_log,
             log_llm_call=_log_llm_call,
         )
@@ -273,7 +320,9 @@ def run(prefix_or_uri: str) -> int:
         _log("Job finished: 0 transcript(s) analyzed.")
         return 0
 
-    max_context_tokens = _get_max_context_tokens()
+    use_ollama = _use_ollama()
+    max_context_tokens = _get_max_context_tokens(use_ollama=use_ollama)
+    max_excerpt_tokens = _get_max_excerpt_tokens(use_ollama, max_context_tokens)
     _log("Loading model (this may take a few minutes)...")
     t0 = time.perf_counter()
     generate_batch = _get_backend()
@@ -288,6 +337,7 @@ def run(prefix_or_uri: str) -> int:
             uri,
             generate_batch,
             max_context_tokens,
+            max_excerpt_tokens=max_excerpt_tokens,
             log_progress=_log,
             log_llm_call=_log_llm_call,
         )

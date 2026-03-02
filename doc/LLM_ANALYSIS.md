@@ -79,6 +79,14 @@ You can run the same job **locally** with the model served by **Ollama** on the 
 
 **If the server still logs "truncating input prompt" (limit=2048):** Many Ollama setups only apply a larger context when the **server** is started with it. Stop `ollama serve` and start it with the same value as your job, e.g. `OLLAMA_CONTEXT_LENGTH=4096 ollama serve` (or `8192` to match default `LLM_MAX_MODEL_LEN`). Then run the Python job as usual.
 
+**Avoiding context truncation with Ollama:** With an 8192-token context, prompts can still overflow if chunk/excerpt sizing is optimistic. To avoid "truncating input prompt", you can set:
+
+- **`LLM_OLLAMA_MAX_CONTENT_TOKENS`** (optional) — When set, used as the max content tokens for Phase 1 chunks and for excerpt sizing (e.g. `4000`) so prompt + reply fit in context.
+- **`LLM_OLLAMA_MAX_EXCERPT_TOKENS`** (optional) — When set, Phase 2 and 3 excerpts are capped at this size (e.g. `3000`). If unset, the job uses a default (3000) when using Ollama.
+- **`LLM_CHARS_PER_TOKEN`** (optional; default `4`) — Characters per token for estimation. Use `3` for safer sizing with Ollama/Czech (fewer characters per chunk, so real token count stays under limit).
+
+Example: `LLM_OLLAMA_MAX_CONTENT_TOKENS=4000 LLM_CHARS_PER_TOKEN=3` (and optionally `LLM_OLLAMA_MAX_EXCERPT_TOKENS=3000`) helps keep each request under 8192.
+
 **Example (single transcript):**
 
 ```bash
@@ -154,6 +162,9 @@ This means the Batch job is trying to pull an image that does not exist (or not 
 | `OLLAMA_HOST` | Ollama API base URL (default: `http://localhost:11434`). Used when `LLM_BACKEND=ollama`. |
 | `OLLAMA_MODELS` | Directory for Ollama model storage. On AWS Batch set to `/cache/ollama` (EFS). |
 | `OLLAMA_MODEL` | Ollama model name (e.g. `qwen2.5:7b`). Fallback: `LLM_MODEL_ID`. Used when `LLM_BACKEND=ollama`. |
+| `LLM_OLLAMA_MAX_CONTENT_TOKENS` | (Optional.) When using Ollama, max content tokens for chunks/excerpts. If set (e.g. `4000`), overrides the default reserve-based cap; helps avoid context truncation. |
+| `LLM_OLLAMA_MAX_EXCERPT_TOKENS` | (Optional.) When using Ollama, Phase 2 and 3 excerpts are capped at this size (e.g. `3000`). Default 3000 when Ollama is used and this is unset. |
+| `LLM_CHARS_PER_TOKEN` | (Optional; default `4`.) Characters per token for chunk/excerpt sizing. Use `3` for safer estimation with Ollama/Czech. |
 | `LLM_LOG_FULL` | Set to `1`, `true`, or `yes` to log full prompts and responses; otherwise they are truncated (see Logging below). Use only for dev/debug; full logs may include PII. |
 
 ### Logging (batch job)
@@ -174,10 +185,12 @@ Prompt templates are in `src/debate_analyzer/analysis/prompts.py`. Changing the 
 
 Each `_llm_analysis.json` file contains:
 
+- **main_topics**: Each element has `id`, `title`, `description`, and **`keywords`** (list of strings) — terms derived from the topic title and description, used to find the relevant transcript excerpt (for debugging/inspection).
+
 ```json
 {
   "main_topics": [
-    { "id": "t1", "title": "short label", "description": "optional" }
+    { "id": "t1", "title": "short label", "description": "optional", "keywords": ["label", "short", ...] }
   ],
   "topic_summaries": [
     { "topic_id": "t1", "summary": "Discussion outcome for this topic." }
