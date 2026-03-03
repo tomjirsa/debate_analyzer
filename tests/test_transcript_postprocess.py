@@ -119,26 +119,26 @@ def test_run_correction_multiple_segments() -> None:
 
 
 def test_postprocess_job_run_one_local(tmp_path: Path) -> None:
-    """Batch job writes _transcription_corrected.json next to input (MOCK_LLM)."""
-    transcript_path = tmp_path / "debate_transcription.json"
+    """Batch job reads _transcription_raw.json, writes _transcription.json (MOCK_LLM)."""
+    raw_path = tmp_path / "debate_transcription_raw.json"
     payload = {
         "video_path": "/x",
         "transcription": [
             {"start": 0, "end": 1, "text": "Test.", "speaker": "SPEAKER_00"}
         ],
     }
-    transcript_path.write_text(
+    raw_path.write_text(
         json.dumps(payload, ensure_ascii=False),
         encoding="utf-8",
     )
     os.environ["MOCK_LLM"] = "1"
-    os.environ["TRANSCRIPT_S3_URI"] = str(transcript_path)
+    os.environ["TRANSCRIPT_S3_URI"] = str(raw_path)
     try:
         from debate_analyzer.batch import transcript_postprocess_job
 
-        n = transcript_postprocess_job.run(str(transcript_path))
+        n = transcript_postprocess_job.run(str(raw_path))
         assert n == 1
-        out_path = tmp_path / "debate_transcription_corrected.json"
+        out_path = tmp_path / "debate_transcription.json"
         assert out_path.exists()
         data = json.loads(out_path.read_text(encoding="utf-8"))
         assert data["transcription"][0]["text"] == "Test."

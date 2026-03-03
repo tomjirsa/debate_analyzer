@@ -246,9 +246,11 @@ Transcriptions are saved as JSON files in the output directory:
 **File Structure:**
 ```
 output_dir/
-├── video_name_audio.wav         # Extracted audio (16kHz mono WAV)
-└── video_name_transcription.json # Transcription with speakers
+├── video_name_audio.wav              # Extracted audio (16kHz mono WAV)
+└── video_name_transcription_raw.json # Raw transcription with speakers
 ```
+
+The transcriber writes `*_transcription_raw.json`. The optional postprocess step (see [TRANSCRIBE.md](TRANSCRIBE.md#llm-post-processing-grammar--asr-correction)) produces `*_transcription.json` for use by LLM analysis and the webapp.
 
 **JSON Format:**
 ```json

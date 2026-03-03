@@ -1,11 +1,12 @@
 """
 Run LLM post-processing on transcript(s): correct grammar/ASR errors only.
 
-Writes _transcription_corrected.json. Reads from environment:
-- TRANSCRIPT_S3_URI: Single transcript JSON (s3:// or file:// or path).
-  Writes <stem>_transcription_corrected.json alongside.
-- TRANSCRIPTS_S3_PREFIX: S3 prefix listing *_transcription.json;
-  processes each, writes _transcription_corrected.json per file.
+Reads *_transcription_raw.json (from transcriber), writes *_transcription.json.
+Environment:
+- TRANSCRIPT_S3_URI: Single raw file (s3:// or file:// or path).
+  Writes <stem>_transcription.json alongside.
+- TRANSCRIPTS_S3_PREFIX: S3 prefix listing *_transcription_raw.json;
+  processes each, writes _transcription.json per file.
 
 Backend: MOCK_LLM=1 for tests. Otherwise Ollama (same as llm_analysis_job).
 Install with: poetry install --extras llm
@@ -82,7 +83,7 @@ def _write_result_file(result: dict, path: Path) -> None:
 
 
 def _run_one(source_uri: str, generate_batch, model_label: str) -> bool:
-    """Load transcript, run correction, write _transcription_corrected.json."""
+    """Load raw transcript, run correction, write _transcription.json."""
     from debate_analyzer.api.loader import load_transcript_payload
 
     try:
@@ -100,22 +101,21 @@ def _run_one(source_uri: str, generate_batch, model_label: str) -> bool:
 
     if source_uri.startswith("s3://"):
         bucket, key = _parse_s3_uri(source_uri)
-        if "_transcription.json" in key:
-            out_key = key.replace(
-                "_transcription.json", "_transcription_corrected.json"
-            )
+        if "_transcription_raw.json" in key:
+            out_key = key.replace("_transcription_raw.json", "_transcription.json")
         else:
-            out_key = key.rstrip("/") + "_transcription_corrected.json"
+            out_key = key.rstrip("/").removesuffix("_transcription_raw") + "_transcription.json"
         _write_result_s3(result, bucket, out_key)
         print(f"Wrote s3://{bucket}/{out_key}")
     else:
         path = Path(source_uri.replace("file://", ""))
-        if "_transcription.json" in path.name:
+        if "_transcription_raw.json" in path.name:
             out_path = path.parent / path.name.replace(
-                "_transcription.json", "_transcription_corrected.json"
+                "_transcription_raw.json", "_transcription.json"
             )
         else:
-            out_path = path.parent / (path.stem + "_transcription_corrected.json")
+            stem = path.stem.removesuffix("_transcription_raw")
+            out_path = path.parent / (stem + "_transcription.json")
         _write_result_file(result, out_path)
         print(f"Wrote {out_path}")
 
@@ -130,12 +130,12 @@ def run(prefix_or_uri: str) -> int:
         prefix_or_uri: TRANSCRIPT_S3_URI (single file) or TRANSCRIPTS_S3_PREFIX.
 
     Returns:
-        Number of _transcription_corrected.json files written.
+        Number of _transcription.json files written.
     """
     job_start = time.perf_counter()
     s = prefix_or_uri.strip()
 
-    if "_transcription.json" in s:
+    if "_transcription_raw.json" in s:
         _log(f"Processing single file: {s}")
         _log("Loading model...")
         t0 = time.perf_counter()
@@ -170,12 +170,12 @@ def run(prefix_or_uri: str) -> int:
     for page in paginator.paginate(Bucket=bucket, Prefix=prefix_key):
         for obj in page.get("Contents") or []:
             key = obj["Key"]
-            if not key.endswith("_transcription.json"):
+            if not key.endswith("_transcription_raw.json"):
                 continue
             uris.append(f"s3://{bucket}/{key}")
     _log(f"Found {len(uris)} transcript(s) under prefix.")
     if not uris:
-        _log("Job finished: 0 transcript(s) corrected.")
+        _log("Job finished: 0 transcript(s) processed.")
         return 0
 
     _log("Loading model...")
@@ -199,7 +199,7 @@ def run(prefix_or_uri: str) -> int:
     if failed:
         _log(f"Job finished: {succeeded} ok, {failed} failed (total {elapsed:.1f}s).")
     else:
-        _log(f"Job finished: {succeeded} transcript(s) corrected ({elapsed:.1f}s).")
+        _log(f"Job finished: {succeeded} transcript(s) written ({elapsed:.1f}s).")
     return succeeded
 
 
@@ -217,7 +217,7 @@ def main() -> None:
             file=sys.stderr,
         )
         sys.exit(1)
-    print(f"Done. Wrote {n} corrected transcript file(s).")
+    print(f"Done. Wrote {n} transcript file(s).")
 
 
 if __name__ == "__main__":

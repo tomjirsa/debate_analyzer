@@ -88,6 +88,11 @@ output "batch_job_definition_llm_analysis_name" {
   value       = aws_batch_job_definition.llm_analysis_ollama.name
 }
 
+output "batch_job_definition_transcript_postprocess_name" {
+  description = "Job 5 transcript postprocess (Ollama); use with GPU queue and submit-transcript-postprocess-job.sh."
+  value       = aws_batch_job_definition.transcript_postprocess_ollama.name
+}
+
 output "output_s3_prefix_example" {
   description = "Example OUTPUT_S3_PREFIX for container env (use with VIDEO_URL when submitting job)."
   value       = "s3://${aws_s3_bucket.output.id}/jobs"

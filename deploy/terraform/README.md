@@ -63,12 +63,13 @@ For a **step-by-step AWS setup** and full variable descriptions, see [doc/AWS_SE
 - `batch_job_definition_download_name` – download-only (Job 1)
 - `batch_job_definition_transcribe_name` – transcribe-only (Job 2)
 - `batch_job_definition_llm_analysis_name` – LLM analysis (Job 4 Ollama; use with GPU queue and submit-llm-analysis-job.sh)
+- `batch_job_definition_transcript_postprocess_name` – Job 5 transcript postprocess (Ollama; use with GPU queue and submit-transcript-postprocess-job.sh)
 - `s3_bucket_name` – where videos and transcripts are written
 - `ecr_repository_url` – where CI pushes the image
 - `output_s3_prefix_example` – example value for `OUTPUT_S3_PREFIX`
 - `submit_job_example` – example `aws batch submit-job` command for full pipeline
 
-**Submit scripts (from repo root):** `./deploy/scripts/submit-jobs/submit-job.sh`, `./deploy/scripts/submit-jobs/submit-download-job.sh`, `./deploy/scripts/submit-jobs/submit-transcribe-job.sh`, `./deploy/scripts/submit-jobs/submit-llm-analysis-job.sh`. See **doc/DEPLOYMENT_AWS_BATCH.md** for the two-job flow.
+**Submit scripts (from repo root):** `./deploy/scripts/submit-jobs/submit-job.sh`, `./deploy/scripts/submit-jobs/submit-download-job.sh`, `./deploy/scripts/submit-jobs/submit-transcribe-job.sh`, `./deploy/scripts/submit-jobs/submit-transcript-postprocess-job.sh`, `./deploy/scripts/submit-jobs/submit-llm-analysis-job.sh`. See **doc/DEPLOYMENT_AWS_BATCH.md** for the two-job flow. After transcribe, you can optionally run transcript postprocess with `submit-transcript-postprocess-job.sh` (reads `*_transcription_raw.json`, writes `*_transcription.json`).
 
 **LLM analysis:** Run LLM analysis (Ollama) on the GPU queue with `./deploy/scripts/submit-jobs/submit-llm-analysis-job.sh`. Build and push the Ollama image with `Dockerfile.llm.ollama` and tag `latest-ollama` to the ECR repo (e.g. by CI when LLM code or the Dockerfile changes).
 

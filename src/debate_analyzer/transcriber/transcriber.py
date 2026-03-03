@@ -351,7 +351,7 @@ def transcribe_video(
     }
 
     # Save to JSON
-    output_filename = f"{video_path.stem}_transcription.json"
+    output_filename = f"{video_path.stem}_transcription_raw.json"
     output_path = output_dir / output_filename
 
     with open(output_path, "w", encoding="utf-8") as f:

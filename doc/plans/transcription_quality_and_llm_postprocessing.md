@@ -81,4 +81,17 @@ This keeps the transcript faithful to what was said while cleaning mechanical an
 | `*_transcription_raw.json` | Transcriber only | LLM post-process job (input) |
 | `*_transcription.json` | LLM post-process (or, if skipped, could copy raw → transcription; see below) | LLM analysis, stats, webapp, deploy |
 
-**Optional:** If post-processing is disabled or not run, the pipeline could copy `*_transcription_raw.json` to `*_transcription.json` so downstream always has one file to read. That can be a follow-up; the minimal plan is: transcriber writes raw; post-process reads raw and writes canonical; when post-process is used, analysis uses canonical.
+**Optional (skip post-processing):** If you do not run the postprocess job, add to the docs (e.g. [doc/TRANSCRIBE.md](doc/TRANSCRIBE.md) or [doc/DEPLOYMENT_AWS_BATCH.md](doc/DEPLOYMENT_AWS_BATCH.md)) a short subsection that explains how to use the raw transcript as the canonical one by copying in S3. Include an AWS CLI example:
+
+- **Single file:**  
+  `aws s3 cp s3://BUCKET/PREFIX/stem_transcription_raw.json s3://BUCKET/PREFIX/stem_transcription.json`
+- **All raw files under a prefix (bash):**  
+  List objects with suffix `_transcription_raw.json`, then for each run `aws s3 cp` from `key` to `key` with `_transcription_raw.json` replaced by `_transcription.json`. Example one-liner (replace BUCKET and PREFIX):
+  ```bash
+  aws s3 ls s3://BUCKET/PREFIX/ --recursive | awk '/_transcription_raw\.json$/ {print $4}' | while read key; do
+    new_key="${key%_transcription_raw.json}_transcription.json"
+    aws s3 cp "s3://BUCKET/$key" "s3://BUCKET/$new_key"
+  done
+  ```
+
+This gives users a documented way to get `*_transcription.json` in place when they skip the postprocess job.
