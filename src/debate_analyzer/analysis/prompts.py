@@ -2,6 +2,12 @@
 
 from __future__ import annotations
 
+# System-level instruction for response language (injected by backends).
+SYSTEM_PROMPT_RESPONSE_LANGUAGE = (
+    "Always respond in Czech. Use Czech for all topic labels, descriptions, "
+    "summaries, and any text inside JSON."
+)
+
 # Phase 1: extract topic labels from a chunk. (Braces in JSON escaped for .format.)
 PROMPT_TOPICS_CHUNK = """List main topics in this transcript portion. Concrete only \
 (agenda items, decisions, projects); 2-8; use czech language. \
@@ -63,6 +69,24 @@ Excerpt:
 {excerpt}
 ---
 JSON:"""
+
+# Transcript post-processing: grammar and ASR errors only; do not change meaning.
+PROMPT_CORRECT_SEGMENT = (
+    "Correct only grammar and obvious transcription (speech-to-text) errors in the "
+    "following Czech text. Do not change meaning, paraphrase, add, remove, or "
+    "reinterpret content. Fix only: typos, verb agreement, punctuation, and clear "
+    "ASR mishears (e.g. homophones). Output only the corrected text, one segment.\n\n"
+    "Text:\n"
+    "---\n"
+    "{text}\n"
+    "---\n"
+    "Corrected text:"
+)
+
+
+def build_correct_segment_prompt(text: str) -> str:
+    """Build prompt for transcript post-processing (one segment)."""
+    return PROMPT_CORRECT_SEGMENT.format(text=text)
 
 
 def build_topics_chunk_prompt(chunk: str) -> str:

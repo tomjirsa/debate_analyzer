@@ -1,6 +1,6 @@
 # Transcribe Module
 
-The transcriber module provides **speech-to-text** (faster-whisper) and **speaker diarization** (pyannote.audio) for video files. It produces a JSON transcript with segments and speaker IDs (e.g. `SPEAKER_00`, `SPEAKER_01`).
+The transcriber module provides **speech-to-text** (faster-whisper) and **speaker diarization** (pyannote.audio) for video files. It produces a JSON transcript with segments and speaker IDs (e.g. `SPEAKER_00`, `SPEAKER_01`). Default config targets **Czech** (`language: "cs"`) and uses `beam_size: 5` for better decoding quality; for other languages use `--language XX` or set `language` to `null` in the config file for auto-detect.
 
 For annotating speaker IDs with real names or speaker profiles (first name, surname; standalone tool or web app), see [HOWTO.md](HOWTO.md#how-to-annotate-speaker-names) and [WEBAPP.md](WEBAPP.md). For running transcription on AWS Batch, see [DEPLOYMENT_AWS_BATCH.md](DEPLOYMENT_AWS_BATCH.md) and [AWS_SETUP.md](AWS_SETUP.md).
 
@@ -148,8 +148,28 @@ The written `transcription` list is aggregated: consecutive same-speaker segment
 | HuggingFace token required | Set `HF_TOKEN` or pass `--hf-token`. Accept pyannote model terms at the link above. |
 | FFmpeg not found | Install ffmpeg; verify with `ffmpeg -version`. |
 | CUDA out of memory | Use `--model-size small` or `--device cpu`. |
-| Poor quality | Try `--model-size large`, `--language en`, and ensure good audio. |
+| Poor quality | For Czech: ensure config has `language: "cs"` and `beam_size: 5` (see `conf/transcriber_conf.json`). Try `--model-size large` for best accuracy. For other languages use `--language XX` and ensure good audio. |
 | Speaker IDs arbitrary | Speaker IDs are not stable across videos. Use the web app or standalone annotator to map them to speaker profiles (first name, surname) or names; see [HOWTO](HOWTO.md#how-to-annotate-speaker-names). |
+
+---
+
+## LLM post-processing (grammar / ASR correction)
+
+An optional step corrects **only grammar and obvious transcription (ASR) errors** in the transcript, without changing meaning. It uses the same LLM backend as the analysis job (Ollama or mock).
+
+**When to use:** After transcription, if you want cleaner text for display or for the LLM analysis job (e.g. fewer typos and homophone errors).
+
+**How to run:**
+
+```bash
+# Single file (local or file:// or s3://)
+TRANSCRIPT_S3_URI=path/to/stem_transcription.json poetry run python -m debate_analyzer.batch.transcript_postprocess_job
+
+# Multiple files (S3 prefix only)
+TRANSCRIPTS_S3_PREFIX=s3://bucket/prefix/ poetry run python -m debate_analyzer.batch.transcript_postprocess_job
+```
+
+**Output:** Writes `<stem>_transcription_corrected.json` next to each input. Downstream steps (e.g. LLM analysis) can use the corrected file by pointing `TRANSCRIPT_S3_URI` at `*_transcription_corrected.json`. Requires `poetry install --extras llm` for the Ollama backend; set `MOCK_LLM=1` for tests (mock returns segment text unchanged).
 
 ---
 

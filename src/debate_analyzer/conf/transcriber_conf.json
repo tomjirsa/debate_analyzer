@@ -4,8 +4,8 @@
     "model_size": "medium",
     "device": "auto",
     "compute_type": "float16",
-    "language": null,
-    "beam_size": 1,
+    "language": "cs",
+    "beam_size": 5,
     "condition_on_previous_text": true
   },
   "pyannote": {

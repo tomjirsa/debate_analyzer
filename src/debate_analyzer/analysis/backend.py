@@ -59,6 +59,12 @@ class MockLLMBackend:
             return self.summary_response
         if "speaker_contributions" in prompt or "each speaker's position" in prompt:
             return self.speaker_response
+        # Transcript post-processing: return segment text unchanged (grammar correction mock).
+        if "Correct only grammar" in prompt or "Corrected text:" in prompt:
+            parts = prompt.split("---")
+            if len(parts) >= 2:
+                return parts[1].strip()
+            return ""
         return self.topics_response
 
     def generate(self, prompt: str, max_tokens: int = 2048) -> str:

@@ -1,14 +1,13 @@
 """
-Run LLM analysis on transcript(s) and write results to S3 or local path.
+Run LLM post-processing on transcript(s): correct grammar/ASR errors only.
 
-Reads from environment:
+Writes _transcription_corrected.json. Reads from environment:
 - TRANSCRIPT_S3_URI: Single transcript JSON (s3:// or file:// or path).
-  Writes <stem>_llm_analysis.json alongside.
+  Writes <stem>_transcription_corrected.json alongside.
 - TRANSCRIPTS_S3_PREFIX: S3 prefix listing *_transcription.json;
-  processes each, writes _llm_analysis.json per file.
+  processes each, writes _transcription_corrected.json per file.
 
-Backend: MOCK_LLM=1 for tests (mock backend). Otherwise Ollama via LangChain over
-localhost (ensure Ollama is running on OLLAMA_HOST with the chosen model).
+Backend: MOCK_LLM=1 for tests. Otherwise Ollama (same as llm_analysis_job).
 Install with: poetry install --extras llm
 """
 
@@ -18,83 +17,18 @@ import json
 import os
 import sys
 import time
-from collections.abc import Callable
 from pathlib import Path
 
 from debate_analyzer.analysis.backend import MockLLMBackend
 from debate_analyzer.analysis.prompts import SYSTEM_PROMPT_RESPONSE_LANGUAGE
-from debate_analyzer.analysis.runner import run_analysis
+from debate_analyzer.analysis.transcript_postprocess import run_correction
 
-# Truncation limits for LLM call logging when LLM_LOG_FULL is not set
-_LOG_REQUEST_MAX = 500
-_LOG_RESPONSE_MAX = 1000
-
-# Reserve tokens for prompt template and model reply so chunks/excerpts fit in context
-_RESERVE_OLLAMA = 3500
-
-# Default excerpt cap for Ollama Phase 2/3 when LLM_OLLAMA_MAX_EXCERPT_TOKENS not set
-_DEFAULT_OLLAMA_MAX_EXCERPT_TOKENS = 3000
-
-
-def _get_max_context_tokens() -> int:
-    """Compute max context tokens for runner from LLM_MAX_MODEL_LEN (default 8192).
-
-    Uses LLM_OLLAMA_MAX_CONTENT_TOKENS if set, else model_len - _RESERVE_OLLAMA.
-    """
-    raw = os.environ.get("LLM_MAX_MODEL_LEN", "8192").strip()
-    try:
-        model_len = int(raw)
-    except ValueError:
-        model_len = 8192
-    explicit = os.environ.get("LLM_OLLAMA_MAX_CONTENT_TOKENS", "").strip()
-    if explicit:
-        try:
-            return max(1000, int(explicit))
-        except ValueError:
-            pass
-    return max(1000, model_len - _RESERVE_OLLAMA)
-
-
-def _get_max_excerpt_tokens() -> int:
-    """Return excerpt cap for Phase 2/3 (LLM_OLLAMA_MAX_EXCERPT_TOKENS or default)."""
-    raw = os.environ.get("LLM_OLLAMA_MAX_EXCERPT_TOKENS", "").strip()
-    if raw:
-        try:
-            return max(500, int(raw))
-        except ValueError:
-            pass
-    return _DEFAULT_OLLAMA_MAX_EXCERPT_TOKENS
+_MAX_TOKENS_PER_REPLY = 1024
 
 
 def _log(msg: str) -> None:
-    """Emit progress message to stderr with [LLM] prefix for CloudWatch visibility."""
+    """Emit progress message to stderr with [LLM] prefix."""
     print(f"[LLM] {msg}", file=sys.stderr)
-
-
-def _log_llm_call(label: str, prompt: str, response: str) -> None:
-    """Log LLM call to stderr ([LLM] prefix). Truncates unless LLM_LOG_FULL set."""
-    full = os.environ.get("LLM_LOG_FULL", "").strip().lower() in ("1", "true", "yes")
-    p = (
-        prompt
-        if full
-        else (
-            prompt
-            if len(prompt) <= _LOG_REQUEST_MAX
-            else prompt[:_LOG_REQUEST_MAX] + "..."
-        )
-    )
-    r = (
-        response
-        if full
-        else (
-            response
-            if len(response) <= _LOG_RESPONSE_MAX
-            else response[:_LOG_RESPONSE_MAX] + "..."
-        )
-    )
-    print(f"[LLM] Call: {label}", file=sys.stderr)
-    print(f"[LLM] Request: {p}", file=sys.stderr)
-    print(f"[LLM] Response: {r}", file=sys.stderr)
 
 
 def _parse_s3_uri(uri: str) -> tuple[str, str]:
@@ -112,12 +46,12 @@ def _get_backend():
     """Return generate_batch callable: mock when MOCK_LLM=1, else Ollama backend."""
     if os.environ.get("MOCK_LLM", "").strip() in ("1", "true", "yes"):
         backend = MockLLMBackend()
-        return backend.generate_batch
+        return backend.generate_batch, "mock"
     try:
         from debate_analyzer.analysis.backend_ollama import get_ollama_backend
 
         backend = get_ollama_backend(system_prompt=SYSTEM_PROMPT_RESPONSE_LANGUAGE)
-        return backend.generate_batch
+        return backend.generate_batch, "ollama"
     except ImportError as e:
         print(
             "Error: Ollama backend requires langchain-ollama. "
@@ -147,15 +81,8 @@ def _write_result_file(result: dict, path: Path) -> None:
     path.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
-def _run_one(
-    source_uri: str,
-    generate_batch,
-    max_context_tokens: int,
-    max_excerpt_tokens: int | None = None,
-    log_progress: Callable[[str], None] | None = None,
-    log_llm_call: Callable[[str, str, str], None] | None = None,
-) -> bool:
-    """Load transcript, run analysis, write result. Returns True on success."""
+def _run_one(source_uri: str, generate_batch, model_label: str) -> bool:
+    """Load transcript, run correction, write _transcription_corrected.json."""
     from debate_analyzer.api.loader import load_transcript_payload
 
     try:
@@ -164,31 +91,31 @@ def _run_one(
         print(f"Error loading {source_uri}: {e}", file=sys.stderr)
         return False
 
-    result = run_analysis(
+    result = run_correction(
         payload,
         generate_batch,
-        max_context_tokens=max_context_tokens,
-        max_excerpt_tokens=max_excerpt_tokens,
-        log_progress=log_progress,
-        log_llm_call=log_llm_call,
+        max_tokens_per_reply=_MAX_TOKENS_PER_REPLY,
+        postprocess_model_label=model_label,
     )
 
     if source_uri.startswith("s3://"):
         bucket, key = _parse_s3_uri(source_uri)
         if "_transcription.json" in key:
-            out_key = key.replace("_transcription.json", "_llm_analysis.json")
+            out_key = key.replace(
+                "_transcription.json", "_transcription_corrected.json"
+            )
         else:
-            out_key = key.rstrip("/") + "_llm_analysis.json"
+            out_key = key.rstrip("/") + "_transcription_corrected.json"
         _write_result_s3(result, bucket, out_key)
         print(f"Wrote s3://{bucket}/{out_key}")
     else:
         path = Path(source_uri.replace("file://", ""))
         if "_transcription.json" in path.name:
             out_path = path.parent / path.name.replace(
-                "_transcription.json", "_llm_analysis.json"
+                "_transcription.json", "_transcription_corrected.json"
             )
         else:
-            out_path = path.parent / (path.stem + "_llm_analysis.json")
+            out_path = path.parent / (path.stem + "_transcription_corrected.json")
         _write_result_file(result, out_path)
         print(f"Wrote {out_path}")
 
@@ -197,48 +124,37 @@ def _run_one(
 
 def run(prefix_or_uri: str) -> int:
     """
-    Run LLM analysis on one transcript (URI) or all under a prefix (S3 only).
+    Run post-processing on one transcript (URI) or all under a prefix (S3 only).
 
     Args:
         prefix_or_uri: TRANSCRIPT_S3_URI (single file) or TRANSCRIPTS_S3_PREFIX.
 
     Returns:
-        Number of _llm_analysis.json files written.
+        Number of _transcription_corrected.json files written.
     """
     job_start = time.perf_counter()
     s = prefix_or_uri.strip()
 
-    # Single file: URI or path that points to a transcript JSON
     if "_transcription.json" in s:
-        max_context_tokens = _get_max_context_tokens()
-        max_excerpt_tokens = _get_max_excerpt_tokens()
         _log(f"Processing single file: {s}")
-        _log("Loading model (this may take a few minutes)...")
+        _log("Loading model...")
         t0 = time.perf_counter()
-        generate_batch = _get_backend()
+        generate_batch, model_label = _get_backend()
         _log(f"Model ready in {time.perf_counter() - t0:.1f}s.")
-        _log(f"Processing transcript: {s}")
-        ok = _run_one(
-            s,
-            generate_batch,
-            max_context_tokens,
-            max_excerpt_tokens=max_excerpt_tokens,
-            log_progress=_log,
-            log_llm_call=_log_llm_call,
-        )
+        _log(f"Correcting transcript: {s}")
+        ok = _run_one(s, generate_batch, model_label)
         if ok:
             _log("Completed transcript.")
         else:
             _log("Failed transcript.")
         elapsed = time.perf_counter() - job_start
-        n_ok, n_fail = (1 if ok else 0), (0 if ok else 1)
-        _log(f"Job finished: {n_ok} succeeded, {n_fail} failed (total {elapsed:.1f}s).")
+        _log(f"Job finished: {1 if ok else 0} succeeded (total {elapsed:.1f}s).")
         return 1 if ok else 0
 
-    # S3 prefix: list *_transcription.json
     if not s.startswith("s3://"):
         print(
-            "Error: TRANSCRIPTS_S3_PREFIX must be an S3 URI (s3://...)", file=sys.stderr
+            "Error: TRANSCRIPTS_S3_PREFIX must be an S3 URI (s3://...)",
+            file=sys.stderr,
         )
         return 0
 
@@ -259,14 +175,12 @@ def run(prefix_or_uri: str) -> int:
             uris.append(f"s3://{bucket}/{key}")
     _log(f"Found {len(uris)} transcript(s) under prefix.")
     if not uris:
-        _log("Job finished: 0 transcript(s) analyzed.")
+        _log("Job finished: 0 transcript(s) corrected.")
         return 0
 
-    max_context_tokens = _get_max_context_tokens()
-    max_excerpt_tokens = _get_max_excerpt_tokens()
-    _log("Loading model (this may take a few minutes)...")
+    _log("Loading model...")
     t0 = time.perf_counter()
-    generate_batch = _get_backend()
+    generate_batch, model_label = _get_backend()
     _log(f"Model ready in {time.perf_counter() - t0:.1f}s.")
     n = len(uris)
     succeeded = 0
@@ -274,14 +188,7 @@ def run(prefix_or_uri: str) -> int:
     for i, uri in enumerate(uris):
         short_key = uri.split("/")[-1] if "/" in uri else uri
         _log(f"Processing transcript {i + 1}/{n}: {short_key}")
-        ok = _run_one(
-            uri,
-            generate_batch,
-            max_context_tokens,
-            max_excerpt_tokens=max_excerpt_tokens,
-            log_progress=_log,
-            log_llm_call=_log_llm_call,
-        )
+        ok = _run_one(uri, generate_batch, model_label)
         if ok:
             succeeded += 1
             _log(f"Completed transcript {i + 1}/{n}.")
@@ -292,7 +199,7 @@ def run(prefix_or_uri: str) -> int:
     if failed:
         _log(f"Job finished: {succeeded} ok, {failed} failed (total {elapsed:.1f}s).")
     else:
-        _log(f"Job finished: {succeeded} transcript(s) analyzed ({elapsed:.1f}s).")
+        _log(f"Job finished: {succeeded} transcript(s) corrected ({elapsed:.1f}s).")
     return succeeded
 
 
@@ -310,7 +217,7 @@ def main() -> None:
             file=sys.stderr,
         )
         sys.exit(1)
-    print(f"Done. Wrote {n} LLM analysis file(s).")
+    print(f"Done. Wrote {n} corrected transcript file(s).")
 
 
 if __name__ == "__main__":

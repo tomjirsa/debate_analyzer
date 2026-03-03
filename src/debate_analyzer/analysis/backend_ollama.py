@@ -11,6 +11,7 @@ from debate_analyzer.analysis.backend import LLMBackend
 def get_ollama_backend(
     base_url: str | None = None,
     model: str | None = None,
+    system_prompt: str | None = None,
 ) -> LLMBackend:
     """
     Return an LLMBackend using Ollama via LangChain (HTTP; localhost or OLLAMA_HOST).
@@ -21,6 +22,8 @@ def get_ollama_backend(
     Args:
         base_url: Ollama API base URL. Default: OLLAMA_HOST or http://localhost:11434.
         model: Ollama model name. Default: OLLAMA_MODEL or LLM_MODEL_ID or qwen2.5:7b.
+        system_prompt: Optional system message (e.g. response language). Prepended to
+            each request when set.
 
     Returns:
         Object with generate() and generate_batch() (same order as input).
@@ -30,7 +33,7 @@ def get_ollama_backend(
         Exception: If Ollama is unreachable (connection refused, timeout).
     """
     try:
-        from langchain_core.messages import HumanMessage
+        from langchain_core.messages import HumanMessage, SystemMessage
         from langchain_ollama import ChatOllama
     except ImportError as e:
         raise ImportError(
@@ -71,8 +74,14 @@ def get_ollama_backend(
     class OllamaBackend:
         def generate(self, prompt: str, max_tokens: int = 2048) -> str:
             bound = llm
-            msg = HumanMessage(content=prompt)
-            response = bound.invoke([msg])
+            if system_prompt:
+                messages = [
+                    SystemMessage(content=system_prompt),
+                    HumanMessage(content=prompt),
+                ]
+            else:
+                messages = [HumanMessage(content=prompt)]
+            response = bound.invoke(messages)
             content = getattr(response, "content", "")
             return (content or "").strip()
 
