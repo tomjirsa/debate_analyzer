@@ -7,8 +7,16 @@ This document describes how to run **LLM analysis** on transcripts: main topics,
 - **Backend:** **Ollama** only (production). Use `MOCK_LLM=1` for tests (no model required).
 - **Model:** Ollama model name (e.g. `qwen2.5:7b` via `OLLAMA_MODEL` or `LLM_MODEL_ID`). Default context 8k; set `LLM_MAX_MODEL_LEN` as needed. On AWS Batch the job runs on the GPU queue.
 - **Input:** Transcript JSON (from S3 or local), in the same format as the transcribe job output (`transcription` list with `speaker`, `text`, `start`, `end`).
-- **Output:** JSON with `main_topics`, `topic_summaries`, `speaker_contributions`, written to S3 as `<stem>_llm_analysis.json` alongside the transcript, or imported into the DB via the admin API.
+- **Output:** JSON with `main_topics`, `topic_summaries`, `speaker_contributions`, written to S3 as `<stem>_llm_analysis.json` alongside the transcript, or imported into the DB via the admin API. Each item in `main_topics` may include `start_sec` and `end_sec` (seconds from video start) for linking to video playback; these are derived from the transcript segment timestamps that cover the topic’s conversation.
 - **Chunking:** Long transcripts (over the configured context) are split into chunks for topic extraction; topics are merged and then summarized. The job uses `LLM_MAX_MODEL_LEN` and Ollama-specific reserves so chunk and excerpt sizes fit in context. Phase 2 and Phase 3 use **topic-relevant excerpts** (keyword-based) when available.
+
+### Output schema
+
+The `*_llm_analysis.json` file (and the `result` field when imported into the DB) contains:
+
+- **`main_topics`**: List of topic objects. Each has `id`, `title`, `description`, `keywords`, and optionally **`start_sec`** and **`end_sec`** (floats, seconds from video start). Use `start_sec`/`end_sec` to seek the video to the topic’s conversation; they are omitted or `null` when the range cannot be computed.
+- **`topic_summaries`**: List of `{ "topic_id", "summary" }`.
+- **`speaker_contributions`**: List of `{ "topic_id", "speaker_id_in_transcript", "summary" }`.
 
 ### Model cache (EFS, AWS Batch)
 

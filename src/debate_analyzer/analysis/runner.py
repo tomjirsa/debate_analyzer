@@ -8,8 +8,8 @@ from typing import Any, Callable
 
 from debate_analyzer.analysis.chunking import (
     DEFAULT_MAX_CHUNK_TOKENS,
-    flatten_transcription,
-    get_topic_relevant_excerpt,
+    flatten_transcription_with_indices,
+    get_topic_relevant_excerpt_with_range,
     split_into_chunks,
     topic_keywords,
 )
@@ -195,7 +195,7 @@ def run_analysis(
     from debate_analyzer.analysis.chunking import estimate_tokens
 
     transcription = payload.get("transcription") or []
-    flat = flatten_transcription(transcription)
+    flat, line_to_segment = flatten_transcription_with_indices(transcription)
     if not flat.strip():
         return LLMAnalysisResult(
             main_topics=[],
@@ -247,11 +247,12 @@ def run_analysis(
             f"Phase 2: Summary and speaker contributions for {len(main_topics)} topics."
         )
     phase2_prompts: list[str] = []
+    topic_line_ranges: list[tuple[int, int]] = []
     for idx, topic in enumerate(main_topics):
         topic_id = topic.get("id", "")
         title = topic.get("title") or ""
         desc = topic.get("description") or ""
-        excerpt = get_topic_relevant_excerpt(
+        excerpt, start_line, end_line = get_topic_relevant_excerpt_with_range(
             flat,
             title,
             desc,
@@ -259,6 +260,7 @@ def run_analysis(
             token_counter=count,
             fallback_offset_index=idx,
         )
+        topic_line_ranges.append((start_line, end_line))
         phase2_prompts.append(
             build_topic_summary_and_contributions_prompt(topic_id, title, desc, excerpt)
         )
@@ -300,6 +302,28 @@ def run_analysis(
                 )
 
     speaker_contributions = _aggregate_speaker_contributions(speaker_contributions)
+
+    # Attach start_sec / end_sec to each topic for video linking
+    for topic, (start_line, end_line) in zip(main_topics, topic_line_ranges):
+        if (
+            end_line < start_line
+            or not line_to_segment
+            or start_line >= len(line_to_segment)
+        ):
+            topic["start_sec"] = None
+            topic["end_sec"] = None
+            continue
+        seg_start_idx = line_to_segment[start_line]
+        seg_end_idx = line_to_segment[min(end_line, len(line_to_segment) - 1)]
+        if seg_start_idx >= len(transcription) or seg_end_idx >= len(transcription):
+            topic["start_sec"] = None
+            topic["end_sec"] = None
+            continue
+        seg_start = transcription[seg_start_idx]
+        seg_end = transcription[seg_end_idx]
+        topic["start_sec"] = seg_start.get("start")
+        topic["end_sec"] = seg_end.get("end")
+
     return LLMAnalysisResult(
         main_topics=main_topics,
         topic_summaries=topic_summaries,

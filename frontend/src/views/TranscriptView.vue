@@ -40,6 +40,62 @@
         </template>
       </Card>
 
+      <Card
+        v-if="llmAnalysis && llmAnalysis.main_topics && llmAnalysis.main_topics.length"
+        class="mb-4"
+      >
+        <template #title>Discussion topics</template>
+        <template #content>
+          <Accordion :multiple="true">
+            <AccordionPanel
+              v-for="topic in llmAnalysis.main_topics"
+              :key="topic.id"
+              :value="topic.id"
+            >
+              <AccordionHeader>
+                <span class="topic-header-title">{{ topic.title }}</span>
+                <span
+                  v-if="topic.start_sec != null && topic.end_sec != null"
+                  class="topic-header-time"
+                >
+                  {{ formatTimestampRange(topic.start_sec, topic.end_sec) }}
+                </span>
+              </AccordionHeader>
+              <AccordionContent>
+                <p v-if="topic.description" class="topic-description">
+                  {{ topic.description }}
+                </p>
+                <div
+                  v-if="topicSummaryFor(topic.id)"
+                  class="topic-summary-block"
+                >
+                  <strong>Summary</strong>
+                  <p class="topic-summary-text">{{ topicSummaryFor(topic.id) }}</p>
+                </div>
+                <div
+                  v-if="contributionsForTopic(topic.id).length"
+                  class="topic-contributions"
+                >
+                  <strong>By speaker</strong>
+                  <ul class="contributions-list">
+                    <li
+                      v-for="c in contributionsForTopic(topic.id)"
+                      :key="c.speaker_id_in_transcript"
+                      class="contribution-item"
+                    >
+                      <span class="contribution-speaker">{{
+                        speakerDisplayName(c.speaker_id_in_transcript)
+                      }}:</span>
+                      {{ c.summary }}
+                    </li>
+                  </ul>
+                </div>
+              </AccordionContent>
+            </AccordionPanel>
+          </Accordion>
+        </template>
+      </Card>
+
       <Card v-if="speakerStats && speakerStats.length" class="by-speaker">
         <template #title>By speaker</template>
         <template #content>
@@ -119,6 +175,10 @@
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
+import Accordion from 'primevue/accordion'
+import AccordionContent from 'primevue/accordioncontent'
+import AccordionHeader from 'primevue/accordionheader'
+import AccordionPanel from 'primevue/accordionpanel'
 import Breadcrumb from 'primevue/breadcrumb'
 import Card from 'primevue/card'
 import Column from 'primevue/column'
@@ -126,7 +186,7 @@ import DataTable from 'primevue/datatable'
 import Message from 'primevue/message'
 import Select from 'primevue/select'
 import StatBarChart from '../components/StatBarChart.vue'
-import { formatDuration } from '../utils/format.js'
+import { formatDuration, secondsToHhMmSs } from '../utils/format.js'
 
 const route = useRoute()
 const groupIdOrSlug = computed(() => route.params.groupId)
@@ -134,9 +194,43 @@ const transcriptId = computed(() => route.params.transcriptId)
 
 const transcript = ref(null)
 const speakerStats = ref([])
+const llmAnalysis = ref(null)
 const groupName = ref('')
 const error = ref('')
 const chartStatKey = ref('share_speaking_time')
+
+/** Map speaker_id_in_transcript -> speaker_display_name for contribution labels. */
+const speakerDisplayNameMap = computed(() => {
+  const map = {}
+  for (const row of speakerStats.value || []) {
+    const id = row.speaker_id_in_transcript
+    if (id != null && id !== '') {
+      map[id] = row.speaker_display_name || id
+    }
+  }
+  return map
+})
+
+function speakerDisplayName(speakerId) {
+  if (speakerId == null || speakerId === '') return '—'
+  return speakerDisplayNameMap.value[speakerId] ?? speakerId
+}
+
+function topicSummaryFor(topicId) {
+  const list = llmAnalysis.value?.topic_summaries || []
+  const item = list.find((s) => s.topic_id === topicId)
+  return item?.summary ?? ''
+}
+
+function contributionsForTopic(topicId) {
+  const list = llmAnalysis.value?.speaker_contributions || []
+  return list.filter((c) => c.topic_id === topicId)
+}
+
+function formatTimestampRange(startSec, endSec) {
+  if (startSec == null || endSec == null) return ''
+  return `${secondsToHhMmSs(startSec)} – ${secondsToHhMmSs(endSec)}`
+}
 
 const chartMetricOptions = [
   { label: 'Share of speaking time', value: 'share_speaking_time' },
@@ -254,10 +348,12 @@ async function load() {
     const data = await res.json()
     transcript.value = data.transcript
     speakerStats.value = data.speaker_stats || []
+    llmAnalysis.value = data.llm_analysis || null
   } catch (e) {
     error.value = e.message
     transcript.value = null
     speakerStats.value = []
+    llmAnalysis.value = null
   }
 }
 
@@ -309,4 +405,33 @@ watch([groupIdOrSlug, transcriptId], load)
 .chart-label { font-size: 0.9rem; }
 .chart-select { min-width: 200px; }
 .speaker-stats-table { margin-top: 1rem; }
+
+.topic-header-title { margin-right: 0.5rem; }
+.topic-header-time {
+  font-size: 0.85rem;
+  color: var(--p-text-muted-color, #6b7280);
+  font-weight: 400;
+}
+.topic-description {
+  margin: 0 0 1rem;
+  color: var(--p-text-color-secondary, #4b5563);
+  font-size: 0.95rem;
+}
+.topic-summary-block { margin-bottom: 1rem; }
+.topic-summary-block strong { display: block; margin-bottom: 0.25rem; }
+.topic-summary-text { margin: 0; font-size: 0.95rem; line-height: 1.5; }
+.topic-contributions strong { display: block; margin-bottom: 0.25rem; }
+.contributions-list {
+  margin: 0;
+  padding-left: 1.25rem;
+  list-style: disc;
+}
+.contribution-item {
+  margin-bottom: 0.5rem;
+  line-height: 1.4;
+}
+.contribution-speaker {
+  font-weight: 600;
+  margin-right: 0.25rem;
+}
 </style>

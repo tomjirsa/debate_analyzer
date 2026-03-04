@@ -173,10 +173,14 @@ def get_transcript_in_group(
             status_code=status.HTTP_404_NOT_FOUND, detail="Transcript not found"
         )
     speaker_stats = repo.get_speaker_stats_for_transcript(transcript_id)
-    return {
+    response: dict = {
         "transcript": transcript.to_dict(),
         "speaker_stats": speaker_stats,
     }
+    analysis = repo.get_latest_llm_analysis(transcript_id)
+    if analysis:
+        response["llm_analysis"] = analysis.result
+    return response
 
 
 @app.get("/api/groups/{group_id_or_slug}/speakers/{id_or_slug}")
@@ -419,6 +423,7 @@ class RegisterTranscriptRequest(BaseModel):
     group_id: str | None = None
     description: str | None = None
     debate_date: date | None = None
+    llm_model_name: str | None = None
 
 
 @app.post("/api/admin/transcripts/register")
@@ -450,6 +455,7 @@ def admin_register_transcript(
         description=body.description,
         debate_date=body.debate_date,
     )
+    llm_import_warning: str | None = None
     if "_transcription.json" in body.source_uri:
         parquet_uri = body.source_uri.replace(
             "_transcription.json", "_speaker_stats.parquet"
@@ -462,7 +468,38 @@ def admin_register_transcript(
             updated = repo.update_transcript_stats(transcript.id, **stats)
             if updated:
                 transcript = updated
-    return transcript.to_dict()
+
+        analysis_uri = body.source_uri.replace(
+            "_transcription.json", "_llm_analysis.json"
+        )
+        try:
+            analysis_payload = load_transcript_payload(analysis_uri)
+        except FileNotFoundError:
+            llm_import_warning = "LLM analysis not imported: analysis file not found"
+        except ValueError:
+            llm_import_warning = "LLM analysis not imported: invalid analysis JSON"
+        else:
+            result = (
+                analysis_payload.get("result", analysis_payload)
+                if isinstance(analysis_payload.get("result"), dict)
+                else analysis_payload
+            )
+            if not isinstance(result, dict) or "main_topics" not in result:
+                llm_import_warning = (
+                    "LLM analysis not imported: analysis missing main_topics"
+                )
+            else:
+                repo.create_llm_analysis(
+                    transcript_id=transcript.id,
+                    model_name=body.llm_model_name or "batch",
+                    result=result,
+                    source="batch",
+                )
+
+    response: dict = {"transcript": transcript.to_dict()}
+    if llm_import_warning is not None:
+        response["warning"] = llm_import_warning
+    return response
 
 
 class UpdateTranscriptRequest(BaseModel):

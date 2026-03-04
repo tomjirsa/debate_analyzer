@@ -104,7 +104,10 @@ def _run_one(source_uri: str, generate_batch, model_label: str) -> bool:
         if "_transcription_raw.json" in key:
             out_key = key.replace("_transcription_raw.json", "_transcription.json")
         else:
-            out_key = key.rstrip("/").removesuffix("_transcription_raw") + "_transcription.json"
+            out_key = (
+                key.rstrip("/").removesuffix("_transcription_raw")
+                + "_transcription.json"
+            )
         _write_result_s3(result, bucket, out_key)
         print(f"Wrote s3://{bucket}/{out_key}")
     else:

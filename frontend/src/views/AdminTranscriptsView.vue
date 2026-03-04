@@ -39,6 +39,7 @@
             </div>
             <Button label="Register" :loading="registering" :disabled="registering" @click="register" />
             <Message v-if="registerErr" severity="error">{{ registerErr }}</Message>
+            <Message v-else-if="registerWarning" severity="warn">{{ registerWarning }}</Message>
           </div>
         </template>
       </Card>
@@ -135,6 +136,7 @@ const title = ref('')
 const description = ref('')
 const debateDate = ref('')
 const registerErr = ref('')
+const registerWarning = ref('')
 const registering = ref(false)
 
 const editingId = ref(null)
@@ -196,6 +198,7 @@ function loadTranscripts() {
 
 function register() {
   registerErr.value = ''
+  registerWarning.value = ''
   if (!sourceUri.value.trim()) {
     registerErr.value = 'Enter source URI or path.'
     return
@@ -229,6 +232,7 @@ function register() {
         title.value = ''
         description.value = ''
         debateDate.value = ''
+        registerWarning.value = data.warning || ''
         loadTranscripts()
       }
     })

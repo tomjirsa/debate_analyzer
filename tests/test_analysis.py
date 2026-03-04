@@ -4,7 +4,9 @@ from debate_analyzer.analysis.backend import MockLLMBackend
 from debate_analyzer.analysis.chunking import (
     estimate_tokens,
     flatten_transcription,
+    flatten_transcription_with_indices,
     get_topic_relevant_excerpt,
+    get_topic_relevant_excerpt_with_range,
     split_into_chunks,
     topic_keywords,
     truncate_to_tokens,
@@ -34,6 +36,70 @@ def test_flatten_transcription_multiple():
         {"speaker": "SPEAKER_01", "text": "Second."},
     ]
     assert flatten_transcription(t) == "SPEAKER_00: First.\nSPEAKER_01: Second."
+
+
+def test_flatten_transcription_with_indices_empty():
+    """Empty transcription yields empty string and empty line_to_segment."""
+    flat, line_to_segment = flatten_transcription_with_indices([])
+    assert flat == ""
+    assert line_to_segment == []
+
+
+def test_flatten_transcription_with_indices_skips_empty_text():
+    """Segments with empty text are omitted; line_to_segment maps to segment index."""
+    t = [
+        {"speaker": "SPEAKER_00", "text": "First."},
+        {"speaker": "SPEAKER_01", "text": ""},
+        {"speaker": "SPEAKER_02", "text": "Third."},
+    ]
+    flat, line_to_segment = flatten_transcription_with_indices(t)
+    assert flat == "SPEAKER_00: First.\nSPEAKER_02: Third."
+    assert line_to_segment == [0, 2]
+
+
+def test_flatten_transcription_with_indices_all_non_empty():
+    """When all segments have text, line index equals segment index."""
+    t = [
+        {"speaker": "SPEAKER_00", "text": "A"},
+        {"speaker": "SPEAKER_01", "text": "B"},
+    ]
+    flat, line_to_segment = flatten_transcription_with_indices(t)
+    assert line_to_segment == [0, 1]
+
+
+def test_get_topic_relevant_excerpt_with_range_keyword_match():
+    """Excerpt with range returns (excerpt, start_line, end_line) after truncation."""
+    lines = [f"SPEAKER_00: Preamble {i}." for i in range(20)]
+    lines.append("SPEAKER_01: UniqueWordXYZ here.")
+    lines.extend([f"SPEAKER_00: Suffix {i}." for i in range(20)])
+    flat = "\n".join(lines)
+    excerpt, start, end = get_topic_relevant_excerpt_with_range(
+        flat,
+        topic_title="UniqueWordXYZ",
+        topic_description="",
+        max_tokens=500,
+    )
+    assert "UniqueWordXYZ" in excerpt
+    assert start >= 0
+    assert end >= start
+    excerpt_line_count = len(excerpt.split("\n"))
+    assert end == start + excerpt_line_count - 1
+
+
+def test_get_topic_relevant_excerpt_with_range_fallback():
+    """Fallback returns range for staggered slice; end reflects truncated lines."""
+    lines = [f"SPEAKER_00: Line {i}." for i in range(100)]
+    flat = "\n".join(lines)
+    excerpt, start, end = get_topic_relevant_excerpt_with_range(
+        flat,
+        topic_title="NonexistentTopic123",
+        topic_description="",
+        max_tokens=20,
+        fallback_offset_index=2,
+    )
+    assert start == min(2 * 50, 99)  # window_lines=50
+    assert end >= start
+    assert len(excerpt.split("\n")) == end - start + 1
 
 
 def test_estimate_tokens():
@@ -116,6 +182,59 @@ def test_run_analysis_mock_backend():
         assert isinstance(topic["keywords"], list)
         assert all(isinstance(s, str) for s in topic["keywords"])
     assert backend.call_count >= 1
+
+
+def test_run_analysis_adds_start_sec_end_sec_to_topics():
+    """When transcription has start/end, each topic gets start_sec and end_sec."""
+    backend = MockLLMBackend()
+    payload = {
+        "transcription": [
+            {"speaker": "SPEAKER_00", "text": "Topic one.", "start": 10.0, "end": 15.0},
+            {"speaker": "SPEAKER_01", "text": "Topic two.", "start": 16.0, "end": 22.0},
+        ]
+    }
+    result = run_analysis(payload, backend.generate_batch)
+    assert len(result["main_topics"]) >= 1
+    for topic in result["main_topics"]:
+        assert "start_sec" in topic
+        assert "end_sec" in topic
+        assert (
+            isinstance(topic["start_sec"], (int, float)) or topic["start_sec"] is None
+        )
+        assert isinstance(topic["end_sec"], (int, float)) or topic["end_sec"] is None
+        if topic["start_sec"] is not None and topic["end_sec"] is not None:
+            assert topic["start_sec"] <= topic["end_sec"]
+
+
+def test_run_analysis_empty_transcription_no_topics():
+    """Empty transcription yields no topics and no timestamp fields to add."""
+    backend = MockLLMBackend()
+    result = run_analysis({"transcription": []}, backend.generate_batch)
+    assert result["main_topics"] == []
+    assert result["topic_summaries"] == []
+    assert result["speaker_contributions"] == []
+
+
+def test_run_analysis_single_segment_topic_timestamps():
+    """Single-segment transcript yields one topic with start_sec and end_sec."""
+    backend = MockLLMBackend()
+    payload = {
+        "transcription": [
+            {
+                "speaker": "SPEAKER_00",
+                "text": "Single topic discussed here.",
+                "start": 100.5,
+                "end": 105.5,
+            }
+        ]
+    }
+    result = run_analysis(payload, backend.generate_batch)
+    assert len(result["main_topics"]) >= 1
+    topic = result["main_topics"][0]
+    assert topic.get("start_sec") is not None
+    assert topic.get("end_sec") is not None
+    assert topic["start_sec"] == 100.5
+    assert topic["end_sec"] == 105.5
 
 
 def test_run_analysis_respects_max_context_tokens():

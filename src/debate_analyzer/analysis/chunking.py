@@ -24,13 +24,35 @@ def flatten_transcription(transcription: list[dict[str, Any]]) -> str:
     Returns:
         Single string, one "SPEAKER_XX: text" per segment.
     """
+    flat, _ = flatten_transcription_with_indices(transcription)
+    return flat
+
+
+def flatten_transcription_with_indices(
+    transcription: list[dict[str, Any]],
+) -> tuple[str, list[int]]:
+    """
+    Convert transcript segments to flattened text and map line index to segment index.
+
+    Only segments with non-empty text get a line. line_to_segment[i] is the
+    segment index (in transcription) for line i in the flattened string.
+
+    Args:
+        transcription: List of segment dicts with "speaker" and "text" keys.
+
+    Returns:
+        Tuple of (flat_string, line_to_segment). line_to_segment has length
+        equal to the number of lines in flat_string.
+    """
     lines: list[str] = []
-    for seg in transcription:
+    line_to_segment: list[int] = []
+    for idx, seg in enumerate(transcription):
         speaker = seg.get("speaker") or "SPEAKER_UNKNOWN"
         text = (seg.get("text") or "").strip()
         if text:
             lines.append(f"{speaker}: {text}")
-    return "\n".join(lines)
+            line_to_segment.append(idx)
+    return "\n".join(lines), line_to_segment
 
 
 def estimate_tokens(text: str) -> int:
@@ -159,7 +181,7 @@ def topic_keywords(title: str, description: str) -> list[str]:
 
 
 def _line_matches_topic(line: str, keywords: set[str]) -> bool:
-    """True if any keyword matches a word in the line (prefix match for Czech morphology).
+    """True if any keyword matches a word (prefix match for Czech morphology).
 
     Uses word-level prefix matching so e.g. 'rozpočet' matches 'rozpočtu',
     'cyklosteska' matches 'cyklostezka'. Avoids needing a stemmer.
@@ -210,14 +232,62 @@ def get_topic_relevant_excerpt(
     Returns:
         Excerpt string (truncated to max_tokens).
     """
+    excerpt, _, _ = get_topic_relevant_excerpt_with_range(
+        flat_transcript,
+        topic_title,
+        topic_description,
+        max_tokens,
+        token_counter=token_counter,
+        window_lines=window_lines,
+        fallback_offset_index=fallback_offset_index,
+    )
+    return excerpt
+
+
+def get_topic_relevant_excerpt_with_range(
+    flat_transcript: str,
+    topic_title: str,
+    topic_description: str,
+    max_tokens: int,
+    token_counter: Callable[[str], int] | None = None,
+    window_lines: int = DEFAULT_EXCERPT_WINDOW_LINES,
+    fallback_offset_index: int | None = None,
+) -> tuple[str, int, int]:
+    """
+    Build a topic-relevant excerpt and return its line range in the flat transcript.
+
+    Same logic as get_topic_relevant_excerpt, but also returns start and end
+    line indices (0-based, end inclusive) that form the excerpt after truncation.
+    Used to map topic conversation to segment timestamps (start_sec, end_sec).
+
+    Args:
+        flat_transcript: Flattened transcript (one "SPEAKER_XX: text" per line).
+        topic_title: Topic title.
+        topic_description: Optional topic description.
+        max_tokens: Maximum tokens for the excerpt.
+        token_counter: Function that returns token count; if None, uses estimate_tokens.
+        window_lines: Lines to include before/after each matching line.
+        fallback_offset_index: When no keyword match, staggered slice offset.
+
+    Returns:
+        Tuple (excerpt_str, start_line_idx, end_line_idx_inclusive). If no lines,
+        returns ("", 0, -1); runner should treat end < start as no range.
+    """
     count = token_counter or estimate_tokens
     lines = flat_transcript.split("\n")
+    n_lines = len(lines)
     if not lines or max_tokens <= 0:
-        return truncate_to_tokens(flat_transcript, max_tokens, token_counter=count)
+        out = truncate_to_tokens(flat_transcript, max_tokens, token_counter=count)
+        num_kept = len(out.split("\n")) if out else 0
+        end_inclusive = num_kept - 1 if num_kept else -1
+        return (out, 0, end_inclusive)
 
     keywords = _topic_keywords(topic_title, topic_description)
     if not keywords:
-        return truncate_to_tokens(flat_transcript, max_tokens, token_counter=count)
+        out = truncate_to_tokens(flat_transcript, max_tokens, token_counter=count)
+        num_kept = len(out.split("\n")) if out else 0
+        end_inclusive = num_kept - 1 if num_kept else -1
+        return (out, 0, end_inclusive)
 
     matching_indices: list[int] = []
     for i, line in enumerate(lines):
@@ -228,15 +298,28 @@ def get_topic_relevant_excerpt(
         if fallback_offset_index is not None:
             start_line = min(
                 fallback_offset_index * window_lines,
-                max(0, len(lines) - 1),
+                max(0, n_lines - 1),
             )
             excerpt_lines = lines[start_line:]
             excerpt = "\n".join(excerpt_lines)
-            return truncate_to_tokens(excerpt, max_tokens, token_counter=count)
-        return truncate_to_tokens(flat_transcript, max_tokens, token_counter=count)
+            out = truncate_to_tokens(excerpt, max_tokens, token_counter=count)
+            num_kept = len(out.split("\n")) if out else 0
+            end_inclusive = (
+                min(start_line + num_kept - 1, n_lines - 1)
+                if num_kept
+                else start_line - 1
+            )
+            return (out, start_line, end_inclusive)
+        out = truncate_to_tokens(flat_transcript, max_tokens, token_counter=count)
+        num_kept = len(out.split("\n")) if out else 0
+        end_inclusive = num_kept - 1 if num_kept else -1
+        return (out, 0, end_inclusive)
 
     lo = max(0, min(matching_indices) - window_lines)
-    hi = min(len(lines), max(matching_indices) + 1 + window_lines)
+    hi = min(n_lines, max(matching_indices) + 1 + window_lines)
     excerpt_lines = lines[lo:hi]
     excerpt = "\n".join(excerpt_lines)
-    return truncate_to_tokens(excerpt, max_tokens, token_counter=count)
+    out = truncate_to_tokens(excerpt, max_tokens, token_counter=count)
+    num_kept = len(out.split("\n")) if out else 0
+    end_inclusive = min(lo + num_kept - 1, hi - 1) if num_kept else lo - 1
+    return (out, lo, end_inclusive)
