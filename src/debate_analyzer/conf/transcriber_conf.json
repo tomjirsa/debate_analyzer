@@ -1,7 +1,7 @@
 {
   "description": "Transcription and speaker diarization settings",
   "whisper": {
-    "model_size": "medium",
+    "model_size": "large-v3",
     "device": "auto",
     "compute_type": "float16",
     "language": "cs",
