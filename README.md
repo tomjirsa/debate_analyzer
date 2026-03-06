@@ -256,7 +256,7 @@ debate_analyzer/
 
 ## Documentation
 
-For detailed documentation, see the [doc](./doc) folder:
+For detailed documentations, see the [doc](./doc) folder:
 
 - [Architecture](./doc/ARCHITECTURE.md) — System architecture and design
 - [AWS deployment architecture](./doc/ARCHITECTURE_AWS.md) — AWS Batch and Web app stacks
