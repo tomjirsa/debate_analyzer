@@ -25,7 +25,7 @@ def run_analysis(
     lists are always empty. generate_batch is not called.
 
     Args:
-        payload: Transcript dict (optional: may contain "transcription" key).
+        payload:  Transcript dict (optional: may contain "transcription" key).
         generate_batch: Backend callable; unused.
         max_context_tokens: Unused.
         max_excerpt_tokens: Unused.
