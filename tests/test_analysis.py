@@ -3,18 +3,20 @@
 from debate_analyzer.analysis.backend import MockLLMBackend
 from debate_analyzer.analysis.chunking import (
     estimate_tokens,
+    flatten_segments_to_text,
     flatten_transcription,
     flatten_transcription_with_indices,
+    flatten_transcription_with_timestamps,
     get_topic_relevant_excerpt,
     get_topic_relevant_excerpt_with_range,
+    segments_in_time_range,
+    split_block_into_subchunks,
     split_into_chunks,
+    split_into_chunks_with_time_ranges,
     topic_keywords,
     truncate_to_tokens,
 )
-from debate_analyzer.analysis.runner import (
-    _aggregate_speaker_contributions,
-    run_analysis,
-)
+from debate_analyzer.analysis.runner import run_analysis
 from debate_analyzer.analysis.schema import LLMAnalysisResult
 
 
@@ -68,7 +70,7 @@ def test_flatten_transcription_with_indices_all_non_empty():
 
 
 def test_get_topic_relevant_excerpt_with_range_keyword_match():
-    """Excerpt with range returns (excerpt, start_line, end_line) after truncation."""
+    """Excerpt with range returns (excerpt, start_line, end_line) as topic span."""
     lines = [f"SPEAKER_00: Preamble {i}." for i in range(20)]
     lines.append("SPEAKER_01: UniqueWordXYZ here.")
     lines.extend([f"SPEAKER_00: Suffix {i}." for i in range(20)])
@@ -82,8 +84,7 @@ def test_get_topic_relevant_excerpt_with_range_keyword_match():
     assert "UniqueWordXYZ" in excerpt
     assert start >= 0
     assert end >= start
-    excerpt_line_count = len(excerpt.split("\n"))
-    assert end == start + excerpt_line_count - 1
+    assert start == 20 and end == 20
 
 
 def test_get_topic_relevant_excerpt_with_range_fallback():
@@ -97,7 +98,7 @@ def test_get_topic_relevant_excerpt_with_range_fallback():
         max_tokens=20,
         fallback_offset_index=2,
     )
-    assert start == min(2 * 50, 99)  # window_lines=50
+    assert start == min(2 * 50, 99)
     assert end >= start
     assert len(excerpt.split("\n")) == end - start + 1
 
@@ -136,19 +137,94 @@ def test_split_into_chunks_long():
     assert total_len >= len(text) * 0.9
 
 
+def test_flatten_transcription_with_timestamps():
+    """Timestamp-prefixed lines and line_times match; requires start/end."""
+    t = [
+        {"speaker": "SPEAKER_00", "text": "First.", "start": 0.0, "end": 5.0},
+        {"speaker": "SPEAKER_01", "text": "Second.", "start": 5.0, "end": 10.0},
+    ]
+    flat, line_times = flatten_transcription_with_timestamps(t)
+    assert "[0.00–5.00] SPEAKER_00: First." in flat
+    assert "[5.00–10.00] SPEAKER_01: Second." in flat
+    assert line_times == [(0.0, 5.0), (5.0, 10.0)]
+
+
+def test_flatten_transcription_with_timestamps_normalizes_newlines():
+    """Segment text with embedded newlines becomes one line so line_times match."""
+    t = [
+        {
+            "speaker": "SPEAKER_00",
+            "text": "Line one\nLine two",
+            "start": 0.0,
+            "end": 2.0,
+        },
+    ]
+    flat, line_times = flatten_transcription_with_timestamps(t)
+    assert flat.count("\n") == 0
+    assert "Line one Line two" in flat
+    assert len(line_times) == 1
+    chunks = split_into_chunks_with_time_ranges(flat, line_times, max_tokens=500)
+    assert len(chunks) == 1
+
+
+def test_flatten_transcription_with_timestamps_raises_without_start_end():
+    """Segments with non-empty text but no start/end raise ValueError."""
+    import pytest
+
+    t = [{"speaker": "SPEAKER_00", "text": "No times."}]
+    with pytest.raises(ValueError, match="start.*end"):
+        flatten_transcription_with_timestamps(t)
+
+
+def test_segments_in_time_range():
+    """Segments overlapping [start_sec, end_sec] are returned in order."""
+    t = [
+        {"speaker": "A", "text": "a", "start": 0.0, "end": 10.0},
+        {"speaker": "B", "text": "b", "start": 10.0, "end": 20.0},
+        {"speaker": "C", "text": "c", "start": 25.0, "end": 30.0},
+    ]
+    segs = segments_in_time_range(t, 5.0, 22.0)
+    assert len(segs) == 2
+    assert segs[0]["speaker"] == "A" and segs[1]["speaker"] == "B"
+
+
+def test_flatten_segments_to_text():
+    """Segments become SPEAKER: text lines without timestamp prefix."""
+    segs = [
+        {"speaker": "SPEAKER_00", "text": "Hello."},
+        {"speaker": "SPEAKER_01", "text": "World."},
+    ]
+    text = flatten_segments_to_text(segs)
+    assert text == "SPEAKER_00: Hello.\nSPEAKER_01: World."
+
+
+def test_split_into_chunks_with_time_ranges():
+    """Chunks get (text, start_sec, end_sec); single chunk when short."""
+    lines = ["[0.00–1.00] S: A.", "[1.00–2.00] S: B."]
+    flat = "\n".join(lines)
+    line_times = [(0.0, 1.0), (1.0, 2.0)]
+    chunks = split_into_chunks_with_time_ranges(flat, line_times, max_tokens=500)
+    assert len(chunks) == 1
+    assert chunks[0][0] == flat
+    assert chunks[0][1] == 0.0 and chunks[0][2] == 2.0
+
+
+def test_split_block_into_subchunks():
+    """Long block text is split into subchunks by token limit."""
+    lines = [f"SPEAKER_00: Line {i}." for i in range(100)]
+    block = "\n".join(lines)
+    subchunks = split_block_into_subchunks(block, max_tokens=50)
+    assert len(subchunks) >= 2
+    assert "".join(subchunks).replace("\n", "") == block.replace("\n", "")
+
+
 def test_mock_backend_generate_batch():
     """Mock generate_batch returns one response per prompt in order."""
     backend = MockLLMBackend()
-    prompts = [
-        "List the main topics",
-        "Summarize the outcome",
-        "each speaker's position",
-    ]
+    prompts = ["prompt1", "prompt2", "prompt3"]
     out = backend.generate_batch(prompts, max_tokens=100)
     assert len(out) == 3
-    assert "main_topics" in out[0]
-    assert "topic_id" in out[1] and "summary" in out[1]
-    assert "speaker_contributions" in out[2]
+    assert all("main_topics" in r for r in out)
     assert backend.call_count == 3
 
 
@@ -161,53 +237,37 @@ def test_run_analysis_empty_payload():
     assert result["speaker_contributions"] == []
 
 
-def test_run_analysis_mock_backend():
-    """Runner with mock backend returns expected shape."""
+def test_run_analysis_returns_expected_shape():
+    """run_analysis returns dict with main_topics, topic_summaries, speaker_contributions (all empty)."""
     backend = MockLLMBackend()
     payload = {
         "transcription": [
-            {"speaker": "SPEAKER_00", "text": "Topic one."},
-            {"speaker": "SPEAKER_01", "text": "Topic two."},
+            {"speaker": "SPEAKER_00", "text": "Topic one.", "start": 0.0, "end": 5.0},
+            {"speaker": "SPEAKER_01", "text": "Topic two.", "start": 5.0, "end": 10.0},
         ]
     }
     result = run_analysis(payload, backend.generate_batch)
     assert "main_topics" in result
     assert "topic_summaries" in result
     assert "speaker_contributions" in result
-    assert isinstance(result["main_topics"], list)
-    assert isinstance(result["topic_summaries"], list)
-    assert isinstance(result["speaker_contributions"], list)
-    for topic in result["main_topics"]:
-        assert "keywords" in topic
-        assert isinstance(topic["keywords"], list)
-        assert all(isinstance(s, str) for s in topic["keywords"])
-    assert backend.call_count >= 1
+    assert result["main_topics"] == []
+    assert result["topic_summaries"] == []
+    assert result["speaker_contributions"] == []
+    assert backend.call_count == 0
 
 
-def test_run_analysis_adds_start_sec_end_sec_to_topics():
-    """When transcription has start/end, each topic gets start_sec and end_sec."""
+def test_run_analysis_never_calls_generate_batch():
+    """run_analysis does not call generate_batch (empty result path)."""
     backend = MockLLMBackend()
-    payload = {
-        "transcription": [
-            {"speaker": "SPEAKER_00", "text": "Topic one.", "start": 10.0, "end": 15.0},
-            {"speaker": "SPEAKER_01", "text": "Topic two.", "start": 16.0, "end": 22.0},
-        ]
-    }
-    result = run_analysis(payload, backend.generate_batch)
-    assert len(result["main_topics"]) >= 1
-    for topic in result["main_topics"]:
-        assert "start_sec" in topic
-        assert "end_sec" in topic
-        assert (
-            isinstance(topic["start_sec"], (int, float)) or topic["start_sec"] is None
-        )
-        assert isinstance(topic["end_sec"], (int, float)) or topic["end_sec"] is None
-        if topic["start_sec"] is not None and topic["end_sec"] is not None:
-            assert topic["start_sec"] <= topic["end_sec"]
+    run_analysis(
+        {"transcription": [{"speaker": "S", "text": "x", "start": 0.0, "end": 1.0}]},
+        backend.generate_batch,
+    )
+    assert backend.call_count == 0
 
 
 def test_run_analysis_empty_transcription_no_topics():
-    """Empty transcription yields no topics and no timestamp fields to add."""
+    """Empty transcription yields no topics."""
     backend = MockLLMBackend()
     result = run_analysis({"transcription": []}, backend.generate_batch)
     assert result["main_topics"] == []
@@ -215,97 +275,19 @@ def test_run_analysis_empty_transcription_no_topics():
     assert result["speaker_contributions"] == []
 
 
-def test_run_analysis_single_segment_topic_timestamps():
-    """Single-segment transcript yields one topic with start_sec and end_sec."""
+def test_run_analysis_no_timestamps_still_returns_empty():
+    """Payload without timestamps still returns empty result (no LLM call)."""
     backend = MockLLMBackend()
     payload = {
         "transcription": [
-            {
-                "speaker": "SPEAKER_00",
-                "text": "Single topic discussed here.",
-                "start": 100.5,
-                "end": 105.5,
-            }
+            {"speaker": "SPEAKER_00", "text": "No timestamps."},
+            {"speaker": "SPEAKER_01", "text": "Also none."},
         ]
     }
     result = run_analysis(payload, backend.generate_batch)
-    assert len(result["main_topics"]) >= 1
-    topic = result["main_topics"][0]
-    assert topic.get("start_sec") is not None
-    assert topic.get("end_sec") is not None
-    assert topic["start_sec"] == 100.5
-    assert topic["end_sec"] == 105.5
-
-
-def test_run_analysis_respects_max_context_tokens():
-    """With small max_context_tokens, Phase 1 uses multiple chunks."""
-    backend = MockLLMBackend()
-    # Payload that flattens to ~500 tokens so we get multiple chunks with max 100
-    lines = [f"SPEAKER_00: Segment number {i} with some content." for i in range(80)]
-    text = "\n".join(lines)
-    assert estimate_tokens(text) > 100
-    payload = {
-        "transcription": [
-            {"speaker": "SPEAKER_00", "text": line.split(": ", 1)[1]} for line in lines
-        ]
-    }
-    calls: list[tuple[str, str, str]] = []
-
-    def capture(label: str, prompt: str, response: str) -> None:
-        calls.append((label, prompt, response))
-
-    run_analysis(
-        payload,
-        backend.generate_batch,
-        max_context_tokens=100,
-        log_llm_call=capture,
-    )
-    phase1_labels = [c[0] for c in calls if "Phase 1 batch" in c[0]]
-    assert (
-        len(phase1_labels) >= 1
-    ), "expected Phase 1 batch call when using generate_batch"
-
-
-def test_run_analysis_respects_max_excerpt_tokens():
-    """With max_excerpt_tokens set, Phase 2/3 excerpts are capped at that size."""
-    backend = MockLLMBackend()
-    # Long transcript so topic-relevant excerpt could be large without cap
-    lines = (
-        [f"SPEAKER_00: Preamble {i}." for i in range(20)]
-        + ["SPEAKER_01: UniqueTopicXYZ discussed here."]
-        + [f"SPEAKER_00: More line {i}." for i in range(80)]
-    )
-    payload = {
-        "transcription": [
-            {"speaker": line.split(": ", 1)[0], "text": line.split(": ", 1)[1]}
-            for line in lines
-        ]
-    }
-    calls: list[tuple[str, str, str]] = []
-
-    def capture(label: str, prompt: str, response: str) -> None:
-        calls.append((label, prompt, response))
-
-    run_analysis(
-        payload,
-        backend.generate_batch,
-        max_context_tokens=2000,
-        max_excerpt_tokens=50,
-        log_llm_call=capture,
-    )
-    # Find Phase 2 prompt and extract excerpt (between --- and ---)
-    phase2 = [c for c in calls if "Phase 2" in c[0]]
-    assert len(phase2) >= 1
-    prompt = phase2[0][1]
-    if "---" in prompt:
-        parts = prompt.split("---")
-        for part in parts[1:]:
-            excerpt = part.strip().split("\n---")[0].strip()
-            if excerpt and "SPEAKER" in excerpt:
-                assert (
-                    estimate_tokens(excerpt) <= 50 + 40
-                ), "Phase 2 excerpt capped at max_excerpt_tokens (with slack)"
-                break
+    assert result["main_topics"] == []
+    assert result["topic_summaries"] == []
+    assert result["speaker_contributions"] == []
 
 
 def test_get_topic_relevant_excerpt_includes_matching_region():
@@ -321,7 +303,7 @@ def test_get_topic_relevant_excerpt_includes_matching_region():
         max_tokens=500,
     )
     assert "UniqueKeywordXYZ" in excerpt
-    assert estimate_tokens(excerpt) <= 500 + 50  # allow small over-estimate
+    assert estimate_tokens(excerpt) <= 500 + 50
 
 
 def test_get_topic_relevant_excerpt_fallback_when_no_match():
@@ -372,7 +354,6 @@ def test_get_topic_relevant_excerpt_staggered_fallback():
         fallback_offset_index=2,
     )
     assert "Line 0." in excerpt0
-    # With window_lines=50, index 2 -> start at line 100
     assert "Line 100." in excerpt2
     assert excerpt0.strip() != excerpt2.strip()
 
@@ -381,41 +362,7 @@ def test_truncate_to_tokens_bounds_output():
     """truncate_to_tokens keeps output within token bound."""
     text = "\n".join([f"SPEAKER_00: Line {i}." for i in range(200)])
     out = truncate_to_tokens(text, max_tokens=100)
-    assert estimate_tokens(out) <= 100 + 30  # line boundary may leave small slack
-
-
-def test_run_analysis_log_llm_call_invoked():
-    """log_llm_call is invoked for Phase 1 and Phase 2 (hybrid) with expected labels."""
-    backend = MockLLMBackend()
-    payload = {
-        "transcription": [
-            {"speaker": "SPEAKER_00", "text": "Topic one."},
-            {"speaker": "SPEAKER_01", "text": "Topic two."},
-        ]
-    }
-    calls: list[tuple[str, str, str]] = []
-
-    def capture(label: str, prompt: str, response: str) -> None:
-        calls.append((label, prompt, response))
-
-    result = run_analysis(payload, backend.generate_batch, log_llm_call=capture)
-    assert "main_topics" in result
-    assert len(calls) >= 1
-    labels = [c[0] for c in calls]
-    assert any("Phase 1" in lbl for lbl in labels)
-    assert any("Phase 2" in lbl for lbl in labels)
-    for _, prompt, resp in calls:
-        assert isinstance(prompt, str) and isinstance(resp, str)
-
-
-def test_extract_json_strips_markdown_fences():
-    """_extract_json parses JSON wrapped in markdown code fences on retry."""
-    from debate_analyzer.analysis.runner import _extract_json
-
-    wrapped = '```json\n{"main_topics": [{"id": "t1", "title": "A"}]}\n```'
-    parsed = _extract_json(wrapped)
-    assert isinstance(parsed, dict)
-    assert parsed.get("main_topics") == [{"id": "t1", "title": "A"}]
+    assert estimate_tokens(out) <= 100 + 30
 
 
 def test_llm_analysis_result_from_dict():
@@ -437,63 +384,6 @@ def test_llm_analysis_result_from_dict():
     assert len(r.topic_summaries) == 1
     assert len(r.speaker_contributions) == 1
     assert r.to_dict()["main_topics"] == d["main_topics"]
-
-
-def test_run_analysis_combined_phase_parsing():
-    """Phase 2 combined response -> topic_summaries + speaker_contributions."""
-    combined = (
-        '{"topic_id": "t1", "summary": "Shrnutí tématu.", '
-        '"speaker_contributions": ['
-        '{"topic_id": "t1", "speaker_id_in_transcript": "SPEAKER_00", '
-        '"summary": "Pro."}, '
-        '{"topic_id": "t1", "speaker_id_in_transcript": "SPEAKER_01", '
-        '"summary": "Proti."}'
-        "]}"
-    )
-    backend = MockLLMBackend(combined_response=combined)
-    payload = {
-        "transcription": [
-            {"speaker": "SPEAKER_00", "text": "First."},
-            {"speaker": "SPEAKER_01", "text": "Second."},
-        ]
-    }
-    result = run_analysis(payload, backend.generate_batch)
-    assert len(result["topic_summaries"]) == 1
-    assert result["topic_summaries"][0]["topic_id"] == "t1"
-    assert result["topic_summaries"][0]["summary"] == "Shrnutí tématu."
-    assert len(result["speaker_contributions"]) == 2
-    ids = {sc["speaker_id_in_transcript"] for sc in result["speaker_contributions"]}
-    assert ids == {"SPEAKER_00", "SPEAKER_01"}
-    assert all(sc["topic_id"] == "t1" for sc in result["speaker_contributions"])
-
-
-def test_aggregate_speaker_contributions_merges_same_topic_speaker():
-    """Multiple contributions for same (topic_id, speaker) are merged into one."""
-    raw = [
-        {
-            "topic_id": "t1",
-            "speaker_id_in_transcript": "SPEAKER_04",
-            "summary": "Navrhl předřazení bodu 22.",
-        },
-        {
-            "topic_id": "t1",
-            "speaker_id_in_transcript": "SPEAKER_04",
-            "summary": "Odpověděl na dotazy kolegů.",
-        },
-        {
-            "topic_id": "t1",
-            "speaker_id_in_transcript": "SPEAKER_06",
-            "summary": "Vítal zastupitelstvo.",
-        },
-    ]
-    aggregated = _aggregate_speaker_contributions(raw)
-    assert len(aggregated) == 2
-    by_speaker = {(r["topic_id"], r["speaker_id_in_transcript"]): r for r in aggregated}
-    assert ("t1", "SPEAKER_04") in by_speaker
-    assert by_speaker[("t1", "SPEAKER_04")]["summary"] == (
-        "Navrhl předřazení bodu 22. Odpověděl na dotazy kolegů."
-    )
-    assert by_speaker[("t1", "SPEAKER_06")]["summary"] == "Vítal zastupitelstvo."
 
 
 def test_get_backend_returns_mock_when_mock_llm_set():

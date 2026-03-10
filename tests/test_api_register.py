@@ -45,6 +45,7 @@ def db_session() -> Generator[Session, None, None]:
 @pytest.fixture
 def client(db_session: Session):
     """TestClient with DB and admin auth overrides."""
+
     def override_get_db():
         try:
             yield db_session
@@ -216,7 +217,9 @@ def test_register_with_invalid_llm_analysis_returns_warning(
     assert "LLM analysis not imported" in data["warning"]
 
 
-def test_register_uri_without_transcription_suffix_no_warning(client, default_group, tmp_path):
+def test_register_uri_without_transcription_suffix_no_warning(
+    client, default_group, tmp_path
+):
     """When source_uri does not contain _transcription.json, no analysis attempt and no warning."""
     other_file = tmp_path / "other.json"
     other_file.write_text(

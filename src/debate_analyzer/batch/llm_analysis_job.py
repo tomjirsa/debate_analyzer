@@ -35,6 +35,10 @@ _RESERVE_OLLAMA = 3500
 # Default excerpt cap for Ollama Phase 2/3 when LLM_OLLAMA_MAX_EXCERPT_TOKENS not set
 _DEFAULT_OLLAMA_MAX_EXCERPT_TOKENS = 3000
 
+# Cap for Phase 1 chunk size so long transcripts are split into multiple chunks and
+# topics are extracted from the whole meeting (not just the first part).
+_DEFAULT_PHASE1_MAX_CHUNK_TOKENS = 8000
+
 
 def _get_max_context_tokens() -> int:
     """Compute max context tokens for runner from LLM_MAX_MODEL_LEN (default 8192).
@@ -53,6 +57,20 @@ def _get_max_context_tokens() -> int:
         except ValueError:
             pass
     return max(1000, model_len - _RESERVE_OLLAMA)
+
+
+def _get_phase1_max_chunk_tokens() -> int:
+    """Max tokens per chunk for Phase 1 so long transcripts use multiple chunks.
+
+    Reads LLM_PHASE1_MAX_CHUNK_TOKENS if set, else _DEFAULT_PHASE1_MAX_CHUNK_TOKENS.
+    """
+    raw = os.environ.get("LLM_PHASE1_MAX_CHUNK_TOKENS", "").strip()
+    if raw:
+        try:
+            return max(1000, int(raw))
+        except ValueError:
+            pass
+    return _DEFAULT_PHASE1_MAX_CHUNK_TOKENS
 
 
 def _get_max_excerpt_tokens() -> int:
@@ -211,6 +229,15 @@ def run(prefix_or_uri: str) -> int:
     # Single file: URI or path that points to a transcript JSON
     if "_transcription.json" in s:
         max_context_tokens = _get_max_context_tokens()
+        phase1_cap = _get_phase1_max_chunk_tokens()
+        max_context_tokens_phase1 = min(max_context_tokens, phase1_cap)
+        if max_context_tokens_phase1 < max_context_tokens:
+            _log(
+                f"Phase 1 chunk cap: {max_context_tokens_phase1} tokens "
+                f"(capped from {max_context_tokens})"
+            )
+        else:
+            _log(f"Phase 1 max context: {max_context_tokens_phase1} tokens")
         max_excerpt_tokens = _get_max_excerpt_tokens()
         _log(f"Processing single file: {s}")
         _log("Loading model (this may take a few minutes)...")
@@ -221,7 +248,7 @@ def run(prefix_or_uri: str) -> int:
         ok = _run_one(
             s,
             generate_batch,
-            max_context_tokens,
+            max_context_tokens_phase1,
             max_excerpt_tokens=max_excerpt_tokens,
             log_progress=_log,
             log_llm_call=_log_llm_call,
@@ -263,6 +290,15 @@ def run(prefix_or_uri: str) -> int:
         return 0
 
     max_context_tokens = _get_max_context_tokens()
+    phase1_cap = _get_phase1_max_chunk_tokens()
+    max_context_tokens_phase1 = min(max_context_tokens, phase1_cap)
+    if max_context_tokens_phase1 < max_context_tokens:
+        _log(
+            f"Phase 1 chunk cap: {max_context_tokens_phase1} tokens "
+            f"(capped from {max_context_tokens})"
+        )
+    else:
+        _log(f"Phase 1 max context: {max_context_tokens_phase1} tokens")
     max_excerpt_tokens = _get_max_excerpt_tokens()
     _log("Loading model (this may take a few minutes)...")
     t0 = time.perf_counter()
@@ -277,7 +313,7 @@ def run(prefix_or_uri: str) -> int:
         ok = _run_one(
             uri,
             generate_batch,
-            max_context_tokens,
+            max_context_tokens_phase1,
             max_excerpt_tokens=max_excerpt_tokens,
             log_progress=_log,
             log_llm_call=_log_llm_call,
