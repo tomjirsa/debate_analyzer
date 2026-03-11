@@ -153,6 +153,7 @@ Thumbs.db
 
 # Terraform
 .terraform/
+*.tfplan
 *.tfstate
 *.tfstate.*
 # Terraform variable files (may contain secrets)
