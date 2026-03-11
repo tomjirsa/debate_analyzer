@@ -153,8 +153,16 @@ Thumbs.db
 
 # Terraform
 .terraform/
+*.tfplan
 *.tfstate
 *.tfstate.*
+# Terraform variable files (may contain secrets)
+*.tfvars
+*.tfvars.json
+!*.tfvars.example
+!*.tfvars.example.json
+# Local deploy secrets script (do not commit)
+deploy/set-deploy-secrets.sh
 # YouTube cookies (sensitive; do not commit)
 cookies.txt
 
