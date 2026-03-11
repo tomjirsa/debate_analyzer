@@ -277,7 +277,7 @@ class TranscriptSpeakerStats(Base):
 
 
 class TranscriptLLMAnalysis(Base):
-    """One LLM analysis run for a transcript (topics, summaries, speaker contributions)."""
+    """One LLM analysis run for a transcript (speaker contributions only)."""
 
     __tablename__ = "transcript_llm_analysis"
 
@@ -293,7 +293,7 @@ class TranscriptLLMAnalysis(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     result = Column(
         JSON, nullable=False
-    )  # main_topics, topic_summaries, speaker_contributions
+    )  # speaker_contributions only: list of {id, speaker_id_in_transcript, summary, keywords}
 
     transcript = relationship("Transcript", backref="llm_analyses")
 

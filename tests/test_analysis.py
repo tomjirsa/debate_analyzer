@@ -224,7 +224,7 @@ def test_mock_backend_generate_batch():
     prompts = ["prompt1", "prompt2", "prompt3"]
     out = backend.generate_batch(prompts, max_tokens=100)
     assert len(out) == 3
-    assert all("main_topics" in r for r in out)
+    assert all("speaker_contributions" in r for r in out)
     assert backend.call_count == 3
 
 
@@ -232,13 +232,11 @@ def test_run_analysis_empty_payload():
     """Empty transcription yields empty result."""
     backend = MockLLMBackend()
     result = run_analysis({"transcription": []}, backend.generate_batch)
-    assert result["main_topics"] == []
-    assert result["topic_summaries"] == []
     assert result["speaker_contributions"] == []
 
 
 def test_run_analysis_returns_expected_shape():
-    """run_analysis returns dict with main_topics, topic_summaries, speaker_contributions (all empty)."""
+    """run_analysis returns dict with speaker_contributions (empty)."""
     backend = MockLLMBackend()
     payload = {
         "transcription": [
@@ -247,11 +245,7 @@ def test_run_analysis_returns_expected_shape():
         ]
     }
     result = run_analysis(payload, backend.generate_batch)
-    assert "main_topics" in result
-    assert "topic_summaries" in result
     assert "speaker_contributions" in result
-    assert result["main_topics"] == []
-    assert result["topic_summaries"] == []
     assert result["speaker_contributions"] == []
     assert backend.call_count == 0
 
@@ -266,12 +260,10 @@ def test_run_analysis_never_calls_generate_batch():
     assert backend.call_count == 0
 
 
-def test_run_analysis_empty_transcription_no_topics():
-    """Empty transcription yields no topics."""
+def test_run_analysis_empty_transcription_no_contributions():
+    """Empty transcription yields no speaker contributions."""
     backend = MockLLMBackend()
     result = run_analysis({"transcription": []}, backend.generate_batch)
-    assert result["main_topics"] == []
-    assert result["topic_summaries"] == []
     assert result["speaker_contributions"] == []
 
 
@@ -285,8 +277,6 @@ def test_run_analysis_no_timestamps_still_returns_empty():
         ]
     }
     result = run_analysis(payload, backend.generate_batch)
-    assert result["main_topics"] == []
-    assert result["topic_summaries"] == []
     assert result["speaker_contributions"] == []
 
 
@@ -366,24 +356,24 @@ def test_truncate_to_tokens_bounds_output():
 
 
 def test_llm_analysis_result_from_dict():
-    """LLMAnalysisResult.from_dict parses raw dict."""
+    """LLMAnalysisResult.from_dict parses raw dict with speaker_contributions only."""
     d = {
-        "main_topics": [{"id": "t1", "title": "A", "description": ""}],
-        "topic_summaries": [{"topic_id": "t1", "summary": "Summary."}],
         "speaker_contributions": [
             {
-                "topic_id": "t1",
+                "id": "c1",
                 "speaker_id_in_transcript": "SPEAKER_00",
                 "summary": "In favor.",
+                "keywords": ["klíčové", "slovo"],
             }
         ],
     }
     r = LLMAnalysisResult.from_dict(d)
-    assert len(r.main_topics) == 1
-    assert r.main_topics[0]["id"] == "t1"
-    assert len(r.topic_summaries) == 1
     assert len(r.speaker_contributions) == 1
-    assert r.to_dict()["main_topics"] == d["main_topics"]
+    assert r.speaker_contributions[0]["id"] == "c1"
+    assert r.speaker_contributions[0]["speaker_id_in_transcript"] == "SPEAKER_00"
+    assert r.speaker_contributions[0]["summary"] == "In favor."
+    assert r.speaker_contributions[0]["keywords"] == ["klíčové", "slovo"]
+    assert r.to_dict()["speaker_contributions"] == d["speaker_contributions"]
 
 
 def test_get_backend_returns_mock_when_mock_llm_set():
@@ -397,4 +387,4 @@ def test_get_backend_returns_mock_when_mock_llm_set():
         generate_batch = llm_analysis_job._get_backend()
     out = generate_batch(["List the main topics"], max_tokens=100)
     assert len(out) == 1
-    assert "main_topics" in out[0]
+    assert "speaker_contributions" in out[0]

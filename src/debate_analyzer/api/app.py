@@ -484,9 +484,9 @@ def admin_register_transcript(
                 if isinstance(analysis_payload.get("result"), dict)
                 else analysis_payload
             )
-            if not isinstance(result, dict) or "main_topics" not in result:
+            if not isinstance(result, dict) or "speaker_contributions" not in result:
                 llm_import_warning = (
-                    "LLM analysis not imported: analysis missing main_topics"
+                    "LLM analysis not imported: analysis missing speaker_contributions"
                 )
             else:
                 repo.create_llm_analysis(
@@ -596,13 +596,18 @@ def admin_import_transcript_analysis(
             if isinstance(payload.get("result"), dict)
             else payload
         )
-        if not isinstance(result, dict) or "main_topics" not in result:
+        if not isinstance(result, dict) or "speaker_contributions" not in result:
             raise HTTPException(
                 status_code=400,
-                detail="Invalid analysis JSON: expected object with main_topics (and topic_summaries, speaker_contributions)",
+                detail="Invalid analysis: expected object with speaker_contributions",
             )
     elif body.result is not None:
         result = body.result
+        if not isinstance(result, dict) or "speaker_contributions" not in result:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid analysis: expected object with speaker_contributions",
+            )
     else:
         raise HTTPException(
             status_code=400,

@@ -63,6 +63,10 @@ db.sqlite3-journal
 debate_analyzer.db
 debate_analyzer.db-journal
 
+# Local dev SQLite (skill-recommended db in repo root)
+db_devel.db
+db_devel.db-journal
+
 # Flask stuff:
 instance/
 .webassets-cache

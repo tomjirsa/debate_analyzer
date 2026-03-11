@@ -41,58 +41,37 @@
       </Card>
 
       <Card
-        v-if="llmAnalysis && llmAnalysis.main_topics && llmAnalysis.main_topics.length"
+        v-if="llmAnalysis && llmAnalysis.speaker_contributions && llmAnalysis.speaker_contributions.length"
         class="mb-4"
       >
-        <template #title>Discussion topics</template>
+        <template #title>Speaker contributions</template>
         <template #content>
-          <Accordion :multiple="true">
-            <AccordionPanel
-              v-for="topic in llmAnalysis.main_topics"
-              :key="topic.id"
-              :value="topic.id"
-            >
-              <AccordionHeader>
-                <span class="topic-header-title">{{ topic.title }}</span>
-                <span
-                  v-if="topic.start_sec != null && topic.end_sec != null"
-                  class="topic-header-time"
-                >
-                  {{ formatTimestampRange(topic.start_sec, topic.end_sec) }}
-                </span>
-              </AccordionHeader>
-              <AccordionContent>
-                <p v-if="topic.description" class="topic-description">
-                  {{ topic.description }}
-                </p>
-                <div
-                  v-if="topicSummaryFor(topic.id)"
-                  class="topic-summary-block"
-                >
-                  <strong>Summary</strong>
-                  <p class="topic-summary-text">{{ topicSummaryFor(topic.id) }}</p>
+          <div
+            v-for="group in contributionsBySpeaker"
+            :key="group.speakerId"
+            class="speaker-contributions-group"
+          >
+            <h3 class="speaker-contributions-heading">
+              {{ speakerDisplayName(group.speakerId) }}
+            </h3>
+            <ul class="contributions-list">
+              <li
+                v-for="c in group.contributions"
+                :key="c.id"
+                class="contribution-item"
+              >
+                <span v-if="c.id" class="contribution-id">{{ c.id }}</span>
+                <p class="contribution-summary">{{ c.summary }}</p>
+                <div v-if="c.keywords && c.keywords.length" class="contribution-keywords">
+                  <span
+                    v-for="kw in c.keywords"
+                    :key="kw"
+                    class="keyword-tag"
+                  >{{ kw }}</span>
                 </div>
-                <div
-                  v-if="contributionsForTopic(topic.id).length"
-                  class="topic-contributions"
-                >
-                  <strong>By speaker</strong>
-                  <ul class="contributions-list">
-                    <li
-                      v-for="c in contributionsForTopic(topic.id)"
-                      :key="c.speaker_id_in_transcript"
-                      class="contribution-item"
-                    >
-                      <span class="contribution-speaker">{{
-                        speakerDisplayName(c.speaker_id_in_transcript)
-                      }}:</span>
-                      {{ c.summary }}
-                    </li>
-                  </ul>
-                </div>
-              </AccordionContent>
-            </AccordionPanel>
-          </Accordion>
+              </li>
+            </ul>
+          </div>
         </template>
       </Card>
 
@@ -175,10 +154,6 @@
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import Accordion from 'primevue/accordion'
-import AccordionContent from 'primevue/accordioncontent'
-import AccordionHeader from 'primevue/accordionheader'
-import AccordionPanel from 'primevue/accordionpanel'
 import Breadcrumb from 'primevue/breadcrumb'
 import Card from 'primevue/card'
 import Column from 'primevue/column'
@@ -186,7 +161,7 @@ import DataTable from 'primevue/datatable'
 import Message from 'primevue/message'
 import Select from 'primevue/select'
 import StatBarChart from '../components/StatBarChart.vue'
-import { formatDuration, secondsToHhMmSs } from '../utils/format.js'
+import { formatDuration } from '../utils/format.js'
 
 const route = useRoute()
 const groupIdOrSlug = computed(() => route.params.groupId)
@@ -216,21 +191,22 @@ function speakerDisplayName(speakerId) {
   return speakerDisplayNameMap.value[speakerId] ?? speakerId
 }
 
-function topicSummaryFor(topicId) {
-  const list = llmAnalysis.value?.topic_summaries || []
-  const item = list.find((s) => s.topic_id === topicId)
-  return item?.summary ?? ''
-}
-
-function contributionsForTopic(topicId) {
+/** Group speaker_contributions by speaker_id_in_transcript. */
+const contributionsBySpeaker = computed(() => {
   const list = llmAnalysis.value?.speaker_contributions || []
-  return list.filter((c) => c.topic_id === topicId)
-}
-
-function formatTimestampRange(startSec, endSec) {
-  if (startSec == null || endSec == null) return ''
-  return `${secondsToHhMmSs(startSec)} – ${secondsToHhMmSs(endSec)}`
-}
+  const bySpeaker = new Map()
+  for (const c of list) {
+    const sid = c.speaker_id_in_transcript ?? ''
+    if (!bySpeaker.has(sid)) {
+      bySpeaker.set(sid, [])
+    }
+    bySpeaker.get(sid).push(c)
+  }
+  return Array.from(bySpeaker.entries()).map(([speakerId, contributions]) => ({
+    speakerId,
+    contributions,
+  }))
+})
 
 const chartMetricOptions = [
   { label: 'Share of speaking time', value: 'share_speaking_time' },
@@ -406,32 +382,47 @@ watch([groupIdOrSlug, transcriptId], load)
 .chart-select { min-width: 200px; }
 .speaker-stats-table { margin-top: 1rem; }
 
-.topic-header-title { margin-right: 0.5rem; }
-.topic-header-time {
-  font-size: 0.85rem;
-  color: var(--p-text-muted-color, #6b7280);
-  font-weight: 400;
+.speaker-contributions-group {
+  margin-bottom: 1.5rem;
 }
-.topic-description {
-  margin: 0 0 1rem;
-  color: var(--p-text-color-secondary, #4b5563);
-  font-size: 0.95rem;
+.speaker-contributions-group:last-child {
+  margin-bottom: 0;
 }
-.topic-summary-block { margin-bottom: 1rem; }
-.topic-summary-block strong { display: block; margin-bottom: 0.25rem; }
-.topic-summary-text { margin: 0; font-size: 0.95rem; line-height: 1.5; }
-.topic-contributions strong { display: block; margin-bottom: 0.25rem; }
+.speaker-contributions-heading {
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 0 0 0.5rem;
+  color: var(--p-text-color, #111);
+}
 .contributions-list {
   margin: 0;
   padding-left: 1.25rem;
   list-style: disc;
 }
 .contribution-item {
-  margin-bottom: 0.5rem;
+  margin-bottom: 0.75rem;
   line-height: 1.4;
 }
-.contribution-speaker {
-  font-weight: 600;
-  margin-right: 0.25rem;
+.contribution-id {
+  font-size: 0.8rem;
+  color: var(--p-text-muted-color, #6b7280);
+  margin-right: 0.5rem;
+}
+.contribution-summary {
+  margin: 0.25rem 0;
+  font-size: 0.95rem;
+}
+.contribution-keywords {
+  margin-top: 0.25rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+}
+.keyword-tag {
+  font-size: 0.8rem;
+  padding: 0.15rem 0.5rem;
+  border-radius: 4px;
+  background: var(--p-surface-200, #e5e7eb);
+  color: var(--p-text-color-secondary, #4b5563);
 }
 </style>

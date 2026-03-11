@@ -15,7 +15,9 @@ pytest.importorskip(
 def test_ollama_backend_generate_returns_content():
     """get_ollama_backend().generate returns the mocked invoke content."""
     mock_invoke_return = MagicMock()
-    mock_invoke_return.content = '{"main_topics": [{"id": "t1", "title": "Test"}]}'
+    mock_invoke_return.content = (
+        '{"speaker_contributions": [{"id": "c1", "summary": "Test"}]}'
+    )
     mock_llm = MagicMock()
     mock_llm.invoke.return_value = mock_invoke_return
 
@@ -27,7 +29,7 @@ def test_ollama_backend_generate_returns_content():
 
         backend = get_ollama_backend(base_url="http://localhost:11434", model="test")
         out = backend.generate("List topics", max_tokens=512)
-    assert "main_topics" in out
+    assert "speaker_contributions" in out
     mock_llm.invoke.assert_called_once()
 
 

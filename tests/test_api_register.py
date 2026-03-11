@@ -88,9 +88,14 @@ def _minimal_transcription_payload():
 
 def _valid_analysis_result():
     return {
-        "main_topics": [{"id": "t1", "title": "Topic A", "description": "Desc"}],
-        "topic_summaries": [{"topic_id": "t1", "summary": "Summary text"}],
-        "speaker_contributions": [],
+        "speaker_contributions": [
+            {
+                "id": "c1",
+                "speaker_id_in_transcript": "SPEAKER_00",
+                "summary": "Summary text",
+                "keywords": [],
+            }
+        ],
     }
 
 
@@ -157,7 +162,7 @@ def test_register_with_llm_analysis_imports_and_no_warning(
     assert get_r.status_code == 200, get_r.text
     analysis = get_r.json()
     assert "result" in analysis
-    assert analysis["result"]["main_topics"]
+    assert analysis["result"]["speaker_contributions"]
 
 
 def test_register_without_llm_analysis_file_returns_warning(
@@ -191,7 +196,7 @@ def test_register_without_llm_analysis_file_returns_warning(
 def test_register_with_invalid_llm_analysis_returns_warning(
     client, default_group, tmp_path
 ):
-    """When _llm_analysis.json exists but lacks main_topics, response has warning."""
+    """When _llm_analysis.json exists but lacks speaker_contributions, response has warning."""
     transcript_file = tmp_path / "qux_transcription.json"
     transcript_file.write_text(
         json.dumps(_minimal_transcription_payload()), encoding="utf-8"

@@ -1,22 +1,20 @@
 # LLM-based transcript analysis
 
-This document describes how to run **LLM analysis** on transcripts: main topics, per-topic discussion summary, and per-speaker contributions. The analysis runs as a **one-time job** (e.g. after transcription) using **Ollama** (or a mock backend for tests) and a **dedicated LLM Docker image** for **AWS Batch** (GPU).
+This document describes how to run **LLM analysis** on transcripts to produce **speaker contributions**: summaries of each speaker's contributions with keywords. The analysis runs as a **one-time job** (e.g. after transcription) using **Ollama** (or a mock backend for tests) and a **dedicated LLM Docker image** for **AWS Batch** (GPU).
 
 ## Overview
 
 - **Backend:** **Ollama** only (production). Use `MOCK_LLM=1` for tests (no model required).
 - **Model:** Ollama model name (e.g. `qwen2.5:7b` via `OLLAMA_MODEL` or `LLM_MODEL_ID`). Default context 8k; set `LLM_MAX_MODEL_LEN` as needed. On AWS Batch the job runs on the GPU queue.
 - **Input:** Transcript JSON (from S3 or local), in the same format as the transcribe job output (`transcription` list with `speaker`, `text`, `start`, `end`).
-- **Output:** JSON with `main_topics`, `topic_summaries`, `speaker_contributions`, written to S3 as `<stem>_llm_analysis.json` alongside the transcript, or imported into the DB via the admin API. Each item in `main_topics` may include `start_sec` and `end_sec` (seconds from video start) for linking to video playback; these are derived from the transcript segment timestamps that cover the topic’s conversation.
-- **Chunking:** Long transcripts (over the configured context) are split into chunks for topic extraction; topics are merged and then summarized. The job uses `LLM_MAX_MODEL_LEN` and Ollama-specific reserves so chunk and excerpt sizes fit in context. Phase 2 and Phase 3 use **topic-relevant excerpts** (keyword-based) when available.
+- **Output:** JSON with **`speaker_contributions`** written to S3 as `<stem>_llm_analysis.json` alongside the transcript, or imported into the DB via the admin API. Each contribution has an `id`, `speaker_id_in_transcript`, `summary`, and `keywords`. There can be multiple contribution records per speaker.
+- **Chunking:** When real LLM logic is implemented, long transcripts may be split into chunks; the job uses `LLM_MAX_MODEL_LEN` and Ollama-specific reserves so chunk sizes fit in context.
 
 ### Output schema
 
 The `*_llm_analysis.json` file (and the `result` field when imported into the DB) contains:
 
-- **`main_topics`**: List of topic objects. Each has `id`, `title`, `description`, `keywords`, and optionally **`start_sec`** and **`end_sec`** (floats, seconds from video start). Use `start_sec`/`end_sec` to seek the video to the topic’s conversation; they are omitted or `null` when the range cannot be computed.
-- **`topic_summaries`**: List of `{ "topic_id", "summary" }`.
-- **`speaker_contributions`**: List of `{ "topic_id", "speaker_id_in_transcript", "summary" }`.
+- **`speaker_contributions`**: List of contribution records. Each has **`id`** (string), **`speaker_id_in_transcript`** (string), **`summary`** (string), and **`keywords`** (list of strings). Multiple records per speaker are allowed (one per contribution in the transcript).
 
 ### Model cache (EFS, AWS Batch)
 
@@ -56,7 +54,7 @@ After transcripts exist in S3 (e.g. after the transcribe job). The job uses **Ol
   s3://<bucket>/jobs/<job-id>/transcripts
 ```
 
-The job reads each `*_transcription.json`, runs the three-phase analysis (topics → topic summaries → speaker contributions), and writes `*_llm_analysis.json` to the same S3 prefix.
+The job reads each `*_transcription.json`, runs the analysis (producing speaker contributions), and writes `*_llm_analysis.json` to the same S3 prefix.
 
 ### 2a. Running with Ollama (local)
 
@@ -166,33 +164,35 @@ The LLM batch job writes progress and, when running in batch, **each LLM request
 
 ## 4. Language of analysis output (Czech)
 
-The transcripts are typically in **Czech**. To keep all analysis text in Czech:
-
-- **Phase 1 (topics):** Prompts already instruct the model to keep topic labels in the same language as the transcript (Czech).
-- **Phase 2 (topic summaries):** The prompt explicitly requires the summary to be written in Czech so `topic_summaries[].summary` is in Czech.
-- **Phase 3 (speaker contributions):** The prompt explicitly requires each speaker contribution summary to be written in Czech so `speaker_contributions[].summary` is in Czech.
+The transcripts are typically in **Czech**. When LLM analysis is implemented, prompts should require contribution summaries and keywords to be written in Czech so `speaker_contributions[].summary` and `speaker_contributions[].keywords` are in Czech.
 
 Prompt templates are in `src/debate_analyzer/analysis/prompts.py`. Changing the language instruction there affects all future LLM runs.
 
 ## 5. Output schema
 
-Each `_llm_analysis.json` file contains:
-
-- **main_topics**: Each element has `id`, `title`, `description`, and **`keywords`** (list of strings) — terms derived from the topic title and description, used to find the relevant transcript excerpt (for debugging/inspection).
+Each `_llm_analysis.json` file contains only **speaker_contributions**:
 
 ```json
 {
-  "main_topics": [
-    { "id": "t1", "title": "short label", "description": "optional", "keywords": ["label", "short", ...] }
-  ],
-  "topic_summaries": [
-    { "topic_id": "t1", "summary": "Discussion outcome for this topic." }
-  ],
   "speaker_contributions": [
-    { "topic_id": "t1", "speaker_id_in_transcript": "SPEAKER_06", "summary": "Position or contribution." }
+    {
+      "id": "c1",
+      "speaker_id_in_transcript": "SPEAKER_00",
+      "summary": "Krátké shrnutí příspěvku.",
+      "keywords": ["klíčové", "slovo"]
+    }
   ]
 }
 ```
+
+Each contribution has:
+
+- **id**: Unique identifier for the contribution (string).
+- **speaker_id_in_transcript**: Speaker label from the transcript (e.g. `SPEAKER_00`).
+- **summary**: Short summary of that contribution (string).
+- **keywords**: List of strings representing the contribution.
+
+There can be multiple contribution records per speaker.
 
 ## 6. Import into the web app
 
@@ -201,19 +201,13 @@ To attach analysis to a transcript in the DB (for the admin UI or API):
 - **From S3:** `POST /api/admin/transcripts/{transcript_id}/analysis/import` with body:
   `{ "source_uri": "s3://bucket/key/<stem>_llm_analysis.json", "model_name": "Qwen/Qwen2-1.5B-Instruct", "source": "batch" }`
 - **Inline:** Same endpoint with body:
-  `{ "result": { "main_topics": [...], "topic_summaries": [...], "speaker_contributions": [...] }, "model_name": "...", "source": "api" }`
+  `{ "result": { "speaker_contributions": [...] }, "model_name": "...", "source": "api" }`
 
-Get the latest analysis: `GET /api/admin/transcripts/{transcript_id}/analysis`.
+The `result` object must contain the key **speaker_contributions** (a list). Get the latest analysis: `GET /api/admin/transcripts/{transcript_id}/analysis`.
 
 ## 7. Chunking and excerpts (long transcripts)
 
-The job sets chunk and excerpt size from `LLM_MAX_MODEL_LEN` (default 8k) so the model never receives more context than it supports.
-
-- **Phase 1 (topics):** The flattened transcript is split into overlapping chunks (within the context limit). The LLM extracts topics per chunk; topics are merged and deduplicated by title.
-- **Phase 2 (summaries):** For each topic, a **topic-relevant excerpt** is built by finding lines that mention the topic (from its title/description) and taking a window around them, truncated to the context limit. If no match is found, the start of the transcript is used. That excerpt is used to generate the discussion summary.
-- **Phase 3 (speaker contributions):** The same per-topic excerpt is used to summarize each speaker’s contribution for that topic.
-
-Chunking is **required** when the transcript exceeds the configured context; the runner enforces it automatically.
+When real LLM logic is implemented, the job will set chunk size from `LLM_MAX_MODEL_LEN` (default 8k) so the model never receives more context than it supports. Long transcripts may be split into chunks; contribution records are then produced from the transcript (e.g. per turn or per segment group).
 
 ## 8. Local / testing
 

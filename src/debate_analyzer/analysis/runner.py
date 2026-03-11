@@ -1,4 +1,4 @@
-"""Orchestrate LLM analysis: placeholder returns empty topics; schema preserved."""
+"""Orchestrate LLM analysis: placeholder returns empty speaker contributions."""
 
 from __future__ import annotations
 
@@ -20,12 +20,11 @@ def run_analysis(
     """
     Return empty analysis result (no LLM calls).
 
-    Preserves the same signature and result schema (main_topics, topic_summaries,
-    speaker_contributions) for compatibility with the batch job and API. All three
-    lists are always empty. generate_batch is not called.
+    Result schema: speaker_contributions only (list of contribution records with
+    id, speaker_id_in_transcript, summary, keywords). generate_batch is not called.
 
     Args:
-        payload:  Transcript dict (optional: may contain "transcription" key).
+        payload: Transcript dict (optional: may contain "transcription" key).
         generate_batch: Backend callable; unused.
         max_context_tokens: Unused.
         max_excerpt_tokens: Unused.
@@ -35,12 +34,8 @@ def run_analysis(
         log_llm_call: Optional callback; unused.
 
     Returns:
-        Dict with main_topics=[], topic_summaries=[], speaker_contributions=[].
+        Dict with speaker_contributions=[].
     """
     _ = payload, generate_batch, max_context_tokens, max_excerpt_tokens
     _ = token_counter, max_tokens_per_reply, log_progress, log_llm_call
-    return LLMAnalysisResult(
-        main_topics=[],
-        topic_summaries=[],
-        speaker_contributions=[],
-    ).to_dict()
+    return LLMAnalysisResult(speaker_contributions=[]).to_dict()

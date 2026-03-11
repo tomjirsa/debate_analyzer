@@ -23,9 +23,7 @@ class MockLLMBackend:
 
     def __init__(self, default_response: str | None = None) -> None:
         """Optional default_response; if unset, returns minimal empty JSON."""
-        self.default_response = default_response or (
-            '{"main_topics": [], "topic_summaries": [], "speaker_contributions": []}'
-        )
+        self.default_response = default_response or '{"speaker_contributions": []}'
         self.call_count = 0
 
     def _response_for_prompt(self, prompt: str) -> str:
