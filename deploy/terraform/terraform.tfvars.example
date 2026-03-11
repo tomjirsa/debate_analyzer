@@ -1,0 +1,11 @@
+# Copy to terraform.tfvars and fill in; do not commit terraform.tfvars.
+# Or use TF_VAR_* environment variables or source deploy/set-deploy-secrets.sh.
+
+# Required for Batch stack
+# hf_token = "" # HuggingFace token for pyannote (required)
+
+# Optional
+# yt_cookies_file_path = ""       # path to cookies.txt (Netscape format)
+# enable_cloudfront = true       # set false if deploy IAM lacks cloudfront:* permissions
+# aws_region = "eu-central-1"
+# name_prefix = "debate-analyzer"

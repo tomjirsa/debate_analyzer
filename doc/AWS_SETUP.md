@@ -29,7 +29,7 @@ For a visual overview of the AWS deployment, see [ARCHITECTURE_AWS.md](ARCHITECT
 
 ### Terraform Variables (Batch)
 
-Provide required variables via `TF_VAR_*` environment variables, or a `terraform.tfvars` file (do **not** commit secrets).
+Provide required variables via `TF_VAR_*` environment variables, or a `terraform.tfvars` file (do **not** commit secrets). A safe approach: copy `deploy/set-deploy-secrets.sh.example` to `deploy/set-deploy-secrets.sh`, fill in values, run `source deploy/set-deploy-secrets.sh` from the repo root before Terraform; or copy `terraform.tfvars.example` to `terraform.tfvars` in each Terraform directory and fill in (both `terraform.tfvars` and `set-deploy-secrets.sh` are in `.gitignore`—never commit them).
 
 | Variable | Type | Default | Description |
 |----------|------|---------|-------------|

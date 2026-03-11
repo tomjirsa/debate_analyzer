@@ -1,0 +1,15 @@
+# Copy to terraform.tfvars and fill in; do not commit terraform.tfvars.
+# Or use TF_VAR_* environment variables or source deploy/set-deploy-secrets.sh.
+
+# Required for Web app stack (apply after Batch stack)
+# existing_s3_bucket_name = ""    # S3 bucket name from Batch stack output
+# admin_username = ""
+# admin_password = ""
+# db_password = ""
+
+# Optional
+# aws_region = "eu-central-1"
+# name_prefix = "debate-analyzer-webapp"
+# rds_publicly_accessible = false
+# rds_allowed_cidr_blocks = []   # e.g. ["YOUR_IP/32"] when rds_publicly_accessible = true
+# s3_cors_extra_origins = []
