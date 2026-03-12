@@ -92,9 +92,17 @@ Examples:
     try:
         # Import here to avoid slow imports when just showing help
         from debate_analyzer.transcriber import transcribe_video
+        from debate_analyzer.transcriber.transcriber import _load_config
+
+        config = _load_config(args.config)
+        effective_model = (
+            config["whisper"]["model_size"]
+            if args.model_size == "medium"
+            else args.model_size
+        )
 
         print(f"Transcribing: {video_path}")
-        print(f"Model: {args.model_size}")
+        print(f"Model: {effective_model}")
         print(f"Device: {args.device}")
         print(f"Output directory: {args.output_dir}")
         print()
