@@ -9,7 +9,7 @@ This guide describes how to run the debate-analyzer pipeline on AWS Batch: you c
   - **Job 1 (download):** Submit a video URL; downloads and uploads to `s3://<bucket>/jobs/<job-id>/videos/`. Runs on CPU (cheaper). Use `submit-download-job.sh`.
   - **Job 2 (transcribe):** Submit an S3 prefix where the video already lives; transcribes and uploads to `s3://<bucket>/jobs/<path>/transcripts/`. Runs on GPU. Use `submit-transcribe-job.sh`.
 - **Output (S3):** Downloaded video and optional subtitles under `s3://<bucket>/jobs/<job-id>/videos/`; transcription under `s3://<bucket>/jobs/<job-id>/transcripts/`. The transcribe job writes **`*_transcription_raw.json`**; the optional transcript postprocess job (when used) reads raw and writes **`*_transcription.json`** in the same prefix. Downstream jobs (stats, LLM analysis) use `*_transcription.json`.
-- **Job 5 (transcript postprocess):** Optional. After transcribe, run transcript postprocess (Ollama) to correct grammar/ASR errors in raw transcripts. Use `./deploy/scripts/submit-jobs/submit-transcript-postprocess-job.sh <transcripts_s3_uri_or_prefix>`. The job reads **`*_transcription_raw.json`** and writes **`*_transcription.json`** in the same S3 prefix; it uses the same LLM image and GPU queue as Job 4. You can then run LLM analysis (Job 4) on the resulting `*_transcription.json`.
+- **Job 5 (transcript postprocess):** Optional. After transcribe, run transcript postprocess to aggregate consecutive same-speaker segments. Use `./deploy/scripts/submit-jobs/submit-transcript-postprocess-job.sh <transcripts_s3_uri_or_prefix>`. The job reads **`*_transcription_raw.json`** and writes **`*_transcription.json`** in the same S3 prefix; it runs on the **CPU queue** using the main pipeline image (no GPU). You can then run LLM analysis (Job 4) on the resulting `*_transcription.json`.
 - **Job 4 (LLM analysis):** Optional. After transcribe (and optionally postprocess), run LLM analysis on transcript(s) to get main topics, per-topic summaries, and per-speaker contributions. Uses a **dedicated LLM image** (Ollama; see [LLM_ANALYSIS.md](LLM_ANALYSIS.md)). Use `submit-llm-analysis-job.sh`; the job runs on the **GPU queue**.
 - **Secrets:** HuggingFace token is stored in AWS Secrets Manager and injected into the transcribe job (and full-pipeline job). The download and LLM analysis jobs do not need it (Qwen2 is public).
 - **Cost:** CPU compute environment scales to zero when idle; GPU same. Using two jobs lets you re-run transcription without re-downloading.
@@ -53,9 +53,9 @@ Terraform creates:
 | **IAM** roles | Job role (S3 + Secrets Manager), execution role (ECR + CloudWatch), instance role (for Batch compute EC2). |
 | **ECR** repository | Holds the debate-analyzer Docker image (pushed by CI). |
 | **Batch** compute environment (GPU) | GPU (e.g. g4dn.xlarge), min 0 / max 256 vCPUs. |
-| **Batch** compute environment (CPU) | CPU (e.g. c5.xlarge), for download and stats jobs; min 0 / max 64 vCPUs. |
-| **Batch** job queues | GPU queue (full pipeline + transcribe job); CPU queue (download and stats job). |
-| **Batch** job definitions | Full pipeline (GPU); download-only (CPU, no HF token); transcribe-only (GPU, reads video from S3). |
+| **Batch** compute environment (CPU) | CPU (e.g. c5.xlarge), for download, stats, and transcript postprocess jobs; min 0 / max 64 vCPUs. |
+| **Batch** job queues | GPU queue (full pipeline + transcribe + LLM analysis); CPU queue (download, stats, transcript postprocess). |
+| **Batch** job definitions | Full pipeline (GPU); download-only (CPU, no HF token); transcribe-only (GPU, reads video from S3); stats (CPU); transcript postprocess (CPU); LLM analysis (GPU, Ollama). |
 | **CloudWatch** log group | Container logs from each job. |
 
 After `apply`, note the outputs (e.g. `terraform output`): you will need **job queue name**, **job definition name**, and **bucket name** to submit jobs and find outputs.
@@ -239,7 +239,7 @@ Speaker profile photos are stored in the same S3 bucket under the prefix `speake
 3. **Single job:** Use `./deploy/scripts/submit-jobs/submit-job.sh <video_url>` or `aws batch submit-job` with `VIDEO_URL` and `OUTPUT_S3_PREFIX=s3://<bucket>/jobs`.
 4. **Two jobs:** Use `./deploy/scripts/submit-jobs/submit-download-job.sh <video_url>`, then `./deploy/scripts/submit-jobs/submit-transcribe-job.sh s3://<bucket>/jobs/<job-id>/videos` (see section 4b).
 5. **Optional Job 3 (stats):** After transcribe, run `./deploy/scripts/submit-jobs/submit-stats-job.sh s3://<bucket>/jobs/<job-id>/transcripts` to generate per-speaker stats parquet in the same folder. When you register transcripts from S3 in the web app, stats are loaded from these parquet files into the database.
-6. **Optional Job 5 (transcript postprocess):** After transcribe, run `./deploy/scripts/submit-jobs/submit-transcript-postprocess-job.sh s3://<bucket>/jobs/<job-id>/transcripts` (or a single `*_transcription_raw.json` URI). The job reads raw transcripts and writes `*_transcription.json`; then you can run Job 4 (LLM analysis) on those files.
+6. **Optional Job 5 (transcript postprocess):** After transcribe, run `./deploy/scripts/submit-jobs/submit-transcript-postprocess-job.sh s3://<bucket>/jobs/<job-id>/transcripts` (or a single `*_transcription_raw.json` URI). The job runs on the CPU queue, reads raw transcripts and writes `*_transcription.json`; then you can run Job 4 (LLM analysis) on those files.
 7. Find outputs in S3 under `jobs/<job-id>/videos/` and `jobs/<job-id>/transcripts/`, and logs in CloudWatch under `/aws/batch/debate-analyzer`.
 8. If YouTube shows "Sign in to confirm you're not a bot", use optional cookies (see section 7); set `YT_COOKIES_FILE`, `YT_COOKIES_S3_URI`, or `YT_COOKIES_SECRET_ARN` (or Terraform variable `yt_cookies_secret_arn`).
 9. **Speaker photos:** After applying the Batch stack, set the web app variable `cloudfront_speaker_photos_url` to the Batch output and (optionally) `cors_allowed_origins` for the bucket; then apply/update the web app stack and redeploy the app (see section 8).

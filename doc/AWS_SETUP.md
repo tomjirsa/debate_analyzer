@@ -66,7 +66,7 @@ terraform apply   # type yes when prompted
 After apply, note the outputs (e.g. `terraform output`):
 
 - `batch_job_queue_name` — GPU queue (full pipeline + transcribe job)
-- `batch_job_queue_cpu_name` — CPU queue (download and stats job)
+- `batch_job_queue_cpu_name` — CPU queue (download, stats, transcript postprocess)
 - `batch_job_definition_name` — full pipeline job definition
 - `batch_job_definition_download_name` — download-only job definition
 - `batch_job_definition_transcribe_name` — transcribe-only job definition

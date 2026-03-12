@@ -155,11 +155,11 @@ The written `transcription` list is aggregated: consecutive same-speaker segment
 
 ---
 
-## LLM post-processing (grammar / ASR correction)
+## Post-processing (segment aggregation)
 
-An optional step corrects **only grammar and obvious transcription (ASR) errors** in the transcript, without changing meaning. It reads **`*_transcription_raw.json`** (from the transcriber) and writes **`*_transcription.json`** (canonical transcript). It uses the same LLM backend as the analysis job (Ollama or mock).
+An optional step **aggregates consecutive same-speaker segments** into blocks. It reads **`*_transcription_raw.json`** (from the transcriber) and writes **`*_transcription.json`** (canonical transcript). The current implementation is CPU-only (no GPU or LLM). On AWS Batch, the transcript postprocess job runs on the **CPU queue** using the main pipeline image.
 
-**When to use:** After transcription, if you want cleaner text for display or for the LLM analysis job (e.g. fewer typos and homophone errors).
+**When to use:** After transcription, to produce merged blocks per speaker for display, stats, or LLM analysis. Downstream steps (LLM analysis, stats, webapp) use `*_transcription.json`.
 
 **How to run:**
 
@@ -171,7 +171,7 @@ TRANSCRIPT_S3_URI=path/to/stem_transcription_raw.json poetry run python -m debat
 TRANSCRIPTS_S3_PREFIX=s3://bucket/prefix/ poetry run python -m debate_analyzer.batch.transcript_postprocess_job
 ```
 
-**Output:** Writes `<stem>_transcription.json` next to each raw file. Downstream steps (LLM analysis, stats, webapp) use `*_transcription.json`. Requires `poetry install --extras llm` for the Ollama backend; set `MOCK_LLM=1` for tests (mock returns segment text unchanged).
+**Output:** Writes `<stem>_transcription.json` next to each raw file. A future LLM-based grammar/ASR correction step could be added as a separate job.
 
 **If you skip post-processing:** To use the raw transcript as the canonical one (e.g. so the stats or LLM analysis job can run), copy the file in S3. Single file: `aws s3 cp s3://BUCKET/PREFIX/stem_transcription_raw.json s3://BUCKET/PREFIX/stem_transcription.json`. For all raw files under a prefix (replace BUCKET and PREFIX):
 

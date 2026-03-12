@@ -25,9 +25,9 @@ For step-by-step setup and variable definitions, see [AWS_SETUP.md](AWS_SETUP.md
 | **IAM** | Job role (S3 read/write, Secrets Manager read); execution role (ECR pull, CloudWatch Logs, Secrets Manager read); instance role for Batch EC2 hosts. |
 | **ECR** | Repository for the **pipeline** Docker image (built from repo root `Dockerfile`; tag e.g. `latest`). Pushed by CI or manually. |
 | **VPC** | Default or custom (`vpc_id`, `subnet_ids`). Security group for Batch compute: egress only (no inbound). |
-| **Batch compute environments** | **GPU** (e.g. g4dn.xlarge, ECS_AL2023_NVIDIA): full-pipeline and transcribe-only jobs. **CPU** (e.g. c5.xlarge): download-only jobs. Both scale to zero when idle (min vCPUs = 0). |
-| **Batch job queues** | GPU queue (priority for full-pipeline and transcribe job); CPU queue (download job). |
-| **Batch job definitions** | Full-pipeline (GPU; VIDEO_URL + OUTPUT_S3_PREFIX); download-only (CPU; no HF token); transcribe-only (GPU; VIDEO_S3_PREFIX + OUTPUT_S3_PREFIX; HF token injected). |
+| **Batch compute environments** | **GPU** (e.g. g4dn.xlarge, ECS_AL2023_NVIDIA): full-pipeline, transcribe-only, LLM analysis. **CPU** (e.g. c5.xlarge): download, stats, transcript postprocess. Both scale to zero when idle (min vCPUs = 0). |
+| **Batch job queues** | GPU queue (full-pipeline, transcribe, LLM analysis); CPU queue (download, stats, transcript postprocess). |
+| **Batch job definitions** | Full-pipeline (GPU); download-only (CPU); transcribe-only (GPU); stats (CPU); transcript postprocess (CPU); LLM analysis (GPU, Ollama). |
 | **CloudWatch** | Log group for Batch job container logs (e.g. `/aws/batch/debate-analyzer`). |
 
 **Data flow (Batch):** User submits job with `VIDEO_URL` and/or S3 prefix → Batch runs container → container reads `HF_TOKEN` (and optional YT cookies) from Secrets Manager → download and/or transcribe → writes videos/transcripts to S3 under `jobs/<job-id>/`.
@@ -65,6 +65,7 @@ flowchart TB
     JobFull["Job def full pipeline"]
     JobDL["Job def download"]
     JobTrans["Job def transcribe"]
+    JobPostprocess["Job def transcript postprocess"]
   end
 
   subgraph webapp ["Web App Stack"]
@@ -87,9 +88,12 @@ flowchart TB
   BatchGPU --> JobFull
   BatchGPU --> JobTrans
   BatchCPU --> JobDL
+  BatchCPU --> JobPostprocess
   JobFull --> ECRPipe
   JobTrans --> ECRPipe
   JobDL --> ECRPipe
+  JobPostprocess --> ECRPipe
+  JobPostprocess -->|"read raw write transcripts"| S3
   JobFull --> SecretsHF
   JobTrans --> SecretsHF
   JobFull -->|"read optional"| SecretsYT

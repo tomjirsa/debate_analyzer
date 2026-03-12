@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Submit an AWS Batch job to run transcript postprocess (Ollama) on raw transcripts (Job 5).
+# Submit an AWS Batch job to run transcript postprocess on raw transcripts (Job 5).
 # Usage: ./submit-transcript-postprocess-job.sh <transcript_s3_uri_or_prefix>
 # Example (single file): ./submit-transcript-postprocess-job.sh s3://bucket/jobs/id/transcripts/foo_transcription_raw.json
 # Example (prefix):      ./submit-transcript-postprocess-job.sh s3://bucket/jobs/id/transcripts
-# Job reads *_transcription_raw.json and writes *_transcription.json. Runs on GPU queue with same LLM image.
+# Job reads *_transcription_raw.json and writes *_transcription.json. Runs on CPU queue.
 
 set -euo pipefail
 
@@ -27,7 +27,7 @@ fi
 echo "Resolving Terraform outputs..."
 cd "$TERRAFORM_DIR"
 REGION=$(terraform output -raw aws_region)
-QUEUE=$(terraform output -raw batch_job_queue_name)
+QUEUE=$(terraform output -raw batch_job_queue_cpu_name)
 DEFN=$(terraform output -raw batch_job_definition_transcript_postprocess_name)
 
 if [[ "$TRANSCRIPT_URI" == *"_transcription_raw.json"* ]]; then
@@ -37,7 +37,7 @@ else
 fi
 
 JOB_NAME="debate-analyzer-postprocess-$(date +%s)"
-echo "Submitting transcript postprocess job (Ollama): $JOB_NAME"
+echo "Submitting transcript postprocess job (CPU queue): $JOB_NAME"
 echo "$ENV_NAME=$TRANSCRIPT_URI"
 
 aws batch submit-job \

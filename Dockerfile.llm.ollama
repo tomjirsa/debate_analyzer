@@ -40,8 +40,7 @@ COPY src/debate_analyzer /app/src/debate_analyzer
 ENV PYTHONPATH=/app/src
 
 COPY deploy/scripts/entrypoints/entrypoint_llm_ollama.sh /entrypoint_llm_ollama.sh
-COPY deploy/scripts/entrypoints/entrypoint_transcript_postprocess.sh /entrypoint_transcript_postprocess.sh
-RUN chmod +x /entrypoint_llm_ollama.sh /entrypoint_transcript_postprocess.sh
+RUN chmod +x /entrypoint_llm_ollama.sh
 
 # EFS is mounted at /cache; Ollama will store models in /cache/ollama
 ENV OLLAMA_MODELS=/cache/ollama

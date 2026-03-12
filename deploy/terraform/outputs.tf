@@ -89,8 +89,8 @@ output "batch_job_definition_llm_analysis_name" {
 }
 
 output "batch_job_definition_transcript_postprocess_name" {
-  description = "Job 5 transcript postprocess (Ollama); use with GPU queue and submit-transcript-postprocess-job.sh."
-  value       = aws_batch_job_definition.transcript_postprocess_ollama.name
+  description = "Job 5 transcript postprocess (CPU); use with CPU queue and submit-transcript-postprocess-job.sh."
+  value       = aws_batch_job_definition.transcript_postprocess.name
 }
 
 output "output_s3_prefix_example" {

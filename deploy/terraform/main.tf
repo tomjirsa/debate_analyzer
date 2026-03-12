@@ -663,47 +663,23 @@ resource "aws_batch_job_definition" "llm_analysis_ollama" {
   })
 }
 
-# Job 5: Transcript postprocess (Ollama; reads *_transcription_raw.json, writes *_transcription.json)
-resource "aws_batch_job_definition" "transcript_postprocess_ollama" {
-  name                  = "${local.name}-job-transcript-postprocess-ollama"
+# Job 5: Transcript postprocess (CPU; reads *_transcription_raw.json, writes *_transcription.json)
+resource "aws_batch_job_definition" "transcript_postprocess" {
+  name                  = "${local.name}-job-transcript-postprocess"
   type                  = "container"
   platform_capabilities = ["EC2"]
 
   container_properties = jsonencode({
-    image   = local.ecr_image_llm_ollama
+    image = local.ecr_image
     command = ["/entrypoint_transcript_postprocess.sh"]
     resourceRequirements = [
-      { type = "VCPU", value = "4" },
-      { type = "MEMORY", value = tostring(var.batch_llm_gpu_job_memory_mib) },
-      { type = "GPU", value = "1" }
+      { type = "VCPU", value = "2" },
+      { type = "MEMORY", value = "4096" }
     ]
     jobRoleArn       = aws_iam_role.batch_job.arn
     executionRoleArn = aws_iam_role.batch_execution.arn
     secrets          = []
-    environment = [
-      { name = "OLLAMA_HOST", value = "http://localhost:11434" },
-      { name = "OLLAMA_MODELS", value = "/cache/ollama" },
-      { name = "OLLAMA_MODEL", value = "qwen2.5:7b" },
-      { name = "LLM_MAX_MODEL_LEN", value = "8192" },
-      { name = "LLM_OLLAMA_MAX_CONTENT_TOKENS", value = "4692" },
-      { name = "LLM_OLLAMA_MAX_EXCERPT_TOKENS", value = "3000" },
-      { name = "LLM_CHARS_PER_TOKEN", value = "4" }
-    ]
-    volumes = [
-      {
-        name = "llm-cache"
-        efsVolumeConfiguration = {
-          fileSystemId = aws_efs_file_system.llm_cache.id
-        }
-      }
-    ]
-    mountPoints = [
-      {
-        containerPath = "/cache"
-        sourceVolume  = "llm-cache"
-        readOnly      = false
-      }
-    ]
+    environment      = []
     logConfiguration = {
       logDriver = "awslogs"
       options = {

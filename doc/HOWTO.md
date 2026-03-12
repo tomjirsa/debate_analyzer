@@ -94,7 +94,7 @@ output_dir/
 
 ## How to Transcribe Videos with Speaker Identification
 
-The transcriber module provides state-of-the-art speech-to-text transcription with automatic speaker identification using open-source models (faster-whisper + pyannote.audio). Default config targets **Czech** (`language: "cs"`) and uses `beam_size: 5` for quality; for other languages use `--language XX`. For full CLI options, Python API, output format, and troubleshooting, see [TRANSCRIBE.md](TRANSCRIBE.md). For optional LLM post-processing (grammar/ASR correction only), see [TRANSCRIBE.md#llm-post-processing-grammar--asr-correction](TRANSCRIBE.md#llm-post-processing-grammar--asr-correction).
+The transcriber module provides state-of-the-art speech-to-text transcription with automatic speaker identification using open-source models (faster-whisper + pyannote.audio). Default config targets **Czech** (`language: "cs"`) and uses `beam_size: 5` for quality; for other languages use `--language XX`. For full CLI options, Python API, output format, and troubleshooting, see [TRANSCRIBE.md](TRANSCRIBE.md). For optional post-processing (segment aggregation), see [TRANSCRIBE.md#post-processing-segment-aggregation](TRANSCRIBE.md#post-processing-segment-aggregation).
 
 ### Prerequisites
 
@@ -250,7 +250,7 @@ output_dir/
 └── video_name_transcription_raw.json # Raw transcription with speakers
 ```
 
-The transcriber writes `*_transcription_raw.json`. The optional postprocess step (see [TRANSCRIBE.md](TRANSCRIBE.md#llm-post-processing-grammar--asr-correction)) produces `*_transcription.json` for use by LLM analysis and the webapp.
+The transcriber writes `*_transcription_raw.json`. The optional postprocess step (see [TRANSCRIBE.md](TRANSCRIBE.md#post-processing-segment-aggregation)) produces `*_transcription.json` for use by LLM analysis and the webapp.
 
 **JSON Format:**
 ```json
