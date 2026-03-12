@@ -2,7 +2,7 @@
 
 ## Naming convention
 
-- **`*_transcription_raw.json`** — Output of the **transcription job only** (Whisper + diarization + aggregation). Segment-level list.
+- **`*_transcription_raw.json`** — Output of the **transcription job only** (Whisper + diarization + merge). Merge-only segments; no consecutive-speaker aggregation in the transcriber. Aggregation into blocks is done only in the postprocess job.
 - **`*_transcription.json`** — **Canonical transcript**: output of the **transcript postprocess job**, which reads raw and writes here. LLM postprocessing is not part of this job; the job only aggregates consecutive same-speaker segments into blocks (with uid, aggregated start/end, concatenated text). Downstream jobs (LLM analysis, stats, webapp registration) use this file.
 
 So: transcribe → `*_transcription_raw.json`; then postprocess job reads raw, aggregates into blocks, and writes `*_transcription.json`. The canonical transcript is produced by aggregation only (no LLM correction).
