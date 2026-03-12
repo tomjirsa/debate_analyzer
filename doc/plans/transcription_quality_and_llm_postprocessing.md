@@ -1,11 +1,11 @@
-# Transcription quality and LLM post-processing (updated plan)
+# Transcription quality and transcript post-processing (updated plan)
 
 ## Naming convention
 
-- **`*_transcription_raw.json`** — Output of the **transcription job only** (Whisper + diarization + aggregation). No LLM correction.
-- **`*_transcription.json`** — **Canonical transcript**: output of the **full pipeline** when LLM correction is run (i.e. post-process reads raw and writes here). Downstream jobs (LLM analysis, stats, webapp registration) use this file.
+- **`*_transcription_raw.json`** — Output of the **transcription job only** (Whisper + diarization + aggregation). Segment-level list.
+- **`*_transcription.json`** — **Canonical transcript**: output of the **transcript postprocess job**, which reads raw and writes here. LLM postprocessing is not part of this job; the job only aggregates consecutive same-speaker segments into blocks (with uid, aggregated start/end, concatenated text). Downstream jobs (LLM analysis, stats, webapp registration) use this file.
 
-So: transcribe → `*_transcription_raw.json`; then LLM post-process reads raw and writes `*_transcription.json`. The “whole job” (transcribe + correction) produces `*_transcription.json`.
+So: transcribe → `*_transcription_raw.json`; then postprocess job reads raw, aggregates into blocks, and writes `*_transcription.json`. The canonical transcript is produced by aggregation only (no LLM correction).
 
 ---
 
@@ -19,13 +19,13 @@ So: transcribe → `*_transcription_raw.json`; then LLM post-process reads raw a
 - **Transcriber output filename:** In [transcriber.py](src/debate_analyzer/transcriber/transcriber.py), change the written file from `{stem}_transcription.json` to **`{stem}_transcription_raw.json`** (e.g. line 354: `output_filename = f"{video_path.stem}_transcription_raw.json"`).
 - **Docs:** In [doc/TRANSCRIBE.md](doc/TRANSCRIBE.md) and optionally [doc/HOWTO.md](doc/HOWTO.md), document:
   - Default config targets Czech and `beam_size: 5`; for other languages use `--language XX` or `language: null` for auto-detect.
-  - Output of the transcriber is `*_transcription_raw.json`; the canonical `*_transcription.json` is produced by the full pipeline (transcribe + LLM correction).
+  - Output of the transcriber is `*_transcription_raw.json`; the canonical `*_transcription.json` is produced by the transcript postprocess job (aggregation of consecutive same-speaker segments into blocks; no LLM correction).
 
 ---
 
-## 2. LLM post-processing of transcript segments
+## 2. Transcript postprocess job (aggregation only; no LLM)
 
-**Goal:** Optional step that reads `*_transcription_raw.json`, corrects only the `text` field of each segment via the same LLM backends as analysis, and writes **`*_transcription.json`** (canonical transcript). Downstream jobs keep using `*_transcription.json` unchanged.
+**Goal:** The transcript postprocess job reads `*_transcription_raw.json`, **aggregates consecutive same-speaker segments into one block per speaker run**, and writes **`*_transcription.json`** (canonical transcript). LLM postprocessing (grammar/ASR error correction) is not part of this job.
 
 **Data flow:**
 
@@ -33,40 +33,24 @@ So: transcribe → `*_transcription_raw.json`; then LLM post-process reads raw a
 flowchart LR
   A["*_transcription_raw.json"]
   B[Load payload]
-  C[For each segment: prompt LLM]
-  D[Replace text only]
-  E["*_transcription.json"]
-  A --> B --> C --> D --> E
+  C[aggregate_consecutive_speakers]
+  D["*_transcription.json"]
+  A --> B --> C --> D
 ```
 
 **Design:**
 
 - **Input:** `*_transcription_raw.json` (from transcriber). Reuse [load_transcript_payload](src/debate_analyzer/api/loader.py).
-- **Output:** **`*_transcription.json`** — same directory/prefix as input, same structure; only segment `text` fields updated. Add e.g. `"model": {..., "postprocess": "ollama/..."}` for traceability.
-- **Backend:** Same as [llm_analysis_job.py](src/debate_analyzer/batch/llm_analysis_job.py): `MOCK_LLM=1` or Ollama via `get_ollama_backend()` and `generate_batch`.
-- **Prompt:** One prompt per segment. **Critical constraint:** the prompt must explicitly instruct the model to fix **only grammar and obvious transcription (ASR) errors**; **do not change meaning, wording, or content**. E.g. correct typos, verb agreement, punctuation, and clear speech-to-text mishears (e.g. homophones); do not paraphrase, add, remove, or reinterpret. New constant in [prompts.py](src/debate_analyzer/analysis/prompts.py); wording should stress “grammar and transcription errors only, no meaning change”.
-- **Batching:** `generate_batch` over segment prompts; cap per-segment token length if needed; on empty/invalid response keep original `text`.
-- **Preserve:** `start`, `end`, `speaker`, `confidence` unchanged.
+- **Output:** **`*_transcription.json`** — same directory/prefix as input. The `transcription` list contains **blocks** (not raw segments): each block has `start` (min of segment starts in the run), `end` (max of segment ends), `text` (concatenation of segment texts with a space), `speaker`, and `uid` (new unique id per block). Optionally `confidence` (average of merged segments when present).
+- **Implementation:** [transcript_postprocess.py](src/debate_analyzer/analysis/transcript_postprocess.py) provides `aggregate_consecutive_speakers(segments)`; [transcript_postprocess_job.py](src/debate_analyzer/batch/transcript_postprocess_job.py) loads raw, calls aggregation, writes result (no LLM backend).
+- **Docs:** Transcriber writes raw; postprocess job writes canonical `*_transcription.json` with blocks; downstream uses `*_transcription.json`.
 
-**Prompt wording (correction step):** The LLM prompt for post-processing **must** stress:
-- **Only** fix grammar errors and obvious transcription (ASR) errors (e.g. typos, homophones, punctuation).
-- **Do not** change meaning, paraphrase, add, remove, or reinterpret content.
-- Output **only** the corrected text, nothing else.
-
-This keeps the transcript faithful to what was said while cleaning mechanical and ASR mistakes.
-
-**Implementation:**
-
-- New module (e.g. `transcript_postprocess.py` or small package) that: loads raw payload, builds prompts, calls `generate_batch`, maps responses to segments, writes result as `*_transcription.json` (derive path from input: replace `_transcription_raw.json` with `_transcription.json`).
-- New batch/CLI entrypoint (e.g. `python -m debate_analyzer.batch.transcript_postprocess_job`) reading `TRANSCRIPT_S3_URI` (or path) pointing at a `*_transcription_raw.json`; optional `TRANSCRIPTS_S3_PREFIX` for multiple files.
-- Unit tests with `MOCK_LLM=1`.
-- Docs: when to use post-processing; that transcriber writes raw; post-process writes canonical `*_transcription.json`; downstream uses `*_transcription.json`.
 
 ---
 
 ## 3. Downstream and backward compatibility
 
-- **LLM analysis job,** **stats job,** **loader,** **webapp,** **deploy scripts:** They already expect and list `*_transcription.json`. No change needed: they will now get the corrected transcript when the full pipeline (transcribe + post-process) has been run.
+- **LLM analysis job,** **stats job,** **loader,** **webapp,** **deploy scripts:** They already expect and list `*_transcription.json`. No change needed: they will now get the aggregated (block-level) transcript when the full pipeline (transcribe + post-process) has been run.
 - **When only transcribe is run:** Only `*_transcription_raw.json` exists. To run analysis or stats, either:
   - Run the post-process job first (so that `*_transcription.json` is created), or
   - Temporarily treat `*_transcription_raw.json` as the transcript (e.g. pass its URI to the analysis job if we add support for “use raw as transcript” for testing). Plan assumes normal flow is: transcribe → post-process → analysis, so canonical input to analysis is `*_transcription.json`.
@@ -78,8 +62,8 @@ This keeps the transcript faithful to what was said while cleaning mechanical an
 
 | Output | Producer | Consumer |
 |--------|----------|----------|
-| `*_transcription_raw.json` | Transcriber only | LLM post-process job (input) |
-| `*_transcription.json` | LLM post-process (or, if skipped, could copy raw → transcription; see below) | LLM analysis, stats, webapp, deploy |
+| `*_transcription_raw.json` | Transcriber only | Transcript postprocess job (input) |
+| `*_transcription.json` | Transcript postprocess job (aggregation only; or, if skipped, copy raw → transcription; see below) | LLM analysis, stats, webapp, deploy |
 
 **Optional (skip post-processing):** If you do not run the postprocess job, add to the docs (e.g. [doc/TRANSCRIBE.md](doc/TRANSCRIBE.md) or [doc/DEPLOYMENT_AWS_BATCH.md](doc/DEPLOYMENT_AWS_BATCH.md)) a short subsection that explains how to use the raw transcript as the canonical one by copying in S3. Include an AWS CLI example:
 

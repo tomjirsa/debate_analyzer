@@ -1,15 +1,15 @@
 """
-Run LLM post-processing on transcript(s): correct grammar/ASR errors only.
+Run transcript post-processing: aggregate consecutive same-speaker segments into blocks.
 
 Reads *_transcription_raw.json (from transcriber), writes *_transcription.json.
+Each output item is a block (consecutive same-speaker segments merged) with
+aggregated start/end, concatenated text, speaker, and uid.
+
 Environment:
 - TRANSCRIPT_S3_URI: Single raw file (s3:// or file:// or path).
   Writes <stem>_transcription.json alongside.
 - TRANSCRIPTS_S3_PREFIX: S3 prefix listing *_transcription_raw.json;
   processes each, writes _transcription.json per file.
-
-Backend: MOCK_LLM=1 for tests. Otherwise Ollama (same as llm_analysis_job).
-Install with: poetry install --extras llm
 """
 
 from __future__ import annotations
@@ -20,16 +20,14 @@ import sys
 import time
 from pathlib import Path
 
-from debate_analyzer.analysis.backend import MockLLMBackend
-from debate_analyzer.analysis.prompts import SYSTEM_PROMPT_RESPONSE_LANGUAGE
-from debate_analyzer.analysis.transcript_postprocess import run_correction
-
-_MAX_TOKENS_PER_REPLY = 1024
+from debate_analyzer.analysis.transcript_postprocess import (
+    aggregate_consecutive_speakers,
+)
 
 
 def _log(msg: str) -> None:
-    """Emit progress message to stderr with [LLM] prefix."""
-    print(f"[LLM] {msg}", file=sys.stderr)
+    """Emit progress message to stderr."""
+    print(f"[postprocess] {msg}", file=sys.stderr)
 
 
 def _parse_s3_uri(uri: str) -> tuple[str, str]:
@@ -41,25 +39,6 @@ def _parse_s3_uri(uri: str) -> tuple[str, str]:
     bucket = parts[0]
     key = parts[1] if len(parts) > 1 else ""
     return bucket, key
-
-
-def _get_backend():
-    """Return generate_batch callable: mock when MOCK_LLM=1, else Ollama backend."""
-    if os.environ.get("MOCK_LLM", "").strip() in ("1", "true", "yes"):
-        backend = MockLLMBackend()
-        return backend.generate_batch, "mock"
-    try:
-        from debate_analyzer.analysis.backend_ollama import get_ollama_backend
-
-        backend = get_ollama_backend(system_prompt=SYSTEM_PROMPT_RESPONSE_LANGUAGE)
-        return backend.generate_batch, "ollama"
-    except ImportError as e:
-        print(
-            "Error: Ollama backend requires langchain-ollama. "
-            "Install with: poetry install --extras llm",
-            file=sys.stderr,
-        )
-        raise SystemExit(1) from e
 
 
 def _write_result_s3(result: dict, bucket: str, key: str) -> None:
@@ -82,8 +61,8 @@ def _write_result_file(result: dict, path: Path) -> None:
     path.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
-def _run_one(source_uri: str, generate_batch, model_label: str) -> bool:
-    """Load raw transcript, run correction, write _transcription.json."""
+def _run_one(source_uri: str) -> bool:
+    """Load raw, aggregate consecutive same-speaker segments, write output."""
     from debate_analyzer.api.loader import load_transcript_payload
 
     try:
@@ -92,12 +71,10 @@ def _run_one(source_uri: str, generate_batch, model_label: str) -> bool:
         print(f"Error loading {source_uri}: {e}", file=sys.stderr)
         return False
 
-    result = run_correction(
-        payload,
-        generate_batch,
-        max_tokens_per_reply=_MAX_TOKENS_PER_REPLY,
-        postprocess_model_label=model_label,
-    )
+    segments = payload.get("transcription") or []
+    blocks = aggregate_consecutive_speakers(segments)
+    result = dict(payload)
+    result["transcription"] = blocks
 
     if source_uri.startswith("s3://"):
         bucket, key = _parse_s3_uri(source_uri)
@@ -140,12 +117,7 @@ def run(prefix_or_uri: str) -> int:
 
     if "_transcription_raw.json" in s:
         _log(f"Processing single file: {s}")
-        _log("Loading model...")
-        t0 = time.perf_counter()
-        generate_batch, model_label = _get_backend()
-        _log(f"Model ready in {time.perf_counter() - t0:.1f}s.")
-        _log(f"Correcting transcript: {s}")
-        ok = _run_one(s, generate_batch, model_label)
+        ok = _run_one(s)
         if ok:
             _log("Completed transcript.")
         else:
@@ -181,17 +153,13 @@ def run(prefix_or_uri: str) -> int:
         _log("Job finished: 0 transcript(s) processed.")
         return 0
 
-    _log("Loading model...")
-    t0 = time.perf_counter()
-    generate_batch, model_label = _get_backend()
-    _log(f"Model ready in {time.perf_counter() - t0:.1f}s.")
     n = len(uris)
     succeeded = 0
     failed = 0
     for i, uri in enumerate(uris):
         short_key = uri.split("/")[-1] if "/" in uri else uri
         _log(f"Processing transcript {i + 1}/{n}: {short_key}")
-        ok = _run_one(uri, generate_batch, model_label)
+        ok = _run_one(uri)
         if ok:
             succeeded += 1
             _log(f"Completed transcript {i + 1}/{n}.")
