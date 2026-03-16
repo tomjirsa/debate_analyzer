@@ -17,7 +17,11 @@ from debate_analyzer.analysis.chunking import (
     truncate_to_tokens,
 )
 from debate_analyzer.analysis.runner import run_analysis
-from debate_analyzer.analysis.schema import LLMAnalysisResult
+from debate_analyzer.analysis.schema import LLMAnalysisResult, SegmentSummary
+from debate_analyzer.analysis.segment_summary_runner import (
+    _parse_summary_json,
+    run_segment_summaries,
+)
 
 
 def test_flatten_transcription_empty():
@@ -229,46 +233,77 @@ def test_mock_backend_generate_batch():
 
 
 def test_run_analysis_empty_payload():
-    """Empty transcription yields empty result."""
+    """Empty transcription yields empty segment_summaries."""
     backend = MockLLMBackend()
     result = run_analysis({"transcription": []}, backend.generate_batch)
-    assert result["speaker_contributions"] == []
+    assert "segment_summaries" in result
+    assert result["segment_summaries"] == []
+    assert backend.call_count == 0
 
 
 def test_run_analysis_returns_expected_shape():
-    """run_analysis returns dict with speaker_contributions (empty)."""
+    """run_analysis returns dict with segment_summaries (one per block)."""
     backend = MockLLMBackend()
     payload = {
         "transcription": [
-            {"speaker": "SPEAKER_00", "text": "Topic one.", "start": 0.0, "end": 5.0},
-            {"speaker": "SPEAKER_01", "text": "Topic two.", "start": 5.0, "end": 10.0},
+            {
+                "uid": "u1",
+                "speaker": "SPEAKER_00",
+                "text": "Topic one.",
+                "start": 0.0,
+                "end": 5.0,
+            },
+            {
+                "uid": "u2",
+                "speaker": "SPEAKER_01",
+                "text": "Topic two.",
+                "start": 5.0,
+                "end": 10.0,
+            },
         ]
     }
     result = run_analysis(payload, backend.generate_batch)
-    assert "speaker_contributions" in result
-    assert result["speaker_contributions"] == []
-    assert backend.call_count == 0
+    assert "segment_summaries" in result
+    assert len(result["segment_summaries"]) == 2
+    assert result["segment_summaries"][0]["uid"] == "u1"
+    assert result["segment_summaries"][0]["speaker"] == "SPEAKER_00"
+    assert result["segment_summaries"][0]["start"] == 0.0
+    assert result["segment_summaries"][0]["end"] == 5.0
+    assert "Shrnutí" in result["segment_summaries"][0]["summary"]
+    assert result["segment_summaries"][0]["keywords"]
+    assert result["segment_summaries"][1]["uid"] == "u2"
+    assert backend.call_count == 2
 
 
-def test_run_analysis_never_calls_generate_batch():
-    """run_analysis does not call generate_batch (empty result path)."""
+def test_run_analysis_calls_generate_batch_per_block():
+    """run_analysis calls generate_batch once per block with text."""
     backend = MockLLMBackend()
     run_analysis(
-        {"transcription": [{"speaker": "S", "text": "x", "start": 0.0, "end": 1.0}]},
+        {
+            "transcription": [
+                {
+                    "uid": "u1",
+                    "speaker": "S",
+                    "text": "x",
+                    "start": 0.0,
+                    "end": 1.0,
+                },
+            ],
+        },
         backend.generate_batch,
     )
-    assert backend.call_count == 0
+    assert backend.call_count == 1
 
 
-def test_run_analysis_empty_transcription_no_contributions():
-    """Empty transcription yields no speaker contributions."""
+def test_run_analysis_empty_transcription_no_segment_summaries():
+    """Empty transcription yields no segment summaries."""
     backend = MockLLMBackend()
     result = run_analysis({"transcription": []}, backend.generate_batch)
-    assert result["speaker_contributions"] == []
+    assert result["segment_summaries"] == []
 
 
-def test_run_analysis_no_timestamps_still_returns_empty():
-    """Payload without timestamps still returns empty result (no LLM call)."""
+def test_run_analysis_no_timestamps_uses_defaults_and_returns_records():
+    """Payload without uid/start/end still processed; defaults used."""
     backend = MockLLMBackend()
     payload = {
         "transcription": [
@@ -277,7 +312,11 @@ def test_run_analysis_no_timestamps_still_returns_empty():
         ]
     }
     result = run_analysis(payload, backend.generate_batch)
-    assert result["speaker_contributions"] == []
+    assert "segment_summaries" in result
+    assert len(result["segment_summaries"]) == 2
+    assert result["segment_summaries"][0]["speaker"] == "SPEAKER_00"
+    assert result["segment_summaries"][0]["start"] == 0.0
+    assert result["segment_summaries"][0]["end"] == 0.0
 
 
 def test_get_topic_relevant_excerpt_includes_matching_region():
@@ -356,7 +395,7 @@ def test_truncate_to_tokens_bounds_output():
 
 
 def test_llm_analysis_result_from_dict():
-    """LLMAnalysisResult.from_dict parses raw dict with speaker_contributions only."""
+    """LLMAnalysisResult.from_dict parses speaker_contributions or segment_summaries."""
     d = {
         "speaker_contributions": [
             {
@@ -375,6 +414,25 @@ def test_llm_analysis_result_from_dict():
     assert r.speaker_contributions[0]["keywords"] == ["klíčové", "slovo"]
     assert r.to_dict()["speaker_contributions"] == d["speaker_contributions"]
 
+    d2 = {
+        "segment_summaries": [
+            {
+                "uid": "u1",
+                "speaker": "SPEAKER_00",
+                "start": 0.0,
+                "end": 10.5,
+                "summary": "Shrnutí.",
+                "keywords": ["a", "b"],
+            }
+        ],
+    }
+    r2 = LLMAnalysisResult.from_dict(d2)
+    assert len(r2.segment_summaries) == 1
+    assert r2.segment_summaries[0]["uid"] == "u1"
+    assert r2.segment_summaries[0]["start"] == 0.0
+    assert r2.segment_summaries[0]["end"] == 10.5
+    assert r2.to_dict()["segment_summaries"] == d2["segment_summaries"]
+
 
 def test_get_backend_returns_mock_when_mock_llm_set():
     """_get_backend() returns mock generate_batch when MOCK_LLM=1."""
@@ -388,3 +446,90 @@ def test_get_backend_returns_mock_when_mock_llm_set():
     out = generate_batch(["List the main topics"], max_tokens=100)
     assert len(out) == 1
     assert "speaker_contributions" in out[0]
+
+
+def test_parse_summary_json_valid():
+    """_parse_summary_json extracts summary and keywords from valid JSON."""
+    raw = '{"summary": "Shrnutí.", "keywords": ["a", "b"]}'
+    summary, keywords = _parse_summary_json(raw)
+    assert summary == "Shrnutí."
+    assert keywords == ["a", "b"]
+
+
+def test_parse_summary_json_with_surrounding_text():
+    """_parse_summary_json finds JSON object inside surrounding text."""
+    raw = 'Here is the result:\n{"summary": "Ok.", "keywords": ["x"]}\nDone.'
+    summary, keywords = _parse_summary_json(raw)
+    assert summary == "Ok."
+    assert keywords == ["x"]
+
+
+def test_parse_summary_json_invalid_returns_empty():
+    """_parse_summary_json returns empty on invalid or missing JSON."""
+    assert _parse_summary_json("") == ("", [])
+    assert _parse_summary_json("not json") == ("", [])
+    assert _parse_summary_json("{}") == ("", [])
+
+
+def test_segment_summary_from_dict_to_dict():
+    """SegmentSummary.from_dict and to_dict round-trip."""
+    d = {
+        "uid": "u1",
+        "speaker": "SPEAKER_00",
+        "start": 0.0,
+        "end": 10.5,
+        "summary": "S.",
+        "keywords": ["k1"],
+    }
+    seg = SegmentSummary.from_dict(d)
+    assert seg.uid == "u1"
+    assert seg.speaker == "SPEAKER_00"
+    assert seg.start == 0.0
+    assert seg.end == 10.5
+    assert seg.summary == "S."
+    assert seg.keywords == ["k1"]
+    assert seg.to_dict() == d
+
+
+def test_run_segment_summaries_skips_empty_text():
+    """run_segment_summaries skips blocks with empty text."""
+
+    def gen_batch(prompts, max_tokens=2048):
+        return ['{"summary": "x", "keywords": []}'] * len(prompts)
+
+    payload = {
+        "transcription": [
+            {"uid": "u1", "speaker": "S", "text": "", "start": 0, "end": 1},
+            {"uid": "u2", "speaker": "S", "text": "  \n  ", "start": 1, "end": 2},
+            {"uid": "u3", "speaker": "S", "text": "one word", "start": 2, "end": 3},
+        ],
+    }
+    result = run_segment_summaries(payload, gen_batch, max_context_tokens=8000)
+    assert len(result) == 1
+    assert result[0]["uid"] == "u3"
+    assert result[0]["start"] == 2.0
+    assert result[0]["end"] == 3.0
+
+
+def test_run_segment_summaries_preserves_uid_and_metadata():
+    """run_segment_summaries preserves uid, speaker, start, end from block."""
+    backend = MockLLMBackend()
+    payload = {
+        "transcription": [
+            {
+                "uid": "my-uid-123",
+                "speaker": "SPEAKER_07",
+                "text": "Short segment.",
+                "start": 100.5,
+                "end": 105.25,
+            },
+        ],
+    }
+    result = run_segment_summaries(payload, backend.generate_batch)
+    assert len(result) == 1
+    assert result[0]["uid"] == "my-uid-123"
+    assert result[0]["speaker"] == "SPEAKER_07"
+    assert result[0]["start"] == 100.5
+    assert result[0]["end"] == 105.25
+    assert "summary" in result[0]
+    assert "keywords" in result[0]

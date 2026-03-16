@@ -60,19 +60,92 @@ class SpeakerContribution:
         )
 
 
+class SegmentSummary:
+    """One segment (block) summary: uid, speaker, start, end, summary, keywords."""
+
+    __slots__ = ("uid", "speaker", "start", "end", "summary", "keywords")
+
+    def __init__(
+        self,
+        uid: str,
+        speaker: str,
+        start: float,
+        end: float,
+        summary: str,
+        keywords: list[str] | None = None,
+    ) -> None:
+        self.uid = uid
+        self.speaker = speaker
+        self.start = start
+        self.end = end
+        self.summary = summary
+        self.keywords = keywords if keywords is not None else []
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dict for JSON."""
+        return {
+            "uid": self.uid,
+            "speaker": self.speaker,
+            "start": self.start,
+            "end": self.end,
+            "summary": self.summary,
+            "keywords": list(self.keywords),
+        }
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any]) -> SegmentSummary:
+        """Parse from dict."""
+
+        def _float(val: Any) -> float:
+            if val is None:
+                return 0.0
+            try:
+                return float(val)
+            except (TypeError, ValueError):
+                return 0.0
+
+        return cls(
+            uid=str(d.get("uid", "")),
+            speaker=str(d.get("speaker", "")),
+            start=_float(d.get("start")),
+            end=_float(d.get("end")),
+            summary=str(d.get("summary", "")),
+            keywords=_get_list_str(d, "keywords"),
+        )
+
+
 class LLMAnalysisResult:
-    """Result of LLM analysis: speaker contributions only."""
+    """Result of LLM analysis: speaker_contributions (legacy) or segment_summaries."""
 
-    __slots__ = ("speaker_contributions",)
+    __slots__ = ("speaker_contributions", "segment_summaries")
 
-    def __init__(self, speaker_contributions: list[dict[str, Any]]) -> None:
-        self.speaker_contributions = speaker_contributions
+    def __init__(
+        self,
+        speaker_contributions: list[dict[str, Any]] | None = None,
+        segment_summaries: list[dict[str, Any]] | None = None,
+    ) -> None:
+        self.speaker_contributions = (
+            speaker_contributions if speaker_contributions is not None else []
+        )
+        self.segment_summaries = (
+            segment_summaries if segment_summaries is not None else []
+        )
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dict for JSON storage."""
-        return {"speaker_contributions": self.speaker_contributions}
+        out: dict[str, Any] = {}
+        if self.speaker_contributions:
+            out["speaker_contributions"] = self.speaker_contributions
+        if self.segment_summaries:
+            out["segment_summaries"] = self.segment_summaries
+        if not out:
+            out["segment_summaries"] = []
+        return out
 
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> LLMAnalysisResult:
         """Parse from raw LLM output dict (e.g. parsed JSON)."""
-        return cls(speaker_contributions=_get_list(d, "speaker_contributions"))
+        return cls(
+            speaker_contributions=_get_list(d, "speaker_contributions"),
+            segment_summaries=_get_list(d, "segment_summaries"),
+        )

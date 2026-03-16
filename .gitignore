@@ -63,6 +63,9 @@ db.sqlite3-journal
 debate_analyzer.db
 debate_analyzer.db-journal
 
+# SQLite in-memory DB files (e.g. file:memdb from test/config)
+*memdb*
+
 # Local dev SQLite (skill-recommended db in repo root)
 db_devel.db
 db_devel.db-journal

@@ -27,12 +27,22 @@ class MockLLMBackend:
         self.call_count = 0
 
     def _response_for_prompt(self, prompt: str) -> str:
-        """Return response for one prompt. Grammar correction returns segment text."""
+        """Return response for one prompt. Grammar correction returns segment text.
+
+        Segment-summary prompts get valid segment-summary JSON so tests get
+        summary and keywords.
+        """
         if "Correct only grammar" in prompt or "Corrected text:" in prompt:
             parts = prompt.split("---")
             if len(parts) >= 2:
                 return parts[1].strip()
             return ""
+        if "Summarize the following" in prompt or "Segment text:" in prompt:
+            return (
+                '{"summary": "Shrnutí segmentu.", "keywords": ["klíč1", "klíč2"]}'
+            )
+        if "partial summaries" in prompt.lower() or "Combine them" in prompt:
+            return '{"summary": "Slučené shrnutí.", "keywords": ["sloučený"]}'
         return self.default_response
 
     def generate(self, prompt: str, max_tokens: int = 2048) -> str:

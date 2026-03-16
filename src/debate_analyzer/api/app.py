@@ -484,9 +484,16 @@ def admin_register_transcript(
                 if isinstance(analysis_payload.get("result"), dict)
                 else analysis_payload
             )
-            if not isinstance(result, dict) or "speaker_contributions" not in result:
+            has_contributions = isinstance(result, dict) and isinstance(
+                result.get("speaker_contributions"), list
+            )
+            has_segment_summaries = isinstance(result, dict) and isinstance(
+                result.get("segment_summaries"), list
+            )
+            if not (has_contributions or has_segment_summaries):
                 llm_import_warning = (
-                    "LLM analysis not imported: analysis missing speaker_contributions"
+                    "LLM analysis not imported: analysis missing "
+                    "speaker_contributions or segment_summaries"
                 )
             else:
                 repo.create_llm_analysis(
@@ -596,17 +603,31 @@ def admin_import_transcript_analysis(
             if isinstance(payload.get("result"), dict)
             else payload
         )
-        if not isinstance(result, dict) or "speaker_contributions" not in result:
+        has_contributions = isinstance(result, dict) and isinstance(
+            result.get("speaker_contributions"), list
+        )
+        has_segment_summaries = isinstance(result, dict) and isinstance(
+            result.get("segment_summaries"), list
+        )
+        if not (has_contributions or has_segment_summaries):
             raise HTTPException(
                 status_code=400,
-                detail="Invalid analysis: expected object with speaker_contributions",
+                detail="Invalid analysis: expected object with "
+                "speaker_contributions or segment_summaries",
             )
     elif body.result is not None:
         result = body.result
-        if not isinstance(result, dict) or "speaker_contributions" not in result:
+        has_contributions = isinstance(result, dict) and isinstance(
+            result.get("speaker_contributions"), list
+        )
+        has_segment_summaries = isinstance(result, dict) and isinstance(
+            result.get("segment_summaries"), list
+        )
+        if not (has_contributions or has_segment_summaries):
             raise HTTPException(
                 status_code=400,
-                detail="Invalid analysis: expected object with speaker_contributions",
+                detail="Invalid analysis: expected object with "
+                "speaker_contributions or segment_summaries",
             )
     else:
         raise HTTPException(
