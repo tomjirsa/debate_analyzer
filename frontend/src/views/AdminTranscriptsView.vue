@@ -5,7 +5,7 @@
       | <router-link to="/admin/speakers">Manage speakers</router-link>
     </p>
 
-    <Card class="mb-4">
+      <DashboardCard class="mb-4">
         <template #title>Register transcript</template>
         <template #content>
           <div class="flex flex-column gap-2" style="max-width: 480px;">
@@ -42,9 +42,9 @@
             <Message v-else-if="registerWarning" severity="warn">{{ registerWarning }}</Message>
           </div>
         </template>
-      </Card>
+      </DashboardCard>
 
-      <Card>
+      <DashboardCard>
         <template #title>Transcripts</template>
         <template #content>
           <Message v-if="listErr" severity="error">{{ listErr }}</Message>
@@ -100,7 +100,7 @@
           </DataTable>
           <p v-else>No transcripts. Register one above.</p>
         </template>
-      </Card>
+      </DashboardCard>
 
     <ConfirmPopup />
   </div>
@@ -110,7 +110,6 @@
 import { ref, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import Button from 'primevue/button'
-import Card from 'primevue/card'
 import Column from 'primevue/column'
 import ConfirmPopup from 'primevue/confirmpopup'
 import DataTable from 'primevue/datatable'
@@ -119,6 +118,7 @@ import Message from 'primevue/message'
 import Select from 'primevue/select'
 import Textarea from 'primevue/textarea'
 import { useConfirm } from 'primevue/useconfirm'
+import DashboardCard from '../components/DashboardCard.vue'
 import { useAdminAuth } from '../composables/useAdminAuth'
 
 const router = useRouter()

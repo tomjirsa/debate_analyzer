@@ -4,7 +4,7 @@
       <router-link to="/">← Dashboard</router-link>
     </p>
 
-    <Card>
+    <DashboardCard>
       <template #title>Admin</template>
       <template #content>
         <div v-if="showLogin" class="login-box">
@@ -55,7 +55,7 @@
           </Panel>
         </template>
       </template>
-    </Card>
+    </DashboardCard>
   </div>
 </template>
 
@@ -63,11 +63,11 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import Button from 'primevue/button'
-import Card from 'primevue/card'
 import InputText from 'primevue/inputtext'
 import Message from 'primevue/message'
 import Panel from 'primevue/panel'
 import Password from 'primevue/password'
+import DashboardCard from '../components/DashboardCard.vue'
 import { useAdminAuth } from '../composables/useAdminAuth'
 
 const route = useRoute()

@@ -23,6 +23,35 @@
     </Card>
 
     <Card v-if="group && !loading && !error" class="mb-3">
+      <template #title>At a glance</template>
+      <template #content>
+        <MetricStatGrid :items="atAGlanceItems" />
+      </template>
+    </Card>
+
+    <Card v-if="group && !loading && !error" class="mb-3">
+      <template #title>Top speakers</template>
+      <template #content>
+        <Message v-if="!topSpeakers.length" severity="info">
+          No speakers in this group yet.
+        </Message>
+        <template v-else>
+          <div class="dashboard-chart-section">
+            <div class="dashboard-chart-header">
+              <span>By transcript count</span>
+            </div>
+            <StatBarChart
+              :labels="topSpeakerLabels"
+              :values="topSpeakerValues"
+              yAxisName="Transcripts"
+              :value-formatter="transcriptCountFormatter"
+            />
+          </div>
+        </template>
+      </template>
+    </Card>
+
+    <Card v-if="group && !loading && !error" class="mb-3">
       <template #title>Speakers</template>
       <template #content>
         <Message v-if="!speakers.length" severity="info">
@@ -118,6 +147,8 @@ import Column from 'primevue/column'
 import DataTable from 'primevue/datatable'
 import Message from 'primevue/message'
 import ProgressSpinner from 'primevue/progressspinner'
+import MetricStatGrid from '../components/MetricStatGrid.vue'
+import StatBarChart from '../components/StatBarChart.vue'
 
 const route = useRoute()
 const groupIdOrSlug = computed(() => route.params.idOrSlug)
@@ -135,6 +166,51 @@ const breadcrumbItems = computed(() => {
   }
   return items
 })
+
+const atAGlanceItems = computed(() => {
+  const transcriptCount = transcripts.value?.length ?? 0
+  const speakerCount = speakers.value?.length ?? 0
+  const totalSpeakerTranscriptCount = (speakers.value || []).reduce(
+    (acc, s) => acc + (Number(s.transcript_count) || 0),
+    0,
+  )
+  const topSpeakerTranscriptCount = (speakers.value || []).reduce(
+    (max, s) => Math.max(max, Number(s.transcript_count) || 0),
+    0,
+  )
+  return [
+    { key: 'transcripts', value: transcriptCount, label: 'Transcripts' },
+    { key: 'speakers', value: speakerCount, label: 'Speakers' },
+    { key: 'links', value: totalSpeakerTranscriptCount, label: 'Speaker-transcript links' },
+    { key: 'top', value: topSpeakerTranscriptCount, label: 'Top speaker transcripts' },
+  ]
+})
+
+const topSpeakers = computed(() => {
+  const list = (speakers.value || []).map((s) => ({
+    id: s.id,
+    name: displayName(s),
+    count: Number(s.transcript_count) || 0,
+  }))
+  list.sort((a, b) => b.count - a.count)
+  return list.slice(0, 5)
+})
+
+const topSpeakerLabels = computed(() =>
+  (topSpeakers.value || []).map((s) => {
+    const maxLen = 24
+    if (s.name.length <= maxLen) return s.name
+    return s.name.slice(0, maxLen - 1) + '…'
+  }),
+)
+
+const topSpeakerValues = computed(() => (topSpeakers.value || []).map((s) => s.count))
+
+function transcriptCountFormatter(value) {
+  const n = Number(value)
+  if (Number.isNaN(n)) return '—'
+  return n.toLocaleString()
+}
 
 function displayName(s) {
   if (s.first_name && s.surname) return `${s.first_name} ${s.surname}`

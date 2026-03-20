@@ -47,40 +47,13 @@
         <template #title>Summary</template>
         <template #content>
           <template v-if="statDefinitions.length">
-            <section v-for="group in statDefinitions" :key="group.key" class="stat-group">
+            <section v-for="group in statItemsByGroup" :key="group.key" class="stat-group">
               <h3 class="group-label">{{ group.label }}</h3>
-              <div class="stats">
-                <div
-                  v-for="defn in group.stats"
-                  :key="defn.stat_key"
-                  v-show="stats[defn.stat_key] != null && stats[defn.stat_key] !== ''"
-                  class="stat"
-                >
-                  <span class="value">{{ formatStatValue(defn.stat_key, stats[defn.stat_key]) }}</span>
-                  <br><span class="label">{{ statLabel(defn.stat_key, defn.label, stats[defn.stat_key]) }}</span>
-                </div>
-              </div>
+              <MetricStatGrid :items="group.items" />
             </section>
           </template>
           <template v-else>
-            <div class="stats">
-              <div class="stat">
-                <span class="value">{{ formatNum(stats.transcript_count) }}</span>
-                <br><span class="label">Transcripts</span>
-              </div>
-              <div class="stat">
-                <span class="value">{{ formatNum(stats.segment_count) }}</span>
-                <br><span class="label">Segments</span>
-              </div>
-              <div class="stat">
-                <span class="value">{{ formatTime(stats.total_seconds) }}</span>
-                <br><span class="label">Speaking time</span>
-              </div>
-              <div class="stat">
-                <span class="value">{{ formatNum(stats.word_count) }}</span>
-                <br><span class="label">Words</span>
-              </div>
-            </div>
+            <MetricStatGrid :items="fallbackStatItems" />
           </template>
         </template>
       </Card>
@@ -88,8 +61,8 @@
       <Card v-if="statsByTranscript && statsByTranscript.length" class="by-transcript">
         <template #title>By transcript</template>
         <template #content>
-          <div class="chart-section">
-            <div class="chart-header">
+          <ChartCard>
+            <template #controls>
               <label for="chart-stat-select" class="chart-label">Metric:</label>
               <Select
                 id="chart-stat-select"
@@ -99,14 +72,14 @@
                 option-value="value"
                 class="chart-select"
               />
-            </div>
+            </template>
             <StatBarChart
               :labels="chartLabels"
               :values="chartValues"
               :y-axis-name="chartYAxisName"
               :value-formatter="chartValueFormatter"
             />
-          </div>
+          </ChartCard>
           <ul class="transcript-list">
             <li v-for="row in statsByTranscript" :key="row.transcript_id" class="transcript-row">
               <div class="transcript-main">
@@ -154,6 +127,8 @@ import Card from 'primevue/card'
 import Message from 'primevue/message'
 import ProgressBar from 'primevue/progressbar'
 import Select from 'primevue/select'
+import MetricStatGrid from '../components/MetricStatGrid.vue'
+import ChartCard from '../components/ChartCard.vue'
 import StatBarChart from '../components/StatBarChart.vue'
 import { formatDuration, formatDurationStatLabel } from '../utils/format.js'
 
@@ -253,6 +228,31 @@ function formatStatValue(statKey, value) {
   return String(value)
 }
 
+const statItemsByGroup = computed(() => {
+  const defs = statDefinitions.value || []
+  if (!defs.length) return []
+  return defs.map((group) => {
+    const items = (group.stats || [])
+      .filter((defn) => stats.value?.[defn.stat_key] != null && stats.value[defn.stat_key] !== '')
+      .map((defn) => {
+        const v = stats.value[defn.stat_key]
+        return {
+          key: defn.stat_key,
+          value: formatStatValue(defn.stat_key, v),
+          label: statLabel(defn.stat_key, defn.label, v),
+        }
+      })
+    return { key: group.key, label: group.label, items }
+  })
+})
+
+const fallbackStatItems = computed(() => [
+  { key: 'transcripts', value: formatNum(stats.value.transcript_count), label: 'Transcripts' },
+  { key: 'segments', value: formatNum(stats.value.segment_count), label: 'Segments' },
+  { key: 'speaking_time', value: formatTime(stats.value.total_seconds), label: 'Speaking time' },
+  { key: 'words', value: formatNum(stats.value.word_count), label: 'Words' },
+])
+
 /** Truncate label for chart axis (max length in chars). */
 function truncateLabel(str, maxLen = 32) {
   const s = String(str || '')
@@ -333,12 +333,6 @@ onMounted(async () => {
 <style scoped>
 .mb-3 { margin-bottom: 1rem; }
 .mb-4 { margin-bottom: 1.5rem; }
-.stats {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-  gap: 1rem;
-  margin: 1rem 0;
-}
 .stat-group {
   margin-bottom: 1rem;
 }
@@ -348,40 +342,6 @@ onMounted(async () => {
   margin: 0 0 0.5rem 0;
   color: var(--p-text-muted-color, #6b7280);
 }
-.stat {
-  padding: 1rem;
-  border-radius: var(--p-border-radius, 6px);
-  background: var(--p-surface-0, #fff);
-  border: 1px solid var(--p-surface-200, #e5e7eb);
-  border-left: 3px solid var(--p-primary-500, #3b82f6);
-  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.04);
-}
-.stat .value {
-  font-size: 1.75rem;
-  font-weight: 700;
-  line-height: 1.2;
-  color: var(--p-text-color, #111);
-}
-.stat .label {
-  font-size: 0.8rem;
-  margin-top: 0.25rem;
-  color: var(--p-text-muted-color, #6b7280);
-  font-weight: 500;
-}
-.chart-section {
-  margin-bottom: 1.5rem;
-  padding: 1rem;
-  border-radius: var(--p-border-radius, 6px);
-  border: 1px solid var(--p-surface-200, #e5e7eb);
-}
-.chart-header {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  margin-bottom: 0.75rem;
-}
-.chart-label { font-size: 0.9rem; }
-.chart-select { min-width: 200px; }
 .transcript-list { list-style: none; padding: 0; margin: 0; }
 .transcript-row {
   padding: 0.75rem 0;

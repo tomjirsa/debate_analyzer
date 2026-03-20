@@ -9,7 +9,7 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import VChart from 'vue-echarts'
 import { use } from 'echarts/core'
 import { CanvasRenderer } from 'echarts/renderers'
@@ -28,6 +28,25 @@ use([
   TooltipComponent,
   TitleComponent,
 ])
+
+// PrimeVue dark mode toggles by adding/removing `.app-dark` on `documentElement`.
+// ECharts option values are built from CSS variables at compute time, so we
+// trigger recomputation when the theme class changes.
+const themeVersion = ref(0)
+
+let classObserver = null
+
+onMounted(() => {
+  classObserver = new MutationObserver(() => {
+    themeVersion.value += 1
+  })
+  classObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] })
+})
+
+onBeforeUnmount(() => {
+  classObserver && classObserver.disconnect()
+  classObserver = null
+})
 
 const props = defineProps({
   /** X-axis labels (e.g. transcript titles). */
@@ -58,6 +77,8 @@ const props = defineProps({
 })
 
 const chartOption = computed(() => {
+  // Ensure ECharts option updates when the theme toggles.
+  void themeVersion.value
   const { labels, values, title, yAxisName, valueFormatter } = props
   const { primaryColor, gridColor, textColor, tooltipBg } = chartTheme
   return {
@@ -66,7 +87,9 @@ const chartOption = computed(() => {
       trigger: 'axis',
       backgroundColor: tooltipBg,
       borderColor: gridColor,
+      borderWidth: 1,
       textStyle: { color: textColor },
+      axisPointer: { type: 'shadow' },
       formatter: (items) => {
         if (!items || !items.length) return ''
         const item = items[0]
@@ -95,6 +118,7 @@ const chartOption = computed(() => {
         color: textColor,
       },
       axisLine: { lineStyle: { color: gridColor } },
+      axisTick: { show: false },
       splitLine: { show: false },
     },
     yAxis: {
@@ -113,6 +137,12 @@ const chartOption = computed(() => {
         data: values,
         itemStyle: {
           color: primaryColor,
+          borderRadius: [6, 6, 0, 0],
+        },
+        emphasis: {
+          itemStyle: {
+            borderRadius: [6, 6, 0, 0],
+          },
         },
       },
     ],

@@ -19,24 +19,7 @@
       <Card class="mb-4">
         <template #title>Summary</template>
         <template #content>
-          <div class="stats">
-            <div class="stat">
-              <span class="value">{{ formatTime(transcript.duration) }}</span>
-              <br><span class="label">Duration</span>
-            </div>
-            <div class="stat">
-              <span class="value">{{ formatNum(transcript.stats_total_words) }}</span>
-              <br><span class="label">Words</span>
-            </div>
-            <div class="stat">
-              <span class="value">{{ formatNum(transcript.stats_segment_count) }}</span>
-              <br><span class="label">Segments</span>
-            </div>
-            <div class="stat">
-              <span class="value">{{ formatNum(transcript.speakers_count) }}</span>
-              <br><span class="label">Speakers</span>
-            </div>
-          </div>
+          <MetricStatGrid :items="summaryStatsItems" />
         </template>
       </Card>
 
@@ -60,11 +43,11 @@
             "
             class="contribution-keywords"
           >
-            <span
+            <KeywordTag
               v-for="kw in llmAnalysis.transcript_summary.keywords"
               :key="kw"
-              class="keyword-tag"
-              >{{ kw }}</span>
+              :text="kw"
+            />
           </div>
         </template>
       </Card>
@@ -92,11 +75,11 @@
                 <span v-if="c.id" class="contribution-id">{{ c.id }}</span>
                 <p class="contribution-summary">{{ c.summary }}</p>
                 <div v-if="c.keywords && c.keywords.length" class="contribution-keywords">
-                  <span
+                  <KeywordTag
                     v-for="kw in c.keywords"
                     :key="kw"
-                    class="keyword-tag"
-                  >{{ kw }}</span>
+                    :text="kw"
+                  />
                 </div>
               </li>
             </ul>
@@ -107,8 +90,8 @@
       <Card v-if="speakerStats && speakerStats.length" class="by-speaker">
         <template #title>By speaker</template>
         <template #content>
-          <div class="chart-section">
-            <div class="chart-header">
+          <ChartCard>
+            <template #controls>
               <label for="chart-stat-select" class="chart-label">Metric:</label>
               <Select
                 id="chart-stat-select"
@@ -118,14 +101,14 @@
                 option-value="value"
                 class="chart-select"
               />
-            </div>
+            </template>
             <StatBarChart
               :labels="chartLabels"
               :values="chartValues"
               :y-axis-name="chartYAxisName"
               :value-formatter="chartValueFormatter"
             />
-          </div>
+          </ChartCard>
           <DataTable
             :value="speakerStats"
             data-key="speaker_id_in_transcript"
@@ -189,6 +172,9 @@ import Column from 'primevue/column'
 import DataTable from 'primevue/datatable'
 import Message from 'primevue/message'
 import Select from 'primevue/select'
+import MetricStatGrid from '../components/MetricStatGrid.vue'
+import ChartCard from '../components/ChartCard.vue'
+import KeywordTag from '../components/KeywordTag.vue'
 import StatBarChart from '../components/StatBarChart.vue'
 import { formatDuration } from '../utils/format.js'
 
@@ -283,6 +269,13 @@ function formatTime(sec) {
   return formatDuration(sec)
 }
 
+const summaryStatsItems = computed(() => [
+  { key: 'duration', value: formatTime(transcript.value?.duration), label: 'Duration' },
+  { key: 'words', value: formatNum(transcript.value?.stats_total_words), label: 'Words' },
+  { key: 'segments', value: formatNum(transcript.value?.stats_segment_count), label: 'Segments' },
+  { key: 'speakers', value: formatNum(transcript.value?.speakers_count), label: 'Speakers' },
+])
+
 function formatShare(value) {
   if (value == null || value === '') return '—'
   const num = Number(value)
@@ -369,46 +362,6 @@ watch([groupIdOrSlug, transcriptId], load)
 <style scoped>
 .mb-3 { margin-bottom: 1rem; }
 .mb-4 { margin-bottom: 1.5rem; }
-.stats {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-  gap: 1rem;
-  margin: 1rem 0;
-}
-.stat {
-  padding: 1rem;
-  border-radius: var(--p-border-radius, 6px);
-  background: var(--p-surface-0, #fff);
-  border: 1px solid var(--p-surface-200, #e5e7eb);
-  border-left: 3px solid var(--p-primary-500, #3b82f6);
-  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.04);
-}
-.stat .value {
-  font-size: 1.75rem;
-  font-weight: 700;
-  line-height: 1.2;
-  color: var(--p-text-color, #111);
-}
-.stat .label {
-  font-size: 0.8rem;
-  margin-top: 0.25rem;
-  color: var(--p-text-muted-color, #6b7280);
-  font-weight: 500;
-}
-.chart-section {
-  margin-bottom: 1.5rem;
-  padding: 1rem;
-  border-radius: var(--p-border-radius, 6px);
-  border: 1px solid var(--p-surface-200, #e5e7eb);
-}
-.chart-header {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  margin-bottom: 0.75rem;
-}
-.chart-label { font-size: 0.9rem; }
-.chart-select { min-width: 200px; }
 .speaker-stats-table { margin-top: 1rem; }
 
 .speaker-contributions-group {
@@ -446,12 +399,5 @@ watch([groupIdOrSlug, transcriptId], load)
   display: flex;
   flex-wrap: wrap;
   gap: 0.25rem;
-}
-.keyword-tag {
-  font-size: 0.8rem;
-  padding: 0.15rem 0.5rem;
-  border-radius: calc(var(--p-border-radius, 6px) - 2px);
-  background: var(--p-surface-200, #e5e7eb);
-  color: var(--p-text-color-secondary, #4b5563);
 }
 </style>

@@ -16,7 +16,10 @@
             >
               <i class="pi pi-chevron-down sidebar-chevron" :class="{ 'sidebar-chevron-open': dashboardOpen }"></i>
             </button>
-            <router-link to="/" class="sidebar-item-label sidebar-dashboard-link" active-class="sidebar-item-active">Dashboards</router-link>
+            <router-link to="/" class="sidebar-dashboard-link" active-class="sidebar-item-active">
+              <i class="pi pi-chart-line sidebar-link-icon" aria-hidden="true"></i>
+              <span class="sidebar-link-text">Dashboards</span>
+            </router-link>
           </div>
           <div id="dashboard-groups" class="sidebar-sub" :hidden="!dashboardOpen">
             <router-link
@@ -26,6 +29,7 @@
               class="sidebar-item sidebar-sub-item"
               active-class="sidebar-item-active"
             >
+              <i class="pi pi-folder sidebar-sub-icon" aria-hidden="true"></i>
               <span class="sidebar-item-label">{{ g.name }}</span>
             </router-link>
             <p v-if="groupsLoaded && !groups.length" class="sidebar-empty">No groups</p>
@@ -34,12 +38,27 @@
         <div class="sidebar-group">
           <span class="sidebar-group-label">Admin</span>
           <template v-if="isLoggedIn">
-            <router-link to="/admin" class="sidebar-item" active-class="sidebar-item-active">Admin</router-link>
-            <router-link to="/admin/groups" class="sidebar-item" active-class="sidebar-item-active">Groups</router-link>
-            <router-link to="/admin/transcripts" class="sidebar-item" active-class="sidebar-item-active">Transcripts</router-link>
-            <router-link to="/admin/speakers" class="sidebar-item" active-class="sidebar-item-active">Speakers</router-link>
+            <router-link to="/admin" class="sidebar-item" active-class="sidebar-item-active">
+              <i class="pi pi-shield sidebar-link-icon" aria-hidden="true"></i>
+              <span class="sidebar-item-label">Admin</span>
+            </router-link>
+            <router-link to="/admin/groups" class="sidebar-item" active-class="sidebar-item-active">
+              <i class="pi pi-th-large sidebar-link-icon" aria-hidden="true"></i>
+              <span class="sidebar-item-label">Groups</span>
+            </router-link>
+            <router-link to="/admin/transcripts" class="sidebar-item" active-class="sidebar-item-active">
+              <i class="pi pi-file-text sidebar-link-icon" aria-hidden="true"></i>
+              <span class="sidebar-item-label">Transcripts</span>
+            </router-link>
+            <router-link to="/admin/speakers" class="sidebar-item" active-class="sidebar-item-active">
+              <i class="pi pi-user sidebar-link-icon" aria-hidden="true"></i>
+              <span class="sidebar-item-label">Speakers</span>
+            </router-link>
           </template>
-          <router-link v-else to="/admin" class="sidebar-item" active-class="sidebar-item-active">Admin login</router-link>
+          <router-link v-else to="/admin" class="sidebar-item" active-class="sidebar-item-active">
+            <i class="pi pi-sign-in sidebar-link-icon" aria-hidden="true"></i>
+            <span class="sidebar-item-label">Admin login</span>
+          </router-link>
         </div>
       </nav>
     </aside>
@@ -139,6 +158,7 @@ onMounted(() => {
   text-decoration: none;
   color: var(--p-text-color, inherit);
   font-size: 0.9rem;
+  border-radius: 8px;
 }
 
 .sidebar-item:hover {
@@ -147,21 +167,49 @@ onMounted(() => {
 }
 
 .sidebar-item-active {
+  position: relative;
   background: var(--p-primary-50, #eef2ff);
   color: var(--p-primary-color, #2563eb);
   font-weight: 600;
-  border-radius: 6px;
-  margin: 0 0.5rem;
-  padding: 0.5rem calc(1rem - 0.5rem);
+  border-radius: 8px;
+  margin: 0;
+  padding: 0.5rem 1rem;
   box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.03);
 }
 
+.sidebar-item-active::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  border-radius: 8px 0 0 8px;
+  background: var(--p-primary-500, #6366f1);
+}
+
 .sidebar-item .pi {
-  font-size: 1.1rem;
   flex-shrink: 0;
 }
 
 .sidebar-item-label {
+  flex: 1;
+}
+
+.sidebar-link-icon {
+  flex-shrink: 0;
+  font-size: 1.05rem;
+  opacity: 0.9;
+}
+
+.sidebar-sub-icon {
+  flex-shrink: 0;
+  font-size: 0.95rem;
+  opacity: 0.85;
+  margin-left: -0.15rem;
+}
+
+.sidebar-link-text {
   flex: 1;
 }
 
@@ -203,12 +251,18 @@ onMounted(() => {
 }
 .sidebar-dashboard-link {
   flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 1rem;
   text-decoration: none;
   color: var(--p-text-color, inherit);
   font-size: 0.9rem;
+  border-radius: 8px;
 }
 .sidebar-dashboard-link:hover {
   color: var(--p-primary-color, #2563eb);
+  background: var(--p-surface-200, #e5e7eb);
 }
 .sidebar-dashboard-row:hover {
   background: var(--p-surface-200, #e5e7eb);
@@ -231,7 +285,7 @@ onMounted(() => {
   display: none;
 }
 .sidebar-sub-item {
-  padding-left: 2rem;
+  padding-left: 1.5rem;
   font-size: 0.85rem;
 }
 .sidebar-empty {

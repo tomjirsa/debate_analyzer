@@ -4,7 +4,7 @@
       <router-link to="/admin">← Admin</router-link>
     </p>
 
-    <Card class="mb-4">
+    <DashboardCard class="mb-4">
         <template #title>Add speaker</template>
         <template #content>
           <div class="flex flex-column gap-2" style="max-width: 400px;">
@@ -43,9 +43,9 @@
             <Message v-if="addStatus" :severity="addStatus === 'Added.' ? 'success' : 'error'">{{ addStatus }}</Message>
           </div>
         </template>
-      </Card>
+      </DashboardCard>
 
-      <Card>
+      <DashboardCard>
         <template #title>Speakers</template>
         <template #content>
           <Message v-if="err" severity="error">{{ err }}</Message>
@@ -135,7 +135,7 @@
           </DataTable>
           <p v-else>No speakers. Add one above.</p>
         </template>
-      </Card>
+      </DashboardCard>
 
     <input
       ref="fileInputRef"
@@ -153,7 +153,6 @@ import { ref, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import Avatar from 'primevue/avatar'
 import Button from 'primevue/button'
-import Card from 'primevue/card'
 import Column from 'primevue/column'
 import ConfirmPopup from 'primevue/confirmpopup'
 import DataTable from 'primevue/datatable'
@@ -162,6 +161,7 @@ import Message from 'primevue/message'
 import Select from 'primevue/select'
 import Textarea from 'primevue/textarea'
 import { useConfirm } from 'primevue/useconfirm'
+import DashboardCard from '../components/DashboardCard.vue'
 import { useAdminAuth } from '../composables/useAdminAuth'
 
 const router = useRouter()

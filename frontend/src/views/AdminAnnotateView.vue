@@ -13,7 +13,7 @@
     </div>
 
     <template v-else-if="transcript">
-      <Card class="mb-4">
+      <DashboardCard class="mb-4">
         <template #title>Video</template>
         <template #subtitle>Optional – load from S3 or choose a local file</template>
         <template #content>
@@ -38,9 +38,9 @@
             @timeupdate="updateCurrentSegment"
           />
         </template>
-      </Card>
+      </DashboardCard>
 
-      <Card class="mb-4">
+      <DashboardCard class="mb-4">
         <template #title>Transcript</template>
         <template #subtitle>Click a line to jump to that time in the video</template>
         <template #content>
@@ -60,9 +60,9 @@
             </div>
           </div>
         </template>
-      </Card>
+      </DashboardCard>
 
-      <Card class="mb-4">
+      <DashboardCard class="mb-4">
         <template #title>Assign speaker IDs</template>
         <template #subtitle>Assign each speaker ID to a profile (or create new)</template>
         <template #content>
@@ -103,9 +103,9 @@
             <Message v-if="saveStatus" :severity="saveStatus === 'Saved.' ? 'success' : 'error'">{{ saveStatus }}</Message>
           </div>
         </template>
-      </Card>
+      </DashboardCard>
 
-      <Card v-if="speakerStats.length && statDefinitions.length">
+      <DashboardCard v-if="speakerStats.length && statDefinitions.length">
         <template #title>Speaker statistics</template>
         <template #content>
           <div v-for="s in speakerStats" :key="s.speaker_id_in_transcript" class="speaker-stat-card">
@@ -121,7 +121,7 @@
             </div>
           </div>
         </template>
-      </Card>
+      </DashboardCard>
     </template>
   </div>
 </template>
@@ -130,11 +130,11 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import Button from 'primevue/button'
-import Card from 'primevue/card'
 import InputText from 'primevue/inputtext'
 import Message from 'primevue/message'
 import Panel from 'primevue/panel'
 import Select from 'primevue/select'
+import DashboardCard from '../components/DashboardCard.vue'
 import { useAdminAuth } from '../composables/useAdminAuth'
 import { formatDuration, formatDurationStatLabel } from '../utils/format.js'
 

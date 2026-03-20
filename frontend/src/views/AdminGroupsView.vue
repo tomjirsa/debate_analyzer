@@ -4,7 +4,7 @@
       <router-link to="/admin">← Admin</router-link>
     </p>
 
-    <Card class="mb-4">
+    <DashboardCard class="mb-4">
       <template #title>Create group</template>
       <template #content>
         <div class="flex flex-column gap-2" style="max-width: 400px;">
@@ -25,9 +25,9 @@
           <Message v-else-if="createOk" severity="success">Group created.</Message>
         </div>
       </template>
-    </Card>
+    </DashboardCard>
 
-    <Card>
+    <DashboardCard>
       <template #title>Groups</template>
       <template #content>
         <Message v-if="listErr" severity="error">{{ listErr }}</Message>
@@ -67,7 +67,7 @@
         </DataTable>
         <p v-else>No groups. Create one above.</p>
       </template>
-    </Card>
+    </DashboardCard>
 
     <ConfirmPopup />
   </div>
@@ -77,13 +77,13 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import Button from 'primevue/button'
-import Card from 'primevue/card'
 import Column from 'primevue/column'
 import ConfirmPopup from 'primevue/confirmpopup'
 import DataTable from 'primevue/datatable'
 import InputText from 'primevue/inputtext'
 import Message from 'primevue/message'
 import { useConfirm } from 'primevue/useconfirm'
+import DashboardCard from '../components/DashboardCard.vue'
 import { useAdminAuth } from '../composables/useAdminAuth'
 
 const router = useRouter()
