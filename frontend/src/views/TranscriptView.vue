@@ -377,7 +377,7 @@ watch([groupIdOrSlug, transcriptId], load)
 }
 .stat {
   padding: 1rem;
-  border-radius: 8px;
+  border-radius: var(--p-border-radius, 6px);
   background: var(--p-surface-0, #fff);
   border: 1px solid var(--p-surface-200, #e5e7eb);
   border-left: 3px solid var(--p-primary-500, #3b82f6);
@@ -398,7 +398,7 @@ watch([groupIdOrSlug, transcriptId], load)
 .chart-section {
   margin-bottom: 1.5rem;
   padding: 1rem;
-  border-radius: 8px;
+  border-radius: var(--p-border-radius, 6px);
   border: 1px solid var(--p-surface-200, #e5e7eb);
 }
 .chart-header {
@@ -450,7 +450,7 @@ watch([groupIdOrSlug, transcriptId], load)
 .keyword-tag {
   font-size: 0.8rem;
   padding: 0.15rem 0.5rem;
-  border-radius: 4px;
+  border-radius: calc(var(--p-border-radius, 6px) - 2px);
   background: var(--p-surface-200, #e5e7eb);
   color: var(--p-text-color-secondary, #4b5563);
 }

@@ -1,3 +1,37 @@
+/* ---------- App design tokens (Prime UI uses CSS variables under the hood) ---------- */
+:root {
+  /* Match screenshot accent (indigo/purple-ish). */
+  --p-primary-50: #eef2ff;
+  --p-primary-100: #e0e7ff;
+  --p-primary-200: #c7d2fe;
+  --p-primary-300: #a5b4fc;
+  --p-primary-400: #818cf8;
+  --p-primary-500: #6366f1;
+  --p-primary-600: #4f46e5;
+  --p-primary-700: #4338ca;
+  --p-primary-800: #3730a3;
+  --p-primary-900: #312e81;
+  --p-primary-950: #1f1949;
+
+  /* Polaris-ish: slightly tighter corners than the current 8px. */
+  --p-border-radius: 6px;
+}
+
+.app-dark {
+  /* Keep the same hue family, but tuned slightly for dark backgrounds. */
+  --p-primary-50: #2a2558;
+  --p-primary-100: #342e66;
+  --p-primary-200: #403982;
+  --p-primary-300: #4f46e5;
+  --p-primary-400: #5b5fe9;
+  --p-primary-500: #7c83ff;
+  --p-primary-600: #6366f1;
+  --p-primary-700: #4f46e5;
+  --p-primary-800: #4338ca;
+  --p-primary-900: #3730a3;
+  --p-primary-950: #2a235c;
+}
+
 /* App layout */
 #app {
   margin: 0;
@@ -16,9 +50,9 @@
 /* Dashboard widgets: cards and panels look like widgets */
 .p-card,
 .p-panel {
-  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.08), 0 1px 2px -1px rgba(0, 0, 0, 0.06);
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.04);
   border: 1px solid var(--p-surface-200, #e5e7eb);
-  border-radius: 8px;
+  border-radius: var(--p-border-radius, 6px);
 }
 
 .p-card .p-card-header,
@@ -42,6 +76,17 @@
 .mb-4 { margin-bottom: 1.5rem; }
 
 /* Admin DataTables: striped rows and hover */
+.p-datatable .p-datatable-thead > tr > th {
+  background: var(--p-surface-50, #f9fafb);
+  border-bottom: 1px solid var(--p-surface-200, #e5e7eb);
+  color: var(--p-text-muted-color, #6b7280);
+  font-weight: 600;
+}
+
+.p-datatable .p-datatable-tbody > tr > td {
+  border-bottom: 1px solid var(--p-surface-200, #e5e7eb);
+}
+
 .p-datatable .p-datatable-tbody > tr:nth-child(even) {
   background: var(--p-surface-50, #f9fafb);
 }
@@ -51,3 +96,38 @@
 .p-datatable .p-datatable-tbody > tr {
   transition: background 0.15s ease;
 }
+
+/* PrimeVue controls: softer borders + Polaris-like focus ring */
+.p-button {
+  border-radius: var(--p-border-radius, 6px);
+}
+
+.p-button:focus-visible,
+.p-inputtext:focus-visible,
+.p-textarea:focus-visible,
+.p-select:focus-visible,
+.p-component:focus-visible {
+  outline: 2px solid var(--p-primary-500, #6366f1);
+  outline-offset: 2px;
+}
+
+.p-inputtext,
+.p-textarea {
+  border-radius: var(--p-border-radius, 6px);
+}
+
+.p-select {
+  border-radius: var(--p-border-radius, 6px);
+}
+
+.p-message {
+  border-radius: var(--p-border-radius, 6px);
+}
+
+.p-message.p-message-success,
+.p-message.p-message-info,
+.p-message.p-message-warn,
+.p-message.p-message-error {
+  border: 1px solid var(--p-surface-200, #e5e7eb);
+}
+

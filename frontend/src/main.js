@@ -3,7 +3,7 @@ import PrimeVue from 'primevue/config'
 import ConfirmationService from 'primevue/confirmationservice'
 import App from './App.vue'
 import router from './router'
-import { AnalyticsPreset } from './theme/analytics-preset'
+import { PolarisPreset } from './theme/polaris-preset'
 import 'primeicons/primeicons.css'
 import './assets/main.css'
 
@@ -18,7 +18,7 @@ if (savedTheme === 'dark') {
 const app = createApp(App)
 app.use(PrimeVue, {
   theme: {
-    preset: AnalyticsPreset,
+    preset: PolarisPreset,
     options: {
       darkModeSelector: '.app-dark',
     },

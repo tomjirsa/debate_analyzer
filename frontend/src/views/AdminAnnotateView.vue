@@ -34,7 +34,7 @@
             ref="videoEl"
             controls
             class="video-player"
-            style="display: none; width: 100%; max-height: 320px; background: #111; border-radius: 4px;"
+            style="display: none; width: 100%; max-height: 320px; background: var(--p-surface-900, #111); border-radius: var(--p-border-radius, 6px);"
             @timeupdate="updateCurrentSegment"
           />
         </template>
@@ -490,8 +490,8 @@ watch(transcriptId, () => { if (transcriptId.value) load() })
 .mapping-label { margin: 0; font-weight: normal; min-width: 100px; cursor: pointer; }
 .mapping-label:hover { text-decoration: underline; }
 .mapping-select { min-width: 200px; }
-.transcript { max-height: 360px; overflow-y: auto; border: 1px solid var(--p-surface-300, #d1d5db); border-radius: 4px; padding: 0.5rem; }
-.segment { padding: 0.35rem 0.5rem; margin: 2px 0; border-radius: 4px; cursor: pointer; }
+.transcript { max-height: 360px; overflow-y: auto; border: 1px solid var(--p-surface-300, #d1d5db); border-radius: var(--p-border-radius, 6px); padding: 0.5rem; }
+.segment { padding: 0.35rem 0.5rem; margin: 2px 0; border-radius: var(--p-border-radius, 6px); cursor: pointer; }
 .segment:hover { background: var(--p-surface-100, #f3f4f6); }
 .segment.current { background: var(--p-primary-100, #dbeafe); }
 .segment.highlight { background: var(--p-yellow-100, #fef3c7); }
