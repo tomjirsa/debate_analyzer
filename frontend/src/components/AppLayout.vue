@@ -95,6 +95,7 @@ onMounted(() => {
 .app-layout {
   display: flex;
   min-height: 100vh;
+  background: var(--p-surface-0, #fff);
 }
 
 .app-sidebar {
@@ -109,6 +110,7 @@ onMounted(() => {
 .sidebar-brand {
   padding: 1rem;
   border-bottom: 1px solid var(--p-surface-200, #e5e7eb);
+  background: var(--p-surface-0, #fff);
 }
 
 .sidebar-title {
@@ -145,9 +147,13 @@ onMounted(() => {
 }
 
 .sidebar-item-active {
-  background: var(--p-highlight-background, #eff6ff);
+  background: var(--p-primary-50, #eef2ff);
   color: var(--p-primary-color, #2563eb);
-  font-weight: 500;
+  font-weight: 600;
+  border-radius: 6px;
+  margin: 0 0.5rem;
+  padding: 0.5rem calc(1rem - 0.5rem);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.03);
 }
 
 .sidebar-item .pi {
@@ -171,7 +177,7 @@ onMounted(() => {
   font-size: 0.75rem;
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.06em;
   color: var(--p-text-muted-color, #6b7280);
 }
 

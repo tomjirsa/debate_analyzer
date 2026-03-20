@@ -350,7 +350,7 @@ onMounted(async () => {
 }
 .stat {
   padding: 1rem;
-  border-radius: 8px;
+  border-radius: var(--p-border-radius, 6px);
   background: var(--p-surface-0, #fff);
   border: 1px solid var(--p-surface-200, #e5e7eb);
   border-left: 3px solid var(--p-primary-500, #3b82f6);
@@ -371,7 +371,7 @@ onMounted(async () => {
 .chart-section {
   margin-bottom: 1.5rem;
   padding: 1rem;
-  border-radius: 8px;
+  border-radius: var(--p-border-radius, 6px);
   border: 1px solid var(--p-surface-200, #e5e7eb);
 }
 .chart-header {
