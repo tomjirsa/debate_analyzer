@@ -117,12 +117,13 @@ class SegmentSummary:
 class LLMAnalysisResult:
     """Result of LLM analysis: speaker_contributions (legacy) or segment_summaries."""
 
-    __slots__ = ("speaker_contributions", "segment_summaries")
+    __slots__ = ("speaker_contributions", "segment_summaries", "transcript_summary")
 
     def __init__(
         self,
         speaker_contributions: list[dict[str, Any]] | None = None,
         segment_summaries: list[dict[str, Any]] | None = None,
+        transcript_summary: dict[str, Any] | None = None,
     ) -> None:
         self.speaker_contributions = (
             speaker_contributions if speaker_contributions is not None else []
@@ -130,6 +131,7 @@ class LLMAnalysisResult:
         self.segment_summaries = (
             segment_summaries if segment_summaries is not None else []
         )
+        self.transcript_summary = transcript_summary
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dict for JSON storage."""
@@ -138,6 +140,16 @@ class LLMAnalysisResult:
             out["speaker_contributions"] = self.speaker_contributions
         if self.segment_summaries:
             out["segment_summaries"] = self.segment_summaries
+        if self.transcript_summary is not None:
+            summary = str(self.transcript_summary.get("summary") or "").strip()
+            raw_keywords = self.transcript_summary.get("keywords") or []
+            keywords = (
+                [str(x).strip() for x in raw_keywords if str(x).strip()]
+                if isinstance(raw_keywords, list)
+                else []
+            )
+            if summary or keywords:
+                out["transcript_summary"] = {"summary": summary, "keywords": keywords}
         if not out:
             out["segment_summaries"] = []
         return out
@@ -145,7 +157,9 @@ class LLMAnalysisResult:
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> LLMAnalysisResult:
         """Parse from raw LLM output dict (e.g. parsed JSON)."""
+        raw_ts = d.get("transcript_summary")
         return cls(
             speaker_contributions=_get_list(d, "speaker_contributions"),
             segment_summaries=_get_list(d, "segment_summaries"),
+            transcript_summary=raw_ts if isinstance(raw_ts, dict) else None,
         )

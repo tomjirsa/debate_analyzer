@@ -172,22 +172,42 @@ Prompt templates are in `src/debate_analyzer/analysis/prompts.py`. Changing the 
 
 ## 5. Output schema
 
-Each `_llm_analysis.json` file contains only **speaker_contributions**:
+Each `_llm_analysis.json` file contains:
 
 ```json
 {
+  "segment_summaries": [
+    {
+      "uid": "caae7890-0ad1-492c-a6bb-3b7f0c0cc746",
+      "speaker": "SPEAKER_02",
+      "start": 572.46,
+      "end": 832.32,
+      "summary": "Zástupci městské části ...",
+      "keywords": ["jednací řád", "program"]
+    }
+  ],
   "speaker_contributions": [
     {
-      "id": "c1",
+      "id": "speaker_summary:SPEAKER_00",
       "speaker_id_in_transcript": "SPEAKER_00",
       "summary": "Krátké shrnutí příspěvku.",
       "keywords": ["klíčové", "slovo"]
     }
-  ]
+  ],
+  "transcript_summary": {
+    "summary": "Celkové shrnutí přepisu.",
+    "keywords": ["témata", "hlasování"]
+  }
 }
 ```
 
-Each contribution has:
+`segment_summaries` are per transcript block (segment) summaries.
+
+`speaker_contributions` are aggregated by speaker by merging that speaker’s segment summaries.
+
+`transcript_summary` is aggregated by merging all `speaker_contributions`.
+
+Each speaker contribution has:
 
 - **id**: Unique identifier for the contribution (string).
 - **speaker_id_in_transcript**: Speaker label from the transcript (e.g. `SPEAKER_00`).
@@ -205,7 +225,7 @@ To attach analysis to a transcript in the DB (for the admin UI or API):
 - **Inline:** Same endpoint with body:
   `{ "result": { "speaker_contributions": [...] }, "model_name": "...", "source": "api" }`
 
-The `result` object must contain the key **speaker_contributions** (a list). Get the latest analysis: `GET /api/admin/transcripts/{transcript_id}/analysis`.
+The `result` object must contain at least one of: **speaker_contributions** (list) or **segment_summaries** (list). Get the latest analysis: `GET /api/admin/transcripts/{transcript_id}/analysis`.
 
 ## 7. Chunking and excerpts (long transcripts)
 

@@ -41,6 +41,35 @@
       </Card>
 
       <Card
+        v-if="
+          llmAnalysis &&
+          llmAnalysis.transcript_summary &&
+          llmAnalysis.transcript_summary.summary
+        "
+        class="mb-4"
+      >
+        <template #title>Transcript summary</template>
+        <template #content>
+          <p class="contribution-summary">
+            {{ llmAnalysis.transcript_summary.summary }}
+          </p>
+          <div
+            v-if="
+              llmAnalysis.transcript_summary.keywords &&
+              llmAnalysis.transcript_summary.keywords.length
+            "
+            class="contribution-keywords"
+          >
+            <span
+              v-for="kw in llmAnalysis.transcript_summary.keywords"
+              :key="kw"
+              class="keyword-tag"
+              >{{ kw }}</span>
+          </div>
+        </template>
+      </Card>
+
+      <Card
         v-if="llmAnalysis && llmAnalysis.speaker_contributions && llmAnalysis.speaker_contributions.length"
         class="mb-4"
       >

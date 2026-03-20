@@ -238,6 +238,11 @@ def test_run_analysis_empty_payload():
     result = run_analysis({"transcription": []}, backend.generate_batch)
     assert "segment_summaries" in result
     assert result["segment_summaries"] == []
+    assert "speaker_contributions" in result
+    assert result["speaker_contributions"] == []
+    assert "transcript_summary" in result
+    assert result["transcript_summary"]["summary"] == ""
+    assert result["transcript_summary"]["keywords"] == []
     assert backend.call_count == 0
 
 
@@ -272,7 +277,17 @@ def test_run_analysis_returns_expected_shape():
     assert "Shrnutí" in result["segment_summaries"][0]["summary"]
     assert result["segment_summaries"][0]["keywords"]
     assert result["segment_summaries"][1]["uid"] == "u2"
-    assert backend.call_count == 2
+    assert "speaker_contributions" in result
+    assert len(result["speaker_contributions"]) == 2
+    assert (
+        result["speaker_contributions"][0]["speaker_id_in_transcript"]
+        == "SPEAKER_00"
+    )
+    assert "transcript_summary" in result
+    assert result["transcript_summary"]["summary"]
+    assert result["transcript_summary"]["keywords"]
+    # segment summaries (2 calls) + transcript merge (1 call; 2 speakers)
+    assert backend.call_count == 3
 
 
 def test_run_analysis_calls_generate_batch_per_block():
@@ -300,6 +315,57 @@ def test_run_analysis_empty_transcription_no_segment_summaries():
     backend = MockLLMBackend()
     result = run_analysis({"transcription": []}, backend.generate_batch)
     assert result["segment_summaries"] == []
+    assert result["speaker_contributions"] == []
+    assert result["transcript_summary"]["summary"] == ""
+    assert result["transcript_summary"]["keywords"] == []
+
+
+def test_run_analysis_aggregates_speaker_contributions_and_transcript_summary():
+    """Aggregate speaker segments into speaker_contributions and transcript_summary."""
+    backend = MockLLMBackend()
+    payload = {
+        "transcription": [
+            {
+                "uid": "u1",
+                "speaker": "SPEAKER_00",
+                "text": "First segment.",
+                "start": 0.0,
+                "end": 5.0,
+            },
+            {
+                "uid": "u2",
+                "speaker": "SPEAKER_00",
+                "text": "Second segment.",
+                "start": 5.0,
+                "end": 10.0,
+            },
+            {
+                "uid": "u3",
+                "speaker": "SPEAKER_01",
+                "text": "Other speaker segment.",
+                "start": 10.0,
+                "end": 15.0,
+            },
+        ]
+    }
+    result = run_analysis(payload, backend.generate_batch)
+    assert len(result["speaker_contributions"]) == 2
+
+    speaker_ids = [
+        c["speaker_id_in_transcript"] for c in result["speaker_contributions"]
+    ]
+    assert speaker_ids == ["SPEAKER_00", "SPEAKER_01"]
+
+    # For SPEAKER_00 we have 2 partial summaries -> merge prompt is used.
+    speaker_00 = result["speaker_contributions"][0]
+    assert speaker_00["summary"] == "Slučené shrnutí."
+    assert speaker_00["keywords"] == ["sloučený"]
+
+    assert result["transcript_summary"]["summary"] == "Slučené shrnutí."
+    assert result["transcript_summary"]["keywords"] == ["sloučený"]
+
+    # segment summaries (3) + speaker merge for SPEAKER_00 (1) + transcript merge (1)
+    assert backend.call_count == 5
 
 
 def test_run_analysis_no_timestamps_uses_defaults_and_returns_records():
@@ -432,6 +498,15 @@ def test_llm_analysis_result_from_dict():
     assert r2.segment_summaries[0]["start"] == 0.0
     assert r2.segment_summaries[0]["end"] == 10.5
     assert r2.to_dict()["segment_summaries"] == d2["segment_summaries"]
+
+    d3 = {
+        "transcript_summary": {
+            "summary": "Celkové shrnutí.",
+            "keywords": ["témata", "hlasování"],
+        }
+    }
+    r3 = LLMAnalysisResult.from_dict(d3)
+    assert r3.to_dict()["transcript_summary"] == d3["transcript_summary"]
 
 
 def test_get_backend_returns_mock_when_mock_llm_set():

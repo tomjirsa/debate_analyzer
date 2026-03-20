@@ -1,0 +1,19 @@
+---
+description: Conditional agent git branch workflow
+alwaysApply: true
+---
+
+# Agent Git Branch Workflow
+
+When a task involves **code changes and/or commits**:
+
+1. Start from the latest `origin/main` (fetch first if needed).
+2. Create a new **feature** branch **before** making code changes.
+   Suggested pattern: `feature/<short-topic>-YYYYMMDD` (or your existing `agent/...` pattern).
+3. Do not commit directly to `main`.
+4. If a branch was already created earlier in the same work session, reuse it.
+
+When a task is **read-only** (reviewing, analyzing, drafting without code changes):
+
+- Creating a new branch is optional; proceed without branching.
+
