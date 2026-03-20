@@ -25,6 +25,14 @@ This skill is the single entrypoint for local development tasks. It routes to ne
 
 2. Follow `references/aws-transcripts/after-download.md` to register the downloaded transcripts in the webapp.
 
+### Upload local data from `./data` into the DB
+
+1. Follow `references/data-upload/upload-local-data-to-db.md` to:
+   - scan `./data/*/transcripts/*_transcription.json`,
+   - register transcripts into the DB,
+   - auto-create dummy speaker profiles for diarization labels,
+   - import companion stats artifacts when present.
+
 ### API / Web app URLs
 
 Follow `references/urls.md`.

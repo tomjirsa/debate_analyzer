@@ -280,8 +280,7 @@ def test_run_analysis_returns_expected_shape():
     assert "speaker_contributions" in result
     assert len(result["speaker_contributions"]) == 2
     assert (
-        result["speaker_contributions"][0]["speaker_id_in_transcript"]
-        == "SPEAKER_00"
+        result["speaker_contributions"][0]["speaker_id_in_transcript"] == "SPEAKER_00"
     )
     assert "transcript_summary" in result
     assert result["transcript_summary"]["summary"]
