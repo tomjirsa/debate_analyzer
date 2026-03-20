@@ -56,8 +56,16 @@ def get_ollama_backend(
     except ValueError:
         num_ctx = 8192
 
+    raw_temp = os.environ.get("LLM_TEMPERATURE", "0.0").strip()
+    try:
+        temperature = float(raw_temp)
+        temperature = max(0.0, min(2.0, temperature))
+    except ValueError:
+        temperature = 0.0
+
     print(
-        f"[LLM] Using Ollama backend: {base_url} model={model} num_ctx={num_ctx}",
+        f"[LLM] Using Ollama backend: {base_url} model={model} num_ctx={num_ctx} "
+        f"temperature={temperature}",
         file=sys.stderr,
     )
 
@@ -67,7 +75,7 @@ def get_ollama_backend(
     llm = ChatOllama(
         base_url=base_url,
         model=model,
-        temperature=0.2,
+        temperature=temperature,
         num_ctx=num_ctx,
     )
 

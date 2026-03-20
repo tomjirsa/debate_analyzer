@@ -14,6 +14,7 @@ def run_analysis(
     max_excerpt_tokens: int | None = None,
     token_counter: Callable[[str], int] | None = None,
     max_tokens_per_reply: int = 2048,
+    min_words: int = 0,
     log_progress: Callable[[str], None] | None = None,
     log_llm_call: Callable[[str, str, str], None] | None = None,
 ) -> dict[str, Any]:
@@ -32,6 +33,7 @@ def run_analysis(
         max_excerpt_tokens: Unused (kept for API compatibility).
         token_counter: Token count function; if None, uses estimate_tokens.
         max_tokens_per_reply: Max tokens per LLM reply.
+        min_words: Minimum word count for a segment to be summarized (default 0).
         log_progress: Optional progress callback.
         log_llm_call: Optional (label, prompt, response) callback.
 
@@ -45,6 +47,7 @@ def run_analysis(
         max_context_tokens=max_context_tokens,
         token_counter=token_counter,
         max_tokens_per_reply=max_tokens_per_reply,
+        min_words=min_words,
         log_progress=log_progress,
         log_llm_call=log_llm_call,
     )

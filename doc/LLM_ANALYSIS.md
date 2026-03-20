@@ -156,6 +156,8 @@ This means the Batch job is trying to pull an image that does not exist (or not 
 | `LLM_OLLAMA_MAX_CONTENT_TOKENS` | (Optional.) Max content tokens for chunks/excerpts (e.g. `4000`). Overrides the default reserve-based cap; helps avoid context truncation. |
 | `LLM_OLLAMA_MAX_EXCERPT_TOKENS` | (Optional.) Phase 2 and 3 excerpts are capped at this size (e.g. `3000`). Default 3000 if unset. |
 | `LLM_CHARS_PER_TOKEN` | (Optional; default `4`.) Characters per token for chunk/excerpt sizing. Use `3` for safer estimation with Ollama/Czech. |
+| `LLM_TEMPERATURE` | (Optional; default `0.0`.) Model sampling temperature (0 = deterministic). Clamped to [0, 2]. |
+| `LLM_MIN_SEGMENT_WORDS` | (Optional; default `0`.) Minimum word count for a segment to be summarized; segments with fewer words are skipped. |
 | `LLM_LOG_FULL` | Set to `1`, `true`, or `yes` to log full prompts and responses; otherwise they are truncated (see Logging below). Use only for dev/debug; full logs may include PII. |
 
 ### Logging (batch job)

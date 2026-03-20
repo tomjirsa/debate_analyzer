@@ -43,7 +43,7 @@ PROMPT_SEGMENT_SUMMARY = (
 PROMPT_MERGE_SUMMARIES = (
     "The following are partial summaries and keywords from one long speaker "
     "segment. Combine them into a single short summary and a single list of "
-    'keywords (no duplicates). Output only valid JSON with exactly two keys: '
+    "keywords (no duplicates). Output only valid JSON with exactly two keys: "
     '"summary" (string) and "keywords" (array of strings). No other text.\n\n'
     "Partial summaries:\n"
     "---\n"

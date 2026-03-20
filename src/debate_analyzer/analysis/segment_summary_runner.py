@@ -65,10 +65,14 @@ def run_segment_summaries(
     overlap_tokens: int = DEFAULT_OVERLAP_TOKENS,
     token_counter: Callable[[str], int] | None = None,
     max_tokens_per_reply: int = 2048,
+    min_words: int = 0,
     log_progress: Callable[[str], None] | None = None,
     log_llm_call: Callable[[str, str, str], None] | None = None,
 ) -> list[dict[str, Any]]:
     """Produce one summary + keywords per block; long blocks use split-then-merge.
+
+    Segments with fewer than min_words (by word count) are skipped and do not
+    appear in the returned list.
 
     Args:
         payload: Transcript dict with "transcription" key (list of blocks).
@@ -79,6 +83,8 @@ def run_segment_summaries(
         overlap_tokens: Overlap when splitting long segment text.
         token_counter: Token count function; if None, uses estimate_tokens.
         max_tokens_per_reply: Max tokens for each LLM reply.
+        min_words: Minimum word count for a segment to be summarized; segments
+            with fewer words are skipped (default 0 = no minimum).
         log_progress: Optional progress callback.
         log_llm_call: Optional (label, prompt, response) callback.
 
@@ -107,6 +113,13 @@ def run_segment_summaries(
         if not text:
             if log_progress:
                 log_progress(f"Segment {idx + 1}: empty text, skipping")
+            continue
+
+        if min_words > 0 and len(text.split()) < min_words:
+            if log_progress:
+                log_progress(
+                    f"Segment {idx + 1}: below min_words={min_words}, skipping"
+                )
             continue
 
         max_input_tokens = max(500, max_context_tokens - reserve_segment_tokens)

@@ -511,6 +511,54 @@ def test_run_segment_summaries_skips_empty_text():
     assert result[0]["end"] == 3.0
 
 
+def test_run_segment_summaries_skips_short_segments_when_min_words_set():
+    """run_segment_summaries skips segments with word count below min_words."""
+
+    def gen_batch(prompts, max_tokens=2048):
+        return ['{"summary": "ok", "keywords": ["k"]}'] * len(prompts)
+
+    payload = {
+        "transcription": [
+            {"uid": "u1", "speaker": "S", "text": "", "start": 0, "end": 1},
+            {"uid": "u2", "speaker": "S", "text": "one", "start": 1, "end": 2},
+            {"uid": "u3", "speaker": "S", "text": "a b", "start": 2, "end": 3},
+            {
+                "uid": "u4",
+                "speaker": "S",
+                "text": "one two three four five",
+                "start": 3,
+                "end": 4,
+            },
+        ],
+    }
+    result = run_segment_summaries(
+        payload, gen_batch, max_context_tokens=8000, min_words=3
+    )
+    assert len(result) == 1
+    assert result[0]["uid"] == "u4"
+    assert result[0]["summary"] == "ok"
+
+
+def test_run_segment_summaries_min_words_zero_summarizes_all_non_empty():
+    """With min_words=0, all non-empty segments are summarized (backward compat)."""
+
+    def gen_batch(prompts, max_tokens=2048):
+        return ['{"summary": "x", "keywords": []}'] * len(prompts)
+
+    payload = {
+        "transcription": [
+            {"uid": "u1", "speaker": "S", "text": "one", "start": 0, "end": 1},
+            {"uid": "u2", "speaker": "S", "text": "two words", "start": 1, "end": 2},
+        ],
+    }
+    result = run_segment_summaries(
+        payload, gen_batch, max_context_tokens=8000, min_words=0
+    )
+    assert len(result) == 2
+    assert result[0]["uid"] == "u1"
+    assert result[1]["uid"] == "u2"
+
+
 def test_run_segment_summaries_preserves_uid_and_metadata():
     """run_segment_summaries preserves uid, speaker, start, end from block."""
     backend = MockLLMBackend()

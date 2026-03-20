@@ -6,6 +6,8 @@ Reads from environment:
   Writes <stem>_llm_analysis.json alongside.
 - TRANSCRIPTS_S3_PREFIX: S3 prefix listing *_transcription.json;
   processes each, writes _llm_analysis.json per file.
+- LLM_MIN_SEGMENT_WORDS: Minimum word count for a segment to be summarized;
+  segments with fewer words are skipped (default 0 = no minimum).
 
 Backend: MOCK_LLM=1 for tests (mock backend). Otherwise Ollama via LangChain over
 localhost (ensure Ollama is running on OLLAMA_HOST with the chosen model).
@@ -82,6 +84,18 @@ def _get_max_excerpt_tokens() -> int:
         except ValueError:
             pass
     return _DEFAULT_OLLAMA_MAX_EXCERPT_TOKENS
+
+
+def _get_min_segment_words() -> int:
+    """Min word count for summarization (LLM_MIN_SEGMENT_WORDS env; default 0)."""
+    raw = os.environ.get("LLM_MIN_SEGMENT_WORDS", "").strip()
+    if raw:
+        try:
+            val = int(raw)
+            return max(0, val)
+        except ValueError:
+            pass
+    return 0
 
 
 def _log(msg: str) -> None:
@@ -170,6 +184,7 @@ def _run_one(
     generate_batch,
     max_context_tokens: int,
     max_excerpt_tokens: int | None = None,
+    min_words: int = 0,
     log_progress: Callable[[str], None] | None = None,
     log_llm_call: Callable[[str, str, str], None] | None = None,
 ) -> bool:
@@ -187,6 +202,7 @@ def _run_one(
         generate_batch,
         max_context_tokens=max_context_tokens,
         max_excerpt_tokens=max_excerpt_tokens,
+        min_words=min_words,
         log_progress=log_progress,
         log_llm_call=log_llm_call,
     )
@@ -245,11 +261,13 @@ def run(prefix_or_uri: str) -> int:
         generate_batch = _get_backend()
         _log(f"Model ready in {time.perf_counter() - t0:.1f}s.")
         _log(f"Processing transcript: {s}")
+        min_words = _get_min_segment_words()
         ok = _run_one(
             s,
             generate_batch,
             max_context_tokens_phase1,
             max_excerpt_tokens=max_excerpt_tokens,
+            min_words=min_words,
             log_progress=_log,
             log_llm_call=_log_llm_call,
         )
@@ -307,6 +325,7 @@ def run(prefix_or_uri: str) -> int:
     n = len(uris)
     succeeded = 0
     failed = 0
+    min_words = _get_min_segment_words()
     for i, uri in enumerate(uris):
         short_key = uri.split("/")[-1] if "/" in uri else uri
         _log(f"Processing transcript {i + 1}/{n}: {short_key}")
@@ -315,6 +334,7 @@ def run(prefix_or_uri: str) -> int:
             generate_batch,
             max_context_tokens_phase1,
             max_excerpt_tokens=max_excerpt_tokens,
+            min_words=min_words,
             log_progress=_log,
             log_llm_call=_log_llm_call,
         )
