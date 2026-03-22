@@ -27,11 +27,15 @@ def build_correct_segment_prompt(text: str) -> str:
     return PROMPT_CORRECT_SEGMENT.format(text=text)
 
 
-# Segment summary: one segment → short summary + keywords (JSON).
+# Segment summary: one segment → summary + keywords (JSON).
 PROMPT_SEGMENT_SUMMARY = (
-    "Summarize the following transcript segment in one short paragraph and "
-    "extract 3–8 key terms or phrases (keywords). Output only valid JSON with "
-    'exactly two keys: "summary" (string) and "keywords" (array of strings). '
+    "Read the following transcript segment and write a clear summary in Czech "
+    "that captures what was said: main points, positions, arguments, and any "
+    "concrete facts or decisions mentioned. Cover the segment content faithfully; "
+    "do not invent details not present in the text. "
+    "Also extract 3–8 key terms or phrases (keywords). "
+    "Output only valid JSON with exactly two keys: "
+    '"summary" (string) and "keywords" (array of strings). '
     "No other text.\n\n"
     "Segment text:\n"
     "---\n"
@@ -40,10 +44,14 @@ PROMPT_SEGMENT_SUMMARY = (
 )
 
 # Merge: partial summaries + keywords → one summary + one keyword list (JSON).
+# Used for long-segment chunks, per-speaker merges, and transcript-level merge.
 PROMPT_MERGE_SUMMARIES = (
-    "The following are partial summaries and keywords from one long speaker "
-    "segment. Combine them into a single short summary and a single list of "
-    "keywords (no duplicates). Output only valid JSON with exactly two keys: "
+    "The following are partial summaries and keywords from related parts of the "
+    "transcript (e.g. chunks of one long turn, or multiple turns to combine). "
+    "Merge them into one coherent Czech summary of the combined content: "
+    "preserve important details, unify overlapping points, and avoid repetition. "
+    "Produce a single merged keyword list (no duplicates). "
+    "Output only valid JSON with exactly two keys: "
     '"summary" (string) and "keywords" (array of strings). No other text.\n\n'
     "Partial summaries:\n"
     "---\n"
