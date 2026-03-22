@@ -1,6 +1,6 @@
 ---
 name: local-development
-description: Instructions for running and developing the Debate Analyzer app locally. Use when the user asks how to run the webapp locally, start the API or frontend, or perform local development setup.
+description: Instructions for running and developing the Debate Analyzer app locally. Use when the user asks how to run the webapp locally, start the API or frontend, run LLM transcript analysis with Ollama locally, or perform local development setup.
 ---
 
 # Local Development
@@ -33,6 +33,10 @@ This skill is the single entrypoint for local development tasks. It routes to ne
    - auto-create dummy speaker profiles for diarization labels,
    - import companion stats artifacts when present.
 
+### Run LLM analysis locally (Ollama / Llama)
+
+Needs Ollama, `poetry install --extras llm`, and a `*_transcription.json`. Command, env vars, and operator notes: `references/llm-analysis/local-ollama-run.md` (writes `*_llm_analysis.json` next to the transcript). To import into the DB, use `references/data-upload/upload-local-data-to-db.md` and `import_llm_analysis` when applicable.
+
 ### API / Web app URLs
 
 Follow `references/urls.md`.
@@ -44,3 +48,4 @@ This skill may include wrappers under `scripts/`:
 - `scripts/start-api.sh`
 - `scripts/start-frontend.sh`
 - `scripts/stop-webapp.sh`
+- `scripts/run-llm-analysis-local.sh`
