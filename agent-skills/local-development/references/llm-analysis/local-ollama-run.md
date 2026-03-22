@@ -41,6 +41,35 @@ Writes `foo_llm_analysis.json` next to the transcript.
 
 **Logging (stderr):** Without `LLM_LOG_FULL`, requests truncate at 500 chars and responses at 1000.
 
+## Llama 3.2 3B — maximum context
+
+Llama 3.2 3B supports a large context window (e.g. 128K tokens in Ollama). To use the maximum **Phase 1** content budget, set both `LLM_MAX_MODEL_LEN` and `LLM_PHASE1_MAX_CHUNK_TOKENS`: the default Phase 1 chunk cap is **8000**, so raising only `LLM_MAX_MODEL_LEN` still leaves Phase 1 capped at 8000 until `LLM_PHASE1_MAX_CHUNK_TOKENS` is raised too.
+
+Pull the model (tag must match `OLLAMA_MODEL`):
+
+```bash
+ollama pull llama3.2:3b
+```
+
+Start Ollama with a context length aligned to `LLM_MAX_MODEL_LEN` (see [Ollama process](#ollama-process-not-read-by-python) below). Example for 131072-token context:
+
+```bash
+OLLAMA_CONTEXT_LENGTH=131072 ollama serve
+```
+
+Run the job with max-context variables (optional `LLM_OLLAMA_MAX_CONTENT_TOKENS` mirrors `LLM_MAX_MODEL_LEN - 3500` and is redundant if omitted):
+
+```bash
+TRANSCRIPT_S3_URI="/absolute/path/to/foo_transcription.json" \
+OLLAMA_MODEL="llama3.2:3b" \
+LLM_MAX_MODEL_LEN=131072 \
+LLM_PHASE1_MAX_CHUNK_TOKENS=131072 \
+LLM_OLLAMA_MAX_CONTENT_TOKENS=127572 \
+poetry run python -m debate_analyzer.batch.llm_analysis_job
+```
+
+**Memory:** 128K context uses a lot of RAM/VRAM. On constrained machines, lower `LLM_MAX_MODEL_LEN` and `LLM_PHASE1_MAX_CHUNK_TOKENS` together (keep them aligned with `OLLAMA_CONTEXT_LENGTH` when you start `ollama serve`).
+
 ## Ollama process (not read by Python)
 
 If the server still uses a 2048 context, start Ollama with a matching context, e.g. `OLLAMA_CONTEXT_LENGTH=8192 ollama serve` (align with `LLM_MAX_MODEL_LEN`). **`OLLAMA_MODELS`** sets where Ollama stores weights (e.g. EFS on Batch); optional locally.
