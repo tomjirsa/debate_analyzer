@@ -18,24 +18,26 @@ Writes `foo_llm_analysis.json` next to the transcript.
 
 **More detail:** `doc/LLM_ANALYSIS.md` (AWS Batch, import API, troubleshooting).
 
-## Environment variables
+## Environment variables for local run
 
-| Variable | Default | Role |
-|----------|---------|------|
-| `TRANSCRIPT_S3_URI` | — | One transcript (`s3://`, `file://`, or local path). Required unless using prefix. |
-| `TRANSCRIPTS_S3_PREFIX` | — | `s3://bucket/prefix/` — all `*_transcription.json` under prefix. Mutually exclusive with URI in practice. |
-| `MOCK_LLM` | off | `1` / `true` / `yes` → mock backend (no Ollama). |
-| `OLLAMA_HOST` | `http://localhost:11434` | Ollama HTTP API. |
-| `OLLAMA_MODEL` | — | Model tag (e.g. `llama3.2`). If unset, falls back to `LLM_MODEL_ID`. |
-| `LLM_MODEL_ID` | `qwen2.5:7b` | Used only if `OLLAMA_MODEL` is empty. |
-| `LLM_MAX_MODEL_LEN` | `8192` | Passed to Ollama as `num_ctx` (min 1024 in backend). Also feeds chunk budget unless overridden below. |
-| `LLM_TEMPERATURE` | `0.0` | Sampling temp; clamped to `[0, 2]`. |
-| `LLM_OLLAMA_MAX_CONTENT_TOKENS` | — | If set, max content tokens for Phase 1 / sizing (min 1000). Overrides `LLM_MAX_MODEL_LEN - 3500` reserve. |
-| `LLM_PHASE1_MAX_CHUNK_TOKENS` | `8000` | Cap on Phase 1 chunk size (min 1000 if set); combined with above via `min()`. |
-| `LLM_OLLAMA_MAX_EXCERPT_TOKENS` | `3000` | Phase 2/3 excerpt cap (min 500 if set). |
-| `LLM_CHARS_PER_TOKEN` | `4` | Char/token estimate for chunking (`src/debate_analyzer/analysis/chunking.py`). Try `3` for Czech. |
-| `LLM_MIN_SEGMENT_WORDS` | `0` | Skip segments with fewer words. |
-| `LLM_LOG_FULL` | off | `1` / `true` / `yes` → full prompt/response logs (PII risk). |
+
+| Variable                        | Default                  | Role                                                                                                      |
+| ------------------------------- | ------------------------ | --------------------------------------------------------------------------------------------------------- |
+| `TRANSCRIPT_S3_URI`             | —                        | One transcript (`s3://`, `file://`, or local path). Required unless using prefix.                         |
+| `TRANSCRIPTS_S3_PREFIX`         | —                        | `s3://bucket/prefix/` — all `*_transcription.json` under prefix. Mutually exclusive with URI in practice. |
+| `MOCK_LLM`                      | off                      | `1` / `true` / `yes` → mock backend (no Ollama).                                                          |
+| `OLLAMA_HOST`                   | `http://localhost:11434` | Ollama HTTP API.                                                                                          |
+| `OLLAMA_MODEL`                  | —                        | Model tag (e.g. `llama3.2`). If unset, falls back to `LLM_MODEL_ID`.                                      |
+| `LLM_MODEL_ID`                  | `qwen2.5:7b`             | Used only if `OLLAMA_MODEL` is empty.                                                                     |
+| `LLM_MAX_MODEL_LEN`             | `8192`                   | Passed to Ollama as `num_ctx` (min 1024 in backend). Also feeds chunk budget unless overridden below.     |
+| `LLM_TEMPERATURE`               | `0.0`                    | Sampling temp; clamped to `[0, 2]`.                                                                       |
+| `LLM_OLLAMA_MAX_CONTENT_TOKENS` | —                        | If set, max content tokens for Phase 1 / sizing (min 1000). Overrides `LLM_MAX_MODEL_LEN - 3500` reserve. |
+| `LLM_PHASE1_MAX_CHUNK_TOKENS`   | `8000`                   | Cap on Phase 1 chunk size (min 1000 if set); combined with above via `min()`.                             |
+| `LLM_OLLAMA_MAX_EXCERPT_TOKENS` | `3000`                   | Phase 2/3 excerpt cap (min 500 if set).                                                                   |
+| `LLM_CHARS_PER_TOKEN`           | `4`                      | Char/token estimate for chunking (`src/debate_analyzer/analysis/chunking.py`). Try `3` for Czech.         |
+| `LLM_MIN_SEGMENT_WORDS`         | `15`                     | Skip segments with fewer words.                                                                           |
+| `LLM_LOG_FULL`                  | off                      | `1` / `true` / `yes` → full prompt/response logs (PII risk).                                              |
+
 
 **Reserve:** Effective Phase 1 budget uses `3500` tokens reserved for template + reply unless `LLM_OLLAMA_MAX_CONTENT_TOKENS` is set (`src/debate_analyzer/batch/llm_analysis_job.py`).
 
@@ -72,7 +74,7 @@ poetry run python -m debate_analyzer.batch.llm_analysis_job
 
 ## Ollama process (not read by Python)
 
-If the server still uses a 2048 context, start Ollama with a matching context, e.g. `OLLAMA_CONTEXT_LENGTH=8192 ollama serve` (align with `LLM_MAX_MODEL_LEN`). **`OLLAMA_MODELS`** sets where Ollama stores weights (e.g. EFS on Batch); optional locally.
+If the server still uses a 2048 context, start Ollama with a matching context, e.g. `OLLAMA_CONTEXT_LENGTH=8192 ollama serve` (align with `LLM_MAX_MODEL_LEN`). `**OLLAMA_MODELS`** sets where Ollama stores weights (e.g. EFS on Batch); optional locally.
 
 ## After analysis
 
