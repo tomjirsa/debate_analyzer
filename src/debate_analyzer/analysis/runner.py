@@ -18,7 +18,7 @@ from debate_analyzer.analysis.segment_summary_runner import (
 
 def run_analysis(
     payload: dict[str, Any],
-    generate_batch: Callable[[list[str], int], list[str]],
+    generate_batch: Callable[..., list[str]],
     max_context_tokens: int = 24_000,
     max_excerpt_tokens: int | None = None,
     token_counter: Callable[[str], int] | None = None,
@@ -100,7 +100,11 @@ def run_analysis(
             merged_summary, merged_keywords = partials[0]
         else:
             merge_prompt = build_merge_summaries_prompt(partials)
-            responses = generate_batch([merge_prompt], max_tokens=max_tokens_per_reply)
+            responses = generate_batch(
+                [merge_prompt],
+                max_tokens=max_tokens_per_reply,
+                json_mode=True,
+            )
             if log_llm_call and responses:
                 log_llm_call("speaker_merge", merge_prompt, responses[0])
             merged_summary, merged_keywords = (
@@ -136,7 +140,11 @@ def run_analysis(
         transcript_summary["keywords"] = transcript_partials[0][1]
     elif len(transcript_partials) > 1:
         merge_prompt = build_merge_summaries_prompt(transcript_partials)
-        responses = generate_batch([merge_prompt], max_tokens=max_tokens_per_reply)
+        responses = generate_batch(
+            [merge_prompt],
+            max_tokens=max_tokens_per_reply,
+            json_mode=True,
+        )
         if log_llm_call and responses:
             log_llm_call("transcript_merge", merge_prompt, responses[0])
         merged_summary, merged_keywords = (

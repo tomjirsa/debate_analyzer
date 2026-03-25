@@ -7,13 +7,21 @@ from typing import Protocol, runtime_checkable
 
 @runtime_checkable
 class LLMBackend(Protocol):
-    """Protocol for batch inference: generate_batch(prompts, max_tokens) -> list."""
+    """Protocol for batch inference (generate_batch with optional json_mode)."""
 
-    def generate(self, prompt: str, max_tokens: int = 2048) -> str:
+    def generate(
+        self, prompt: str, max_tokens: int = 2048, *, json_mode: bool = False
+    ) -> str:
         """Generate completion for the given prompt. Returns raw model output text."""
         ...
 
-    def generate_batch(self, prompts: list[str], max_tokens: int = 2048) -> list[str]:
+    def generate_batch(
+        self,
+        prompts: list[str],
+        max_tokens: int = 2048,
+        *,
+        json_mode: bool = False,
+    ) -> list[str]:
         """Generate completions for the given prompts. Same order as input."""
         ...
 
@@ -43,12 +51,20 @@ class MockLLMBackend:
             return '{"summary": "Slučené shrnutí.", "keywords": ["sloučený"]}'
         return self.default_response
 
-    def generate(self, prompt: str, max_tokens: int = 2048) -> str:
+    def generate(
+        self, prompt: str, max_tokens: int = 2048, *, json_mode: bool = False
+    ) -> str:
         """Return response based on prompt (default or grammar-correction)."""
         self.call_count += 1
         return self._response_for_prompt(prompt)
 
-    def generate_batch(self, prompts: list[str], max_tokens: int = 2048) -> list[str]:
+    def generate_batch(
+        self,
+        prompts: list[str],
+        max_tokens: int = 2048,
+        *,
+        json_mode: bool = False,
+    ) -> list[str]:
         """Return one response per prompt."""
         self.call_count += len(prompts)
         return [self._response_for_prompt(p) for p in prompts]

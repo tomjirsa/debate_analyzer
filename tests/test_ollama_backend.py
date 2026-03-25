@@ -19,6 +19,7 @@ def test_ollama_backend_generate_returns_content():
         '{"speaker_contributions": [{"id": "c1", "summary": "Test"}]}'
     )
     mock_llm = MagicMock()
+    mock_llm.bind.return_value = mock_llm
     mock_llm.invoke.return_value = mock_invoke_return
 
     with (
@@ -38,6 +39,7 @@ def test_ollama_backend_generate_batch_order():
     mock_invoke_return = MagicMock()
     mock_invoke_return.content = '{"summary": "ok"}'
     mock_llm = MagicMock()
+    mock_llm.bind.return_value = mock_llm
     mock_llm.invoke.return_value = mock_invoke_return
 
     with (
