@@ -34,8 +34,9 @@ PROMPT_SEGMENT_SUMMARY = (
     "concrete facts or decisions mentioned. Cover the segment content faithfully; "
     "do not invent details not present in the text. "
     "Also extract 3–8 key terms or phrases (keywords). "
-    "Output only valid JSON with exactly two keys: "
+    "Output only valid JSON with exactly two keys (ASCII identifiers): "
     '"summary" (string) and "keywords" (array of strings). '
+    "Do not use Czech or translated key names (e.g. not shrnutí). "
     "No other text.\n\n"
     "Segment text:\n"
     "---\n"
@@ -51,13 +52,27 @@ PROMPT_MERGE_SUMMARIES = (
     "Merge them into one coherent Czech summary of the combined content: "
     "preserve important details, unify overlapping points, and avoid repetition. "
     "Produce a single merged keyword list (no duplicates). "
-    "Output only valid JSON with exactly two keys: "
-    '"summary" (string) and "keywords" (array of strings). No other text.\n\n'
+    "Output only valid JSON with exactly two keys (ASCII identifiers): "
+    '"summary" (string) and "keywords" (array of strings). '
+    "Do not use Czech key names. No other text.\n\n"
     "Partial summaries:\n"
     "---\n"
     "{partials}\n"
     "---"
 )
+
+# Follow-up when the first reply is not parseable or lacks required keys.
+PROMPT_JSON_RETRY_PREFIX = (
+    "Your previous reply was not usable. Reply with ONLY one JSON object and no "
+    "other text (no markdown, no commentary). The object must use exactly these "
+    'two keys: "summary" (string, Czech) and "keywords" (array of strings). '
+    "Keys must be English identifiers as shown; do not use shrnutí or other labels."
+)
+
+
+def build_json_retry_prompt(original_prompt: str) -> str:
+    """Build a single follow-up user message: strict JSON instruction + original ask."""
+    return f"{PROMPT_JSON_RETRY_PREFIX}\n\n{original_prompt}"
 
 
 def build_segment_summary_prompt(text: str) -> str:

@@ -31,6 +31,8 @@ def test_ollama_backend_generate_returns_content():
         out = backend.generate("List topics", max_tokens=512)
     assert "speaker_contributions" in out
     mock_llm.invoke.assert_called_once()
+    call_kw = mock_llm.invoke.call_args[1]
+    assert call_kw["options"]["num_predict"] == 512
 
 
 def test_ollama_backend_generate_batch_order():

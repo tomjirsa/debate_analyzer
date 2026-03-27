@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import sys
+from typing import Any
 
 from debate_analyzer.analysis.backend import LLMBackend
 
@@ -69,9 +70,10 @@ def get_ollama_backend(
         file=sys.stderr,
     )
 
-    # Do not pass num_predict: ollama expects it in options={}, not top-level.
-    # Rely on model default max output length (or OLLAMA_NUM_PREDICT if needed).
     # num_ctx sets context window size (avoids "truncating input prompt" when >2048).
+    # Per-call max output tokens go in ``options`` (``num_predict``). Using
+    # ``llm.bind(num_predict=...)`` breaks with ollama>=0.6: Client.chat() no longer
+    # accepts top-level generation kwargs; they must be under ``options``.
     llm = ChatOllama(
         base_url=base_url,
         model=model,
@@ -80,8 +82,23 @@ def get_ollama_backend(
     )
 
     class OllamaBackend:
-        def generate(self, prompt: str, max_tokens: int = 2048) -> str:
-            bound = llm
+        def _invoke_kwargs(self, max_tokens: int, *, json_mode: bool) -> dict[str, Any]:
+            out: dict[str, Any] = {
+                "options": {
+                    "num_ctx": num_ctx,
+                    "num_predict": max_tokens,
+                    "temperature": temperature,
+                },
+            }
+            if json_mode:
+                out["format"] = "json"
+            return out
+
+        def generate(
+            self, prompt: str, max_tokens: int = 2048, *, json_mode: bool = False
+        ) -> str:
+            """Invoke Ollama with ``num_predict=max_tokens`` in options; optional JSON mode."""
+            kwargs = self._invoke_kwargs(max_tokens, json_mode=json_mode)
             if system_prompt:
                 messages = [
                     SystemMessage(content=system_prompt),
@@ -89,14 +106,24 @@ def get_ollama_backend(
                 ]
             else:
                 messages = [HumanMessage(content=prompt)]
-            response = bound.invoke(messages)
+            response = llm.invoke(messages, **kwargs)
             content = getattr(response, "content", "")
             return (content or "").strip()
 
         def generate_batch(
-            self, prompts: list[str], max_tokens: int = 2048
+            self,
+            prompts: list[str],
+            max_tokens: int = 2048,
+            *,
+            json_mode: bool = False,
         ) -> list[str]:
-            """Sequential calls to Ollama (no HTTP batch API)."""
-            return [self.generate(p, max_tokens) for p in prompts]
+            """Sequential calls to Ollama (no HTTP batch API).
+
+            Args:
+                prompts: User prompts in order.
+                max_tokens: Maps to Ollama ``num_predict``.
+                json_mode: When True, sets Ollama ``format="json"`` for each call.
+            """
+            return [self.generate(p, max_tokens, json_mode=json_mode) for p in prompts]
 
     return OllamaBackend()

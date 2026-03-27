@@ -545,6 +545,48 @@ def test_parse_summary_json_invalid_returns_empty():
     assert _parse_summary_json("{}") == ("", [])
 
 
+def test_parse_summary_json_rejects_shrnuti_key():
+    """Czech key shrnutí is not accepted in place of summary."""
+    raw = '{"shrnutí": "text", "keywords": ["a"]}'
+    assert _parse_summary_json(raw) == ("", [])
+
+
+def test_parse_summary_json_strips_markdown_fence():
+    """JSON inside ``` fences is parsed."""
+    raw = '```json\n{"summary": "Ok.", "keywords": ["x"]}\n```'
+    summary, keywords = _parse_summary_json(raw)
+    assert summary == "Ok."
+    assert keywords == ["x"]
+
+
+def test_run_segment_summaries_retries_once_after_bad_first_response():
+    """Second generate_batch call supplies valid JSON after first parse failure."""
+    calls: list[int] = []
+
+    def gen_batch(prompts, max_tokens=2048, **kwargs):
+        calls.append(len(prompts))
+        if len(calls) == 1:
+            return ["not valid json"]
+        return ['{"summary": "Shrnutí po opakování.", "keywords": ["a"]}']
+
+    payload = {
+        "transcription": [
+            {
+                "uid": "u1",
+                "speaker": "S",
+                "text": "word " * 20,
+                "start": 0,
+                "end": 1,
+            },
+        ],
+    }
+    result = run_segment_summaries(payload, gen_batch, max_context_tokens=8000)
+    assert len(calls) == 2
+    assert len(result) == 1
+    assert result[0]["summary"] == "Shrnutí po opakování."
+    assert result[0]["keywords"] == ["a"]
+
+
 def test_segment_summary_from_dict_to_dict():
     """SegmentSummary.from_dict and to_dict round-trip."""
     d = {
@@ -568,7 +610,7 @@ def test_segment_summary_from_dict_to_dict():
 def test_run_segment_summaries_skips_empty_text():
     """run_segment_summaries skips blocks with empty text."""
 
-    def gen_batch(prompts, max_tokens=2048):
+    def gen_batch(prompts, max_tokens=2048, **kwargs):
         return ['{"summary": "x", "keywords": []}'] * len(prompts)
 
     payload = {
@@ -588,7 +630,7 @@ def test_run_segment_summaries_skips_empty_text():
 def test_run_segment_summaries_skips_short_segments_when_min_words_set():
     """run_segment_summaries skips segments with word count below min_words."""
 
-    def gen_batch(prompts, max_tokens=2048):
+    def gen_batch(prompts, max_tokens=2048, **kwargs):
         return ['{"summary": "ok", "keywords": ["k"]}'] * len(prompts)
 
     payload = {
@@ -616,7 +658,7 @@ def test_run_segment_summaries_skips_short_segments_when_min_words_set():
 def test_run_segment_summaries_min_words_zero_summarizes_all_non_empty():
     """With min_words=0, all non-empty segments are summarized (backward compat)."""
 
-    def gen_batch(prompts, max_tokens=2048):
+    def gen_batch(prompts, max_tokens=2048, **kwargs):
         return ['{"summary": "x", "keywords": []}'] * len(prompts)
 
     payload = {
