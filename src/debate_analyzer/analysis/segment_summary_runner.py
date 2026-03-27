@@ -181,6 +181,35 @@ def _one_json_summary_with_retry(
     return summary, keywords, raw2
 
 
+def run_single_segment_summary(
+    prompt: str,
+    generate_batch: Callable[..., list[str]],
+    max_tokens_per_reply: int = 2048,
+    *,
+    log_context: str = "single_segment",
+) -> tuple[str, list[str], str]:
+    """Run one segment-summary prompt with JSON parse and one retry on failure.
+
+    Uses the same path as :func:`run_segment_summaries` for a single block (JSON
+    mode, :func:`build_json_retry_prompt` on parse failure).
+
+    Args:
+        prompt: Full user prompt (e.g. built from a template with segment text).
+        generate_batch: Backend ``(prompts, max_tokens, *, json_mode=False)``.
+        max_tokens_per_reply: Max tokens for each LLM reply.
+        log_context: Label for parse/retry logging.
+
+    Returns:
+        Tuple of ``(summary, keywords, raw_model_text_from_last_attempt)``.
+    """
+    return _one_json_summary_with_retry(
+        prompt,
+        generate_batch,
+        max_tokens_per_reply,
+        log_context=log_context,
+    )
+
+
 def run_segment_summaries(
     payload: dict[str, Any],
     generate_batch: Callable[..., list[str]],

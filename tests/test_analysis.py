@@ -16,11 +16,13 @@ from debate_analyzer.analysis.chunking import (
     topic_keywords,
     truncate_to_tokens,
 )
+from debate_analyzer.analysis.prompts import build_segment_summary_prompt
 from debate_analyzer.analysis.runner import run_analysis
 from debate_analyzer.analysis.schema import LLMAnalysisResult, SegmentSummary
 from debate_analyzer.analysis.segment_summary_runner import (
     _parse_summary_json,
     run_segment_summaries,
+    run_single_segment_summary,
 )
 
 
@@ -520,6 +522,21 @@ def test_get_backend_returns_mock_when_mock_llm_set():
     out = generate_batch(["List the main topics"], max_tokens=100)
     assert len(out) == 1
     assert "speaker_contributions" in out[0]
+
+
+def test_run_single_segment_summary_matches_segment_runner_json_path():
+    """run_single_segment_summary returns summary, keywords, raw via mock backend."""
+    backend = MockLLMBackend()
+    prompt = build_segment_summary_prompt("Test segment text.")
+    summary, keywords, raw = run_single_segment_summary(
+        prompt,
+        backend.generate_batch,
+        max_tokens_per_reply=512,
+        log_context="test_single",
+    )
+    assert summary == "Shrnutí segmentu."
+    assert keywords == ["klíč1", "klíč2"]
+    assert "summary" in raw
 
 
 def test_parse_summary_json_valid():

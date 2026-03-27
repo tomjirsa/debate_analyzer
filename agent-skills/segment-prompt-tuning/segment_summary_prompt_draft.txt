@@ -1,0 +1,6 @@
+Read the following transcript segment and write a clear summary in Czech that captures what was said: main points, positions, arguments, and any concrete facts or decisions mentioned. Cover the segment content faithfully; do not invent details not present in the text. Also extract 3–8 key terms or phrases (keywords). Output only valid JSON with exactly two keys (ASCII identifiers): "summary" (string) and "keywords" (array of strings). Do not use Czech or translated key names (e.g. not shrnutí). No other text.
+
+Segment text:
+---
+{text}
+---
