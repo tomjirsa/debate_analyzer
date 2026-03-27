@@ -71,8 +71,9 @@ def get_ollama_backend(
     )
 
     # num_ctx sets context window size (avoids "truncating input prompt" when >2048).
-    # num_predict is applied per call via bind() from max_tokens (Ollama default ~128
-    # is too small for JSON segment summaries).
+    # Per-call max output tokens go in ``options`` (``num_predict``). Using
+    # ``llm.bind(num_predict=...)`` breaks with ollama>=0.6: Client.chat() no longer
+    # accepts top-level generation kwargs; they must be under ``options``.
     llm = ChatOllama(
         base_url=base_url,
         model=model,
@@ -81,17 +82,23 @@ def get_ollama_backend(
     )
 
     class OllamaBackend:
-        def _bound_model(self, max_tokens: int, *, json_mode: bool) -> Any:
-            bind_kwargs: dict[str, Any] = {"num_predict": max_tokens}
+        def _invoke_kwargs(self, max_tokens: int, *, json_mode: bool) -> dict[str, Any]:
+            out: dict[str, Any] = {
+                "options": {
+                    "num_ctx": num_ctx,
+                    "num_predict": max_tokens,
+                    "temperature": temperature,
+                },
+            }
             if json_mode:
-                bind_kwargs["format"] = "json"
-            return llm.bind(**bind_kwargs)
+                out["format"] = "json"
+            return out
 
         def generate(
             self, prompt: str, max_tokens: int = 2048, *, json_mode: bool = False
         ) -> str:
-            """Invoke Ollama with ``num_predict=max_tokens``; optional JSON output mode."""
-            bound = self._bound_model(max_tokens, json_mode=json_mode)
+            """Invoke Ollama with ``num_predict=max_tokens`` in options; optional JSON mode."""
+            kwargs = self._invoke_kwargs(max_tokens, json_mode=json_mode)
             if system_prompt:
                 messages = [
                     SystemMessage(content=system_prompt),
@@ -99,7 +106,7 @@ def get_ollama_backend(
                 ]
             else:
                 messages = [HumanMessage(content=prompt)]
-            response = bound.invoke(messages)
+            response = llm.invoke(messages, **kwargs)
             content = getattr(response, "content", "")
             return (content or "").strip()
 

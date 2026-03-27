@@ -24,9 +24,9 @@ The Ollama backend (`src/debate_analyzer/analysis/backend_ollama.py`) builds `Ch
 
 ## Secondary contributors
 
-1. **System prompt** (`SYSTEM_PROMPT_RESPONSE_LANGUAGE`) forces Czech everywhere. Some models may use Czech **keys** in JSON (e.g. `shrnutí` instead of `summary`); the parser only reads `data.get("summary")`, so the summary can appear empty even if text exists under another key.
+1. **System prompt** (`SYSTEM_PROMPT_RESPONSE_LANGUAGE`) forces Czech for *values*, but the JSON **schema** must stay English. Some models still emit Czech **keys** (e.g. `shrnutí` instead of `summary`). The fix is **not** to accept those keys silently: **require** `summary` and `keywords` and **fail** the parse when the model uses wrong keys (so issues are visible in logs rather than silent empties).
 2. **Brace-based JSON extraction** in `_parse_summary_json` can mis-fire on malformed output (less likely than truncation, but possible).
-3. **Split-then-merge** for very long blocks: multiple chunk parse failures can compound; there is merge fallback logic for some cases, but single-call parse failure has no retry.
+3. **Split-then-merge** for very long blocks: multiple chunk parse failures can compound; there is merge fallback logic for some cases. The fix adds a **single JSON-only retry** after the first failed parse (see §4).
 
 ## Fix plan (ordered)
 
@@ -37,28 +37,34 @@ The Ollama backend (`src/debate_analyzer/analysis/backend_ollama.py`) builds `Ch
 
 **Files:** `src/debate_analyzer/analysis/backend_ollama.py`
 
-### 2. Harden parsing (should-do)
+### 2. Enforce JSON contract + strict keys (should-do)
 
-- In `_parse_summary_json`, accept fallback keys for the summary string (e.g. **`shrnutí`** if `summary` is missing).
-- Optionally strip markdown ```json``` fences before parsing.
+- **Prompt:** State explicitly that the JSON object must use **only** the keys **`summary`** and **`keywords`** (English keys; Czech content inside strings is fine).
+- **`_parse_summary_json`:** Do **not** map Czech keys (e.g. `shrnutí`) onto `summary`. If the parsed object has Czech keys but not `summary`/`keywords`, **fail** the parse the same as malformed JSON (empty result path used today, but distinguishable via logs below).
+- Optionally strip markdown ```json``` fences before parsing (still required for valid extraction).
 
-**Files:** `src/debate_analyzer/analysis/segment_summary_runner.py`
+**Files:** `src/debate_analyzer/analysis/segment_summary_runner.py` (and any shared prompt constants)
 
 ### 3. Observability (should-do)
 
-- When parse yields empty, log a **short warning** (and optionally the first N characters of the raw response) without enabling full `LLM_LOG_FULL`, to confirm truncation vs wrong keys.
+- **When JSON parsing fails** (`json.loads` error, no extractable object, or schema violation including wrong keys): log at **warning** (or **error** if you prefer) with a short reason and the **first N characters** of the raw model response (cap length; no need for `LLM_LOG_FULL`).
+- When parse succeeds but `summary` is empty after enforcing the contract, log separately if useful (truncation vs empty string).
+- Keep logs actionable: include failure class, e.g. `json_decode_error`, `missing_keys`, `wrong_keys_shrnuti`, `empty_summary`.
 
 **Files:** `segment_summary_runner.py` and/or `llm_analysis_job.py` logging helpers
 
-### 4. Optional improvements
+### 4. Ollama `format="json"` + single JSON-only retry (must-do)
 
-- Use Ollama **`format="json"`** for these calls if compatible with prompts and model.
-- **Retry once** on empty parse with a minimal “reply with only JSON” follow-up.
+- Enable Ollama **`format="json"`** for segment-summary generation calls (via `ChatOllama` / invoke options as supported by LangChain and the pinned Ollama client). Adjust prompts if needed so structured output still matches the required **`summary`** / **`keywords`** schema.
+- After the **first** response, if `_parse_summary_json` fails or yields empty `summary`/`keywords` per contract, **retry exactly once** with a minimal follow-up instruction: output **only** valid JSON with keys `summary` and `keywords` (no prose, no markdown). Log the retry path (and first failure) for observability.
+
+**Files:** `backend_ollama.py` (per-call or segment-runner-scoped `format`), `segment_summary_runner.py` (retry orchestration next to `run_segment_summaries` / batch generate).
 
 ### 5. Verification
 
 - Re-run LLM analysis on the same transcript after (1); expect a **large drop** in empty summaries.
-- Add or extend unit tests for `_parse_summary_json` (fallback keys, fenced JSON) and for Ollama backend `num_predict` wiring if testable.
+- Add or extend unit tests for `_parse_summary_json`: fenced JSON, **wrong keys** (`shrnutí` only → failed parse + no silent fill), **retry-once** behavior (mock: first fail → second success), and Ollama **`format="json"`** / `num_predict` wiring if mockable.
+- Manually or in tests: confirm **logging fires** on deliberate malformed JSON / wrong-key payloads and on retry.
 
 ## References (code)
 
