@@ -47,7 +47,11 @@ class MockLLMBackend:
             return ""
         if "Summarize the following" in prompt or "Segment text:" in prompt:
             return '{"summary": "Shrnutí segmentu.", "keywords": ["klíč1", "klíč2"]}'
-        if "partial summaries" in prompt.lower() or "Combine them" in prompt:
+        if (
+            "Částečné vstupy:" in prompt
+            or "partial summaries" in prompt.lower()
+            or "Combine them" in prompt
+        ):
             return '{"summary": "Slučené shrnutí.", "keywords": ["sloučený"]}'
         return self.default_response
 

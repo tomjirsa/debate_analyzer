@@ -8,17 +8,17 @@
 
 ```bash
 ollama pull llama3.2:3b
-# Terminal A (keep running): OLLAMA_CONTEXT_LENGTH=131072 ollama serve
+# Terminal A (keep running): OLLAMA_CONTEXT_LENGTH=65536 ollama serve
 
 TRANSCRIPT_S3_URI="/absolute/path/to/foo_transcription.json" \
 OLLAMA_MODEL="llama3.2:3b" \
-LLM_MAX_MODEL_LEN=131072 \
-LLM_PHASE1_MAX_CHUNK_TOKENS=131072 \
-LLM_OLLAMA_MAX_CONTENT_TOKENS=127572 \
+LLM_MAX_MODEL_LEN=65536 \
+LLM_PHASE1_MAX_CHUNK_TOKENS=65536 \
+LLM_OLLAMA_MAX_CONTENT_TOKENS=63786 \
 poetry run python -m debate_analyzer.batch.llm_analysis_job
 ```
 
-You need **both** `LLM_MAX_MODEL_LEN` and `LLM_PHASE1_MAX_CHUNK_TOKENS`: the job caps Phase 1 chunks at **8000** by default, so raising only `LLM_MAX_MODEL_LEN` does not increase segment chunk size until `LLM_PHASE1_MAX_CHUNK_TOKENS` is raised too. `LLM_OLLAMA_MAX_CONTENT_TOKENS=127572` matches `131072 - 3500` reserve used by the job (optional; omit to use `LLM_MAX_MODEL_LEN - 3500`).
+You need **both** `LLM_MAX_MODEL_LEN` and `LLM_PHASE1_MAX_CHUNK_TOKENS`: the job caps Phase 1 chunks at **8000** by default, so raising only `LLM_MAX_MODEL_LEN` does not increase segment chunk size until `LLM_PHASE1_MAX_CHUNK_TOKENS` is raised too. `LLM_OLLAMA_MAX_CONTENT_TOKENS=63786` is half of the prior `127572` example (optional; omit to use `LLM_MAX_MODEL_LEN - 3500`, i.e. `62036` when `LLM_MAX_MODEL_LEN=65536`).
 
 **Minimal (low memory / quick tests):** omit the `LLM_*` variables; defaults are `8192` context and Phase 1 chunk cap `8000`.
 
@@ -64,7 +64,7 @@ Writes `foo_llm_analysis.json` next to the transcript.
 
 ## Ollama process (not read by Python)
 
-If the server still uses a 2048 context, start Ollama with a context aligned to `LLM_MAX_MODEL_LEN`, e.g. `OLLAMA_CONTEXT_LENGTH=8192 ollama serve` for defaults, or `OLLAMA_CONTEXT_LENGTH=131072 ollama serve` for the max-context command above. **`OLLAMA_MODELS`** sets where Ollama stores weights (e.g. EFS on Batch); optional locally.
+If the server still uses a 2048 context, start Ollama with a context aligned to `LLM_MAX_MODEL_LEN`, e.g. `OLLAMA_CONTEXT_LENGTH=8192 ollama serve` for defaults, or `OLLAMA_CONTEXT_LENGTH=65536 ollama serve` for the max-context command above. **`OLLAMA_MODELS`** sets where Ollama stores weights (e.g. EFS on Batch); optional locally.
 
 ## After analysis
 

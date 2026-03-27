@@ -539,6 +539,32 @@ def test_run_single_segment_summary_matches_segment_runner_json_path():
     assert "summary" in raw
 
 
+def test_build_merge_summaries_prompt_includes_partials_block():
+    """Merge prompt uses Czech template file and embeds formatted partials."""
+    from debate_analyzer.analysis.prompts import (
+        build_merge_summaries_prompt,
+        format_merge_partials_block,
+    )
+
+    partials = [("První souhrn.", ["a", "b"]), ("Druhý souhrn.", ["c"])]
+    prompt = build_merge_summaries_prompt(partials)
+    assert "Částečné vstupy:" in prompt
+    assert format_merge_partials_block(partials) in prompt
+    assert "1. Summary: První souhrn." in prompt
+    assert "2. Summary: Druhý souhrn." in prompt
+
+
+def test_mock_backend_merge_prompt_returns_merged_json():
+    """MockLLMBackend recognizes Czech merge prompt and returns merge-shaped JSON."""
+    backend = MockLLMBackend()
+    from debate_analyzer.analysis.prompts import build_merge_summaries_prompt
+
+    prompt = build_merge_summaries_prompt([("A.", ["x"]), ("B.", ["y"])])
+    out = backend.generate(prompt, json_mode=True)
+    assert "Slučené shrnutí." in out
+    assert "sloučený" in out
+
+
 def test_parse_summary_json_valid():
     """_parse_summary_json extracts summary and keywords from valid JSON."""
     raw = '{"summary": "Shrnutí.", "keywords": ["a", "b"]}'

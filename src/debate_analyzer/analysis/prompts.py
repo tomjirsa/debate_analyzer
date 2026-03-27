@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 # System-level instruction for response language (injected by backends).
 SYSTEM_PROMPT_RESPONSE_LANGUAGE = (
     "Always respond in Czech. Use Czech for all topic labels, descriptions, "
@@ -27,39 +29,46 @@ def build_correct_segment_prompt(text: str) -> str:
     return PROMPT_CORRECT_SEGMENT.format(text=text)
 
 
+def _load_segment_summary_prompt_template() -> str:
+    """Load segment-summary prompt template from ``segment_summary_prompt.txt``.
+
+    The template must contain a single ``{text}`` placeholder for the segment body.
+    Kept in sync with ``agent-skills/segment-prompt-tuning/segment_summary_prompt_draft.txt``.
+
+    Returns:
+        Raw template string (before ``str.format``).
+
+    Raises:
+        FileNotFoundError: If the template file is missing next to this module.
+    """
+    path = Path(__file__).resolve().parent / "segment_summary_prompt.txt"
+    return path.read_text(encoding="utf-8")
+
+
 # Segment summary: one segment → summary + keywords (JSON).
-PROMPT_SEGMENT_SUMMARY = (
-    "Read the following transcript segment and write a clear summary in Czech "
-    "that captures what was said: main points, positions, arguments, and any "
-    "concrete facts or decisions mentioned. Cover the segment content faithfully; "
-    "do not invent details not present in the text. "
-    "Also extract 3–8 key terms or phrases (keywords). "
-    "Output only valid JSON with exactly two keys (ASCII identifiers): "
-    '"summary" (string) and "keywords" (array of strings). '
-    "Do not use Czech or translated key names (e.g. not shrnutí). "
-    "No other text.\n\n"
-    "Segment text:\n"
-    "---\n"
-    "{text}\n"
-    "---"
-)
+PROMPT_SEGMENT_SUMMARY = _load_segment_summary_prompt_template()
+
+
+def _load_merge_summaries_prompt_template() -> str:
+    """Load merge prompt template from ``merge_summaries_prompt.txt``.
+
+    The template must contain a single ``{partials}`` placeholder for the
+    formatted partial-summary block. Kept in sync with
+    ``agent-skills/segment-prompt-tuning/merge_summaries_prompt_draft.txt``.
+
+    Returns:
+        Raw template string (before ``str.format``).
+
+    Raises:
+        FileNotFoundError: If the template file is missing next to this module.
+    """
+    path = Path(__file__).resolve().parent / "merge_summaries_prompt.txt"
+    return path.read_text(encoding="utf-8")
+
 
 # Merge: partial summaries + keywords → one summary + one keyword list (JSON).
 # Used for long-segment chunks, per-speaker merges, and transcript-level merge.
-PROMPT_MERGE_SUMMARIES = (
-    "The following are partial summaries and keywords from related parts of the "
-    "transcript (e.g. chunks of one long turn, or multiple turns to combine). "
-    "Merge them into one coherent Czech summary of the combined content: "
-    "preserve important details, unify overlapping points, and avoid repetition. "
-    "Produce a single merged keyword list (no duplicates). "
-    "Output only valid JSON with exactly two keys (ASCII identifiers): "
-    '"summary" (string) and "keywords" (array of strings). '
-    "Do not use Czech key names. No other text.\n\n"
-    "Partial summaries:\n"
-    "---\n"
-    "{partials}\n"
-    "---"
-)
+PROMPT_MERGE_SUMMARIES = _load_merge_summaries_prompt_template()
 
 # Follow-up when the first reply is not parseable or lacks required keys.
 PROMPT_JSON_RETRY_PREFIX = (
@@ -80,13 +89,22 @@ def build_segment_summary_prompt(text: str) -> str:
     return PROMPT_SEGMENT_SUMMARY.format(text=text)
 
 
-def build_merge_summaries_prompt(
+def format_merge_partials_block(
     partial_summaries: list[tuple[str, list[str]]],
 ) -> str:
-    """Build prompt to merge partial (summary, keywords) into one summary + keywords."""
-    lines = []
+    """Format partial (summary, keywords) tuples for the merge prompt body."""
+    lines: list[str] = []
     for i, (summary, keywords) in enumerate(partial_summaries, 1):
         lines.append(f"{i}. Summary: {summary}")
         if keywords:
             lines.append(f"   Keywords: {', '.join(keywords)}")
-    return PROMPT_MERGE_SUMMARIES.format(partials="\n\n".join(lines))
+    return "\n\n".join(lines)
+
+
+def build_merge_summaries_prompt(
+    partial_summaries: list[tuple[str, list[str]]],
+) -> str:
+    """Build prompt to merge partial (summary, keywords) into one summary + keywords."""
+    return PROMPT_MERGE_SUMMARIES.format(
+        partials=format_merge_partials_block(partial_summaries),
+    )

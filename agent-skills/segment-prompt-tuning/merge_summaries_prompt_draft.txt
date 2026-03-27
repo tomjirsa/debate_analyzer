@@ -1,0 +1,14 @@
+Níže jsou částečné souhrny a klíčová slova ze souvisejících částí přepisu (např. části jednoho dlouhého výstupu, nebo více po sobě jdoucích bloků). Sluč je do jednoho souvislého českého souhrnu: zachovej důležité detaily, sjednoť překryvy a vyhni se opakování.
+
+Částečné vstupy mohou popisovat různé řečníky nebo různé fáze jednání — nevyjadřuj vše v jedné osobě („řečník“), pokud vstupy ukazují na více aktérů nebo střídání rolí; používej podle potřeby neutrální nebo množné ztvárnění („je navrženo“, „zaznělo“, „řečníci uvádějí“, „následuje představení…“).
+
+Nevymýšlej fakta mimo částečné vstupy. Netvrď dokončené schválení ani proběhlé hlasování, pokud ho vstupy výslovně nepotvrzují shodně; formulace typu „navrhuje se hlasovat“ nebo „můžeme schválit“ zachovej jako návrh či možnost, ne jako hotový výsledek.
+
+Piš výhradně česky, bez anglických slov a zbytečných anglicismů. Dodržuj českou gramatiku (shoda podmětu s přísudkem, správné tvary sloves a pádů); např. u množného podmětu používej správný tvar slovesa („řečníci navrhují“, ne „řečníci navrhuji“). Jména a příjmení přejímej přesně tak, jak jsou v částečných vstupech; nevymýšlej nové podoby.
+
+Výstup musí být jen platný JSON s přesně dvěma klíči v anglickém zápisu (ASCII): "summary" (jeden řetězec) a "keywords" (pole řetězců). Klíčová slova slouč, slouč významové duplicity a drž rozumnou délku seznamu (obvykle cca 5–15 položek podle šíře vstupů). Nepoužívej české názvy klíčů. Kromě tohoto JSON žádný jiný text.
+
+Částečné vstupy:
+---
+{partials}
+---
