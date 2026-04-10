@@ -1,6 +1,4 @@
-Níže jsou částečné souhrny a klíčová slova ze souvisejících částí přepisu (např. části jednoho dlouhého výstupu, nebo více po sobě jdoucích bloků). Sluč je do jednoho souvislého českého souhrnu: zachovej důležité detaily, sjednoť překryvy a vyhni se opakování.
-
-Částečné vstupy mohou popisovat různé řečníky nebo různé fáze jednání — nevyjadřuj vše v jedné osobě („řečník“), pokud vstupy ukazují na více aktérů nebo střídání rolí; používej podle potřeby neutrální nebo množné ztvárnění („je navrženo“, „zaznělo“, „řečníci uvádějí“, „následuje představení…“).
+Všechny částečné vstupy popisují jeden souvislý úsek přepisu (jeden výstup rozdělený kvůli délce). Sluč je do jednoho souvislého českého souhrnu: zachovej důležité detaily, sjednoť překryvy na hranicích částí a vyhni se opakování. Nevkládej nové osoby ani témata, které ve vstupech nejsou.
 
 Nevymýšlej fakta mimo částečné vstupy. Netvrď dokončené schválení ani proběhlé hlasování, pokud ho vstupy výslovně nepotvrzují shodně; formulace typu „navrhuje se hlasovat“ nebo „můžeme schválit“ zachovej jako návrh či možnost, ne jako hotový výsledek.
 

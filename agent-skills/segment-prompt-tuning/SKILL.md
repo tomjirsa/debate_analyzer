@@ -7,7 +7,7 @@ description: Iteratively tunes the Czech segment-summary LLM prompt using local 
 
 ## Purpose
 
-Improve [`PROMPT_SEGMENT_SUMMARY`](../../../src/debate_analyzer/analysis/prompts.py) (loaded from [`segment_summary_prompt.txt`](../../../src/debate_analyzer/analysis/segment_summary_prompt.txt)) and, separately, [`PROMPT_MERGE_SUMMARIES`](../../../src/debate_analyzer/analysis/prompts.py) (from [`merge_summaries_prompt.txt`](../../../src/debate_analyzer/analysis/merge_summaries_prompt.txt)) by running **single-segment** or **merge** calls through the same stack as production (Ollama + JSON mode + parse/retry), using fixed test fixtures. Adjust [`PROMPT_JSON_RETRY_PREFIX`](../../../src/debate_analyzer/analysis/prompts.py) only if JSON repair still fails after prompt fixes.
+Improve [`PROMPT_SEGMENT_SUMMARY`](../../../src/debate_analyzer/analysis/prompts.py) (loaded from [`segment_summary_prompt.txt`](../../../src/debate_analyzer/analysis/segment_summary_prompt.txt)) and, separately, the merge templates [`PROMPT_MERGE_SEGMENT_CHUNK`](../../../src/debate_analyzer/analysis/prompts.py), [`PROMPT_MERGE_SPEAKER`](../../../src/debate_analyzer/analysis/prompts.py), and [`PROMPT_MERGE_TRANSCRIPT`](../../../src/debate_analyzer/analysis/prompts.py) (from [`merge_segment_chunk_prompt.txt`](../../../src/debate_analyzer/analysis/merge_segment_chunk_prompt.txt), [`merge_speaker_prompt.txt`](../../../src/debate_analyzer/analysis/merge_speaker_prompt.txt), [`merge_transcript_prompt.txt`](../../../src/debate_analyzer/analysis/merge_transcript_prompt.txt)) by running **single-segment** or **merge** calls through the same stack as production (Ollama + JSON mode + parse/retry), using fixed test fixtures. Adjust [`PROMPT_JSON_RETRY_PREFIX`](../../../src/debate_analyzer/analysis/prompts.py) only if JSON repair still fails after prompt fixes.
 
 ## Data sources (do not confuse them)
 
@@ -54,21 +54,21 @@ Improve [`PROMPT_SEGMENT_SUMMARY`](../../../src/debate_analyzer/analysis/prompts
 8. When satisfied across segments: copy the final draft into [`src/debate_analyzer/analysis/segment_summary_prompt.txt`](../../../src/debate_analyzer/analysis/segment_summary_prompt.txt) (that file is what [`prompts.py`](../../../src/debate_analyzer/analysis/prompts.py) loads as `PROMPT_SEGMENT_SUMMARY`) and keep [`segment_summary_prompt_draft.txt`](segment_summary_prompt_draft.txt) in sync.
 9. Run `make test` (and spot-check Ollama on 1–2 uids if possible).
 
-### Merge prompt (split / speaker / transcript merge)
+### Merge prompts (segment chunk / speaker / transcript)
 
-1. Edit [`merge_summaries_prompt_draft.txt`](merge_summaries_prompt_draft.txt) (must contain `{partials}`). Partials are formatted by production as numbered `Summary:` / `Keywords:` blocks.
-2. Run (from repo root):
+1. Edit the draft that matches the merge path you are tuning (each must contain `{partials}`): [`merge_segment_chunk_prompt_draft.txt`](merge_segment_chunk_prompt_draft.txt), [`merge_speaker_prompt_draft.txt`](merge_speaker_prompt_draft.txt), or [`merge_transcript_prompt_draft.txt`](merge_transcript_prompt_draft.txt). Partials are formatted by production as numbered `Summary:` / `Keywords:` blocks.
+2. Run (from repo root), pointing `--prompt-file` at the draft you are tuning:
 
    ```bash
-   poetry run python .cursor/skills/segment-prompt-tuning/scripts/run_merge_summaries.py \
+   poetry run python agent-skills/segment-prompt-tuning/scripts/run_merge_summaries.py \
      --analysis data/test/test_llm_analysis.json \
      --start 0 --count 3 \
-     --prompt-file .cursor/skills/segment-prompt-tuning/merge_summaries_prompt_draft.txt
+     --prompt-file agent-skills/segment-prompt-tuning/merge_speaker_prompt_draft.txt
    ```
 
    Adjust `--start` / `--count` to stress short vs long partial lists (e.g. `--count 5`).
 3. Evaluate: valid Czech JSON with `summary` / `keywords`; no extra invention beyond partials; deduplicated keywords.
-4. When satisfied: copy the draft into [`src/debate_analyzer/analysis/merge_summaries_prompt.txt`](../../../src/debate_analyzer/analysis/merge_summaries_prompt.txt) and keep the draft in sync.
+4. When satisfied: copy the draft into the matching production file under [`src/debate_analyzer/analysis/`](../../../src/debate_analyzer/analysis/) (`merge_segment_chunk_prompt.txt`, `merge_speaker_prompt.txt`, or `merge_transcript_prompt.txt`) and keep the draft in sync.
 
 ## Evaluation rubric (all must pass for “good”)
 
@@ -103,6 +103,6 @@ Improve [`PROMPT_SEGMENT_SUMMARY`](../../../src/debate_analyzer/analysis/prompts
 ## Final merge checklist
 
 - [ ] Segment draft merged into `segment_summary_prompt.txt` (loaded as `PROMPT_SEGMENT_SUMMARY` in `prompts.py`)
-- [ ] Merge draft merged into `merge_summaries_prompt.txt` (loaded as `PROMPT_MERGE_SUMMARIES`) when merge prompt was tuned
+- [ ] Merge drafts merged into `merge_segment_chunk_prompt.txt`, `merge_speaker_prompt.txt`, and/or `merge_transcript_prompt.txt` (loaded as `PROMPT_MERGE_*` in `prompts.py`) when those prompts were tuned
 - [ ] `make test` passes
 - [ ] Optional: Ollama spot-check on at least one segment uid and one merge `--start/--count`

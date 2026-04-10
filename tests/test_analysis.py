@@ -539,27 +539,56 @@ def test_run_single_segment_summary_matches_segment_runner_json_path():
     assert "summary" in raw
 
 
-def test_build_merge_summaries_prompt_includes_partials_block():
-    """Merge prompt uses Czech template file and embeds formatted partials."""
+def test_build_merge_segment_chunk_prompt_includes_partials_block():
+    """Segment-chunk merge prompt embeds partials and the long-segment intro."""
     from debate_analyzer.analysis.prompts import (
-        build_merge_summaries_prompt,
+        build_merge_segment_chunk_prompt,
         format_merge_partials_block,
     )
 
     partials = [("První souhrn.", ["a", "b"]), ("Druhý souhrn.", ["c"])]
-    prompt = build_merge_summaries_prompt(partials)
+    prompt = build_merge_segment_chunk_prompt(partials)
     assert "Částečné vstupy:" in prompt
     assert format_merge_partials_block(partials) in prompt
+    assert "jeden souvislý úsek přepisu" in prompt
     assert "1. Summary: První souhrn." in prompt
     assert "2. Summary: Druhý souhrn." in prompt
+
+
+def test_build_merge_speaker_prompt_includes_partials_block():
+    """Per-speaker merge prompt embeds partials and the single-speaker intro."""
+    from debate_analyzer.analysis.prompts import (
+        build_merge_speaker_prompt,
+        format_merge_partials_block,
+    )
+
+    partials = [("První souhrn.", ["a"]), ("Druhý souhrn.", ["b"])]
+    prompt = build_merge_speaker_prompt(partials)
+    assert "Částečné vstupy:" in prompt
+    assert format_merge_partials_block(partials) in prompt
+    assert "jednoho a téhož řečníka" in prompt
+
+
+def test_build_merge_transcript_prompt_includes_partials_block():
+    """Transcript-level merge prompt embeds partials and the whole-meeting intro."""
+    from debate_analyzer.analysis.prompts import (
+        build_merge_transcript_prompt,
+        format_merge_partials_block,
+    )
+
+    partials = [("Souhrn A.", ["x"]), ("Souhrn B.", ["y"])]
+    prompt = build_merge_transcript_prompt(partials)
+    assert "Částečné vstupy:" in prompt
+    assert format_merge_partials_block(partials) in prompt
+    assert "přehledu celého jednání" in prompt
 
 
 def test_mock_backend_merge_prompt_returns_merged_json():
     """MockLLMBackend recognizes Czech merge prompt and returns merge-shaped JSON."""
     backend = MockLLMBackend()
-    from debate_analyzer.analysis.prompts import build_merge_summaries_prompt
+    from debate_analyzer.analysis.prompts import build_merge_speaker_prompt
 
-    prompt = build_merge_summaries_prompt([("A.", ["x"]), ("B.", ["y"])])
+    prompt = build_merge_speaker_prompt([("A.", ["x"]), ("B.", ["y"])])
     out = backend.generate(prompt, json_mode=True)
     assert "Slučené shrnutí." in out
     assert "sloučený" in out

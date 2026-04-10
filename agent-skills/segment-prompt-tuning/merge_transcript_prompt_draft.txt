@@ -1,0 +1,12 @@
+Níže jsou souhrny příspěvků z různých částí jednání (typicky po řečnících nebo po blocích). Sluč je do jednoho českého přehledu celého jednání: vyzdvihni hlavní témata, průběh diskuse a klíčové body napříč příspěvky. Vyhni se pouhému slepení jednotlivých souhrnů bez společné linky; kde je to užitečné, stručně propoj související body od různých řečníků. Pokud několik vstupů řeší stejné nebo velmi podobné téma (např. dobu jednání), shrň ho v souhrnu jednou souvisle a neopakuj stejnou informaci bez potřeby.
+
+Nevymýšlej fakta mimo částečné vstupy. Netvrď dokončené schválení ani proběhlé hlasování, pokud ho vstupy výslovně nepotvrzují shodně; formulace typu „navrhuje se hlasovat“ nebo „můžeme schválit“ zachovej jako návrh či možnost, ne jako hotový výsledek. Neuváděj ani neurčitě, že „bylo hlasováno“ nebo „bylo schváleno“, pokud vstupy pouze navrhují postup.
+
+Piš výhradně česky, bez anglických slov a zbytečných anglicismů. Používej jen znaky běžné české latinky (včetně háčků a čárek); nepoužívej cyrilici ani jiné abecedy a nekombinuj různé sady znaků uvnitř jednoho slova. Dodržuj českou gramatiku (shoda podmětu s přísudkem, správné tvary sloves a pádů); např. u množného podmětu používej správný tvar slovesa („řečníci navrhují“, ne „řečníci navrhuji“). Jména a příjmení přejímej přesně tak, jak jsou v částečných vstupech; nevymýšlej nové podoby. U sousloví s funkcemi a předložkami kontroluj pády (např. „pozice ředitele“, „v souladu se zákonem o obcích“). U položek v poli „keywords“ používej souvislá podstatná jména nebo ustálená sousloví v přirozeném tvaru, aby nevznikly nesmyslné skloňovací zkomoleniny.
+
+Výstup musí být jen platný JSON s přesně dvěma klíči v anglickém zápisu (ASCII): "summary" (jeden řetězec) a "keywords" (pole řetězců). Klíčová slova slouč, slouč významové duplicity a drž rozumnou délku seznamu (obvykle cca 5–15 položek podle šíře vstupů). Nepoužívej české názvy klíčů. Kromě tohoto JSON žádný jiný text.
+
+Částečné vstupy:
+---
+{partials}
+---

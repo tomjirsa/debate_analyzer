@@ -3,9 +3,12 @@
 **Production templates:** LLM analysis loads
 
 - [`segment_summary_prompt.txt`](../../src/debate_analyzer/analysis/segment_summary_prompt.txt) → `PROMPT_SEGMENT_SUMMARY`
-- [`merge_summaries_prompt.txt`](../../src/debate_analyzer/analysis/merge_summaries_prompt.txt) → `PROMPT_MERGE_SUMMARIES` (split-then-merge, per-speaker merge, transcript merge)
+- Merge prompts (partial summaries → one JSON), each with `{partials}`:
+  - [`merge_segment_chunk_prompt.txt`](../../src/debate_analyzer/analysis/merge_segment_chunk_prompt.txt) → `PROMPT_MERGE_SEGMENT_CHUNK` (split-then-merge within one long segment)
+  - [`merge_speaker_prompt.txt`](../../src/debate_analyzer/analysis/merge_speaker_prompt.txt) → `PROMPT_MERGE_SPEAKER` (one speaker, multiple segments)
+  - [`merge_transcript_prompt.txt`](../../src/debate_analyzer/analysis/merge_transcript_prompt.txt) → `PROMPT_MERGE_TRANSCRIPT` (meeting-level summary from per-speaker summaries)
 
-Keep [`segment_summary_prompt_draft.txt`](segment_summary_prompt_draft.txt) and [`merge_summaries_prompt_draft.txt`](merge_summaries_prompt_draft.txt) in sync with the files above when copying tuning results into production.
+Keep [`segment_summary_prompt_draft.txt`](segment_summary_prompt_draft.txt) and the merge drafts [`merge_segment_chunk_prompt_draft.txt`](merge_segment_chunk_prompt_draft.txt), [`merge_speaker_prompt_draft.txt`](merge_speaker_prompt_draft.txt), [`merge_transcript_prompt_draft.txt`](merge_transcript_prompt_draft.txt) in sync with the files above when copying tuning results into production.
 
 ## Environment variables
 
@@ -50,11 +53,15 @@ Optional: `--max-tokens 2048` to override reply length.
 Partials are **not** raw transcript text; they are `(summary, keywords)` tuples, same as after segment summarization. Use consecutive rows from [`data/test/test_llm_analysis.json`](../../data/test/test_llm_analysis.json) `segment_summaries` to simulate merging chunk partials or multiple blocks.
 
 ```bash
-poetry run python .cursor/skills/segment-prompt-tuning/scripts/run_merge_summaries.py \
+poetry run python agent-skills/segment-prompt-tuning/scripts/run_merge_summaries.py \
   --analysis data/test/test_llm_analysis.json \
   --start 0 --count 3 \
-  --prompt-file .cursor/skills/segment-prompt-tuning/merge_summaries_prompt_draft.txt
+  --prompt-file agent-skills/segment-prompt-tuning/merge_speaker_prompt_draft.txt
 ```
+
+Use `merge_segment_chunk_prompt_draft.txt` or `merge_transcript_prompt_draft.txt` when tuning those merge paths; partials are the same `(summary, keywords)` format.
+
+For **`merge_speaker_prompt`**, production partials are **multiple segments from one speaker**. In [`data/test/test_llm_analysis.json`](../../data/test/test_llm_analysis.json) there are no three consecutive rows with the same `speaker`; the only **consecutive same-speaker pairs** are at indices **20–21** and **68–69**. Use e.g. `--start 20 --count 2` to stress-test the speaker merge path realistically.
 
 Evaluate with the same JSON/language/faithfulness/keywords rubric as segment summaries; inputs are summaries, so faithfulness means **do not invent content beyond what the partials state**.
 

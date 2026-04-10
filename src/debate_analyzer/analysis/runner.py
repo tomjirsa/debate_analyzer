@@ -9,7 +9,10 @@ from __future__ import annotations
 
 from typing import Any, Callable
 
-from debate_analyzer.analysis.prompts import build_merge_summaries_prompt
+from debate_analyzer.analysis.prompts import (
+    build_merge_speaker_prompt,
+    build_merge_transcript_prompt,
+)
 from debate_analyzer.analysis.segment_summary_runner import (
     _parse_summary_json,
     run_segment_summaries,
@@ -99,7 +102,7 @@ def run_analysis(
         if len(partials) == 1:
             merged_summary, merged_keywords = partials[0]
         else:
-            merge_prompt = build_merge_summaries_prompt(partials)
+            merge_prompt = build_merge_speaker_prompt(partials)
             responses = generate_batch(
                 [merge_prompt],
                 max_tokens=max_tokens_per_reply,
@@ -139,7 +142,7 @@ def run_analysis(
         transcript_summary["summary"] = transcript_partials[0][0]
         transcript_summary["keywords"] = transcript_partials[0][1]
     elif len(transcript_partials) > 1:
-        merge_prompt = build_merge_summaries_prompt(transcript_partials)
+        merge_prompt = build_merge_transcript_prompt(transcript_partials)
         responses = generate_batch(
             [merge_prompt],
             max_tokens=max_tokens_per_reply,

@@ -10,7 +10,7 @@ from typing import Any
 from debate_analyzer.analysis.chunking import estimate_tokens, split_into_chunks
 from debate_analyzer.analysis.prompts import (
     build_json_retry_prompt,
-    build_merge_summaries_prompt,
+    build_merge_segment_chunk_prompt,
     build_segment_summary_prompt,
 )
 
@@ -360,7 +360,7 @@ def run_segment_summaries(
             )
             continue
 
-        merge_prompt = build_merge_summaries_prompt(partials)
+        merge_prompt = build_merge_segment_chunk_prompt(partials)
         summary, keywords, merge_raw = _one_json_summary_with_retry(
             merge_prompt,
             generate_batch,

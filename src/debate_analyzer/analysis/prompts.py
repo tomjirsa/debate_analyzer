@@ -33,7 +33,8 @@ def _load_segment_summary_prompt_template() -> str:
     """Load segment-summary prompt template from ``segment_summary_prompt.txt``.
 
     The template must contain a single ``{text}`` placeholder for the segment body.
-    Kept in sync with ``agent-skills/segment-prompt-tuning/segment_summary_prompt_draft.txt``.
+    Kept in sync with
+    ``agent-skills/segment-prompt-tuning/segment_summary_prompt_draft.txt``.
 
     Returns:
         Raw template string (before ``str.format``).
@@ -49,26 +50,31 @@ def _load_segment_summary_prompt_template() -> str:
 PROMPT_SEGMENT_SUMMARY = _load_segment_summary_prompt_template()
 
 
-def _load_merge_summaries_prompt_template() -> str:
-    """Load merge prompt template from ``merge_summaries_prompt.txt``.
+def _analysis_dir() -> Path:
+    """Directory containing ``segment_summary_prompt.txt`` and merge templates."""
+    return Path(__file__).resolve().parent
 
-    The template must contain a single ``{partials}`` placeholder for the
-    formatted partial-summary block. Kept in sync with
-    ``agent-skills/segment-prompt-tuning/merge_summaries_prompt_draft.txt``.
+
+def _load_merge_template(filename: str) -> str:
+    """Load a merge prompt template; must contain ``{partials}`` placeholder.
+
+    Args:
+        filename: File name under the analysis package directory.
 
     Returns:
         Raw template string (before ``str.format``).
 
     Raises:
-        FileNotFoundError: If the template file is missing next to this module.
+        FileNotFoundError: If the template file is missing.
     """
-    path = Path(__file__).resolve().parent / "merge_summaries_prompt.txt"
+    path = _analysis_dir() / filename
     return path.read_text(encoding="utf-8")
 
 
 # Merge: partial summaries + keywords → one summary + one keyword list (JSON).
-# Used for long-segment chunks, per-speaker merges, and transcript-level merge.
-PROMPT_MERGE_SUMMARIES = _load_merge_summaries_prompt_template()
+PROMPT_MERGE_SEGMENT_CHUNK = _load_merge_template("merge_segment_chunk_prompt.txt")
+PROMPT_MERGE_SPEAKER = _load_merge_template("merge_speaker_prompt.txt")
+PROMPT_MERGE_TRANSCRIPT = _load_merge_template("merge_transcript_prompt.txt")
 
 # Follow-up when the first reply is not parseable or lacks required keys.
 PROMPT_JSON_RETRY_PREFIX = (
@@ -101,10 +107,29 @@ def format_merge_partials_block(
     return "\n\n".join(lines)
 
 
-def build_merge_summaries_prompt(
+def _build_merge_prompt(
+    partial_summaries: list[tuple[str, list[str]]],
+    template: str,
+) -> str:
+    return template.format(partials=format_merge_partials_block(partial_summaries))
+
+
+def build_merge_segment_chunk_prompt(
     partial_summaries: list[tuple[str, list[str]]],
 ) -> str:
-    """Build prompt to merge partial (summary, keywords) into one summary + keywords."""
-    return PROMPT_MERGE_SUMMARIES.format(
-        partials=format_merge_partials_block(partial_summaries),
-    )
+    """Merge chunk partials for one long segment into one summary + keywords."""
+    return _build_merge_prompt(partial_summaries, PROMPT_MERGE_SEGMENT_CHUNK)
+
+
+def build_merge_speaker_prompt(
+    partial_summaries: list[tuple[str, list[str]]],
+) -> str:
+    """Merge one speaker's segment summaries into one contribution + keywords."""
+    return _build_merge_prompt(partial_summaries, PROMPT_MERGE_SPEAKER)
+
+
+def build_merge_transcript_prompt(
+    partial_summaries: list[tuple[str, list[str]]],
+) -> str:
+    """Merge per-speaker summaries into one transcript-level summary + keywords."""
+    return _build_merge_prompt(partial_summaries, PROMPT_MERGE_TRANSCRIPT)

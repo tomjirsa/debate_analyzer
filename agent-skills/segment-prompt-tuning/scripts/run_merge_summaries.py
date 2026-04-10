@@ -6,10 +6,10 @@ JSON with ``segment_summaries``) to simulate chunk merge / speaker merge.
 
 Example (from repo root):
 
-  poetry run python .cursor/skills/segment-prompt-tuning/scripts/run_merge_summaries.py \\
+  poetry run python agent-skills/segment-prompt-tuning/scripts/run_merge_summaries.py \\
     --analysis data/test/test_llm_analysis.json \\
     --start 0 --count 3 \\
-    --prompt-file .cursor/skills/segment-prompt-tuning/merge_summaries_prompt_draft.txt
+    --prompt-file agent-skills/segment-prompt-tuning/merge_speaker_prompt_draft.txt
 """
 
 from __future__ import annotations
